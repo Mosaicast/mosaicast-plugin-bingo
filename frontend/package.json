@@ -1,0 +1,25 @@
+{
+  "name": "@mosaicast/plugin-bingo-frontend",
+  "private": true,
+  "version": "0.6.0",
+  "type": "module",
+  "scripts": {
+    "build": "vite build",
+    "test": "vitest run",
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "@mosaicast/plugin-sdk": "0.17.0",
+    "react": "^18.3.1",
+    "react-dom": "^18.3.1"
+  },
+  "devDependencies": {
+    "@types/react": "^18.3.3",
+    "@types/react-dom": "^18.3.0",
+    "@vitejs/plugin-react": "^4.3.1",
+    "jsdom": "^30.0.1",
+    "typescript": "^7.0.2",
+    "vite": "^5.4.0",
+    "vitest": "^4.1.10"
+  }
+}

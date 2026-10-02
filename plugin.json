@@ -1,0 +1,166 @@
+{
+  "id": "bingo",
+  "version": "0.6.0",
+  "platformApi": "0.17.0",
+  "name": "Bingo",
+  "license": "AGPL-3.0-or-later",
+  "author": "The Mosaicast Authors",
+  "homepage": "https://github.com/Mosaicast/mosaicast-plugin-bingo",
+  "backend": {
+    "basePath": "/api/plugins/bingo",
+    "extensions": [
+      "dev.mosaicast.plugin.bingo.BingoPlugin"
+    ]
+  },
+  "frontend": {
+    "entry": "bingo.es.js",
+    "elements": [
+      "bingo-episode",
+      "bingo-episode-card"
+    ]
+  },
+  "slots": [
+    {
+      "scope": "episode",
+      "element": "bingo-episode-card",
+      "placement": "card",
+      "visibleTo": "anonymous",
+      "order": 100
+    },
+    {
+      "scope": "episode",
+      "element": "bingo-episode",
+      "placement": "main",
+      "visibleTo": "anonymous",
+      "order": 100
+    }
+  ],
+  "storage": {
+    "schema": {
+      "entry": {
+        "episode": "string:indexed",
+        "author": "string:indexed",
+        "position": "integer",
+        "text": "text:fulltext",
+        "canonical": "string:indexed",
+        "hit": "boolean",
+        "ranked": "boolean",
+        "recordedAt": "timestamp:indexed"
+      },
+      "card_result": {
+        "episode": "string:indexed",
+        "author": "string:indexed",
+        "fields": "integer",
+        "lines": "integer",
+        "cells": "integer",
+        "ranked": "boolean",
+        "recordedAt": "timestamp:indexed"
+      }
+    }
+  },
+  "data": {
+    "readableBy": "anonymous",
+    "writableBy": "podcaster",
+    "readsAllUsers": true,
+    "backendOwned": [
+      "phase",
+      "candidates",
+      "leaderboard",
+      "stats",
+      "notified",
+      "participants",
+      "showcased"
+    ]
+  },
+  "tags": {
+    "readsVocabulary": true,
+    "writesEpisodes": false
+  },
+  "identity": {
+    "resolvesUsers": true
+  },
+  "notifications": {
+    "sends": true,
+    "perUserPerDay": 5
+  },
+  "config": {
+    "ingestIntervalSeconds": {
+      "type": "number",
+      "default": 60,
+      "editableBy": "podcaster",
+      "min": 10,
+      "max": 3600,
+      "step": 1,
+      "label": { "en": "Update interval (seconds)", "de": "Aktualisierungsintervall (Sekunden)" },
+      "description": {
+        "en": "How often cards are collected and scores recomputed, from 10 to 3600. A saved change applies within one old interval.",
+        "de": "Wie oft Karten eingesammelt und Punkte neu berechnet werden, von 10 bis 3600. Eine gespeicherte Änderung greift innerhalb eines alten Intervalls."
+      }
+    },
+    "fuzzyThreshold": {
+      "type": "number",
+      "default": 0.82,
+      "editableBy": "podcaster",
+      "min": 0,
+      "max": 1,
+      "step": 0.01,
+      "label": { "en": "Match similarity", "de": "Ähnlichkeitsschwelle" },
+      "description": {
+        "en": "How alike two entries must be, from 0 to 1, to count as the same prediction. Higher merges less. Entries with different numbers are never merged.",
+        "de": "Wie ähnlich sich zwei Einträge sein müssen, von 0 bis 1, um als dieselbe Vorhersage zu gelten. Höher führt weniger zusammen. Einträge mit unterschiedlichen Zahlen werden nie zusammengeführt."
+      }
+    },
+    "defaultGridSize": {
+      "type": "number",
+      "default": 3,
+      "editableBy": "podcaster",
+      "label": { "en": "Default grid", "de": "Standard-Raster" },
+      "description": {
+        "en": "Used for a bingo whose template does not state a size.",
+        "de": "Gilt für ein Bingo, dessen Vorlage keine Größe angibt."
+      },
+      "options": [
+        { "value": 3, "label": "3x3" },
+        { "value": 4, "label": "4x4" },
+        { "value": 5, "label": "5x5" }
+      ]
+    },
+    "allowLateEntries": {
+      "type": "boolean",
+      "default": true,
+      "editableBy": "podcaster",
+      "label": { "en": "Allow late cards", "de": "Späte Karten erlauben" },
+      "description": {
+        "en": "Someone who missed the lock may still hand in a card once. It is scored, but never ranked.",
+        "de": "Wer die Sperre verpasst hat, kann trotzdem einmal eine Karte abgeben. Sie wird gewertet, aber nie in die Rangliste aufgenommen."
+      }
+    },
+    "archiveAfterDays": {
+      "type": "number",
+      "default": 30,
+      "editableBy": "podcaster",
+      "min": 1,
+      "max": 3650,
+      "step": 1,
+      "label": { "en": "Archive after (days)", "de": "Archivieren nach (Tagen)" },
+      "description": {
+        "en": "Days after resolving before a bingo closes for good and nothing more is recorded.",
+        "de": "Tage nach dem Auflösen, bis ein Bingo endgültig schließt und nichts mehr aufgezeichnet wird."
+      }
+    },
+    "rankBy": {
+      "type": "string",
+      "default": "lines",
+      "editableBy": "admin",
+      "label": { "en": "Rank by", "de": "Rangfolge nach" },
+      "description": {
+        "en": "Which score orders the leaderboard. The other one breaks ties.",
+        "de": "Welche Wertung die Rangliste ordnet. Die andere entscheidet bei Gleichstand."
+      },
+      "options": [
+        { "value": "lines", "label": { "en": "Lines", "de": "Reihen" } },
+        { "value": "fields", "label": { "en": "Fields", "de": "Felder" } }
+      ]
+    }
+  }
+}

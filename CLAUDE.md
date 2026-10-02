@@ -11,13 +11,13 @@ lifecycle, and schema-backed history.
 Work in plan mode first.
 
 ## Tech stack
-Java 21 (Gradle, PF4J extension) · React 18 + Vite (Web Component) · **platformApi 0.14.0** (core 0.7.x)
+Java 21 (Gradle, PF4J extension) · React 18 + Vite (Web Component) · **platformApi 0.17.0** (core 0.7.6+)
 
 ## Commands
 ```
 ./build.sh                                    # -> dist/{plugin.json,bingo.jar,assets/bingo.es.js}
-cd backend  && ./gradlew test                 # 57 tests
-cd frontend && npm test && npm run typecheck  # 40 tests
+cd backend  && ./gradlew test                 # 73 tests
+cd frontend && npm test && npm run typecheck  # 60 tests
 scripts/set-version.sh <x.y.z>                # bumps the plugin version in all three files
 ```
 
@@ -50,12 +50,13 @@ frontend/locales/{en,de}.json           UI strings
 
 ## Contract facts this plugin depends on (verified, not assumed)
 - **`ctx.episode` is never populated** by core. The lifecycle is a backend-published `phase` document.
-- **`placement: "admin"` renders nowhere.** The podcaster board is an `episode`/`sidebar` slot.
+- **`placement: "admin"` renders nowhere.** There is no podcaster slot at all: the manifest declares
+  `episode`/`card` and `episode`/`main` only, and every podcaster control is a dialog on the tile.
 - **A plugin authors no HTTP routes.** Everything derived happens in `register()` and `onSchedule`, so the
   tick-off board is eventually consistent by construction.
 - **`DocStore` throws `UnsupportedOperationException` on the `USER` scope, reads included.** Fan cards are
-  written by the browser and read back only via `queryAcrossUsers`.
-- **`queryAcrossUsers` yields a bare `UUID`**; since 0.13.0 `ctx.users` turns it into a name and avatar.
+  written by the browser and read back only via `ctx.allUsers()` (0.16.0; needs `data.readsAllUsers`).
+- **`allUsers().query` yields a bare `UUID`**; since 0.13.0 `ctx.users` turns it into a name and avatar.
   There are no host cards any more — everyone plays as themselves and a podcaster features some of them.
 - **No browser can read another person's partition.** Anything anyone else must see — the candidate list,
   the leaderboard, a featured card — has to be copied into the episode scope by the tick first.
@@ -90,8 +91,22 @@ frontend/locales/{en,de}.json           UI strings
   carry `en`, and its `link` is internal-only.
 - **Notification wording lives in Java, not `locales/*.json`.** A notification is written on a timer with no
   Web Component mounted, and the host has no plugin catalog to resolve a key against.
-- `dev/instance.sh` computes `plugins_dir` and never passes it to `bootRun` (core bug), so `--plugins` is a
-  no-op and `./plugins` is loaded either way.
+- **The tick period is a `Supplier<Duration>` (0.15.0).** The host re-reads it before every tick, so a saved
+  `ingestIntervalSeconds` applies within one old period. Never go back to the `Duration` overload for a
+  configured value — it captures the number once in `register()` and silently ignores every later save.
+- **Both elements return a `MosaicastHandle` (0.15.0).** `update` re-renders the same React root with the new
+  `ctx`; `destroy` runs on a real disconnect only. A bare cleanup would tear the tile down on every `ctx`
+  reassignment and lose a half-typed card or open dialog. Key hooks on what they read (`ctx.locale`,
+  `ctx.scope.id`), never on `ctx` itself.
+- **Config fields carry localized `label` and `description` (core 0.7.2).** The generic admin form shows them
+  in place of the raw key; add both, in `en` and `de`, for every new field. Numbers carry `min`/`max`/`step`
+  (0.16.0): the host refuses a save outside them and reads a stored one as unset — no clamp in the code.
+- **`ctx.docs.get` remembers misses** for 30 s, never across a navigation (core 0.7.5, core#237). `reload()`
+  after a podcaster action lands inside that window, so never read an episode key through it: all of them appear later (a podcaster
+  in another session, or the tick). Episode documents go through `readEpisode` — the batch endpoint via
+  `ctx.api`, uncached, one request. `ctx.docs.getMany` feeds the same memory. Only the viewer's own
+  partition (`'self'`) may use `ctx.docs.get`.
+- **`--mc-accent` is for fills; `--mc-accent-text` for text, focus rings and state borders (0.16.0).**
 
 ## Architecture guardrails (do not violate)
 - Identity (`EpisodeRef`) is separate from presentation (feed snapshot). Plugin metrics are
@@ -106,7 +121,8 @@ frontend/locales/{en,de}.json           UI strings
 
 ## Deviations from `docs/BRIEF.md` (flagged, agreed with the maintainer)
 1. Lifecycle from a backend `phase` doc, not `ctx.episode.status` (impossible).
-2. Resolution board in `sidebar`, not `admin` (renders nowhere).
+2. Resolution board is a dialog on the tile, not an `admin` slot (renders nowhere) and not a `sidebar`
+   one (buries the one action a podcaster came for under everything else on a phone).
 3. Fan cards in the `USER` scope, not `card:fan:{userId}` (IDOR).
 4. Storage is doc **and** schema, for cross-episode statistics and recall.
 5. No host cards and no typed-in names: everyone plays as themselves, resolved through `ctx.users` at
@@ -120,11 +136,21 @@ still ticking off answers — what freezes is what a card *says*, never what it 
 
 ## Dev loop
 ```
-./build.sh && cp -r dist/* ~/mosaicast/mosaicast-core/plugins/bingo/
-cd ~/mosaicast/mosaicast-core && dev/instance.sh up        # :8081, disposable, seeded sample feed
+./build.sh
+C=~/mosaicast/mosaicast-core/dev/instance.sh
+$C --name bingo up --plugin-dir "$PWD/dist"   # own Postgres/ports/plugins dir under /tmp/mosaicast-dev/bingo/
+source <($C --name bingo env)                 # MC_APP_URL etc. — ports are allocated, never assume :8081
+$C --name bingo status                        # which plugin ids actually loaded
+$C --name bingo restart --plugin-dir "$PWD/dist" [--core origin/master]   # new build/core, data kept
+$C --name bingo psql -At -c "select …"        # scriptable since core 0.7.6
+$C --name bingo down                          # only ever up/down YOUR name; other sessions run beside it
 ```
-Plugins load once at startup — a jar or manifest change needs a restart; the frontend bundle is `no-cache`
-and only needs a reload. If the tile is missing, the reason is in `/admin/logs` (drop the level to INFO).
+Other sessions (core, SDK, sample, wiki, stats) run their own named instances at the same time. Never use
+the bare `default` instance, never `--plugins`, and never copy into core's `./plugins` — that folder is
+shared. `--plugin-dir` copies, so a rebuilt jar or manifest needs `restart` (keeps the DB; `down` drops it);
+the frontend bundle is `no-cache` and only needs a reload. Add a sister plugin with a second `--plugin-dir` (its `dist/`). One
+browser profile per instance: cookies are per host, not port. If the tile is missing, the reason is in
+`$C --name bingo logs` or `/admin/logs`.
 
 ## Keep docs current
 - **README.md and this CLAUDE.md** are repo-local and your job.
