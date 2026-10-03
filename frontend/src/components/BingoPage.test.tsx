@@ -66,7 +66,7 @@ describe('<BingoPage>', () => {
     const ctx = await render('', { 'data/site/main/stats': STATS });
 
     expect(host.textContent).toContain('Ned');
-    expect(host.textContent).toContain('3 lines, 9 squares over 2 card(s)');
+    expect(host.textContent).toContain('3 line(s), 9 square(s) over 2 card(s)');
     expect(host.textContent).toContain('The Kraken');
     expect(host.textContent).toContain('Merch Special');
     expect(host.querySelectorAll('.bingo__list li')).toHaveLength(2);

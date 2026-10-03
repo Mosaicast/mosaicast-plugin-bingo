@@ -83,7 +83,7 @@
   "stats.cards": "{{count}} Karte(n)",
   "stats.title": "Gesamtwertung",
   "stats.empty": "Noch kein aufgelöstes Bingo.",
-  "stats.score": "{{lines}} Reihen, {{fields}} Felder aus {{cards}} Karte(n)",
+  "stats.score": "{{lines}} Reihe(n), {{fields}} Feld(er) aus {{cards}} Karte(n)",
   "regroup.toggle": "Schreibweisen ({{count}})",
   "regroup.split": "Abtrennen",
   "regroup.undo": "Rückgängig",
