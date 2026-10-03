@@ -197,10 +197,14 @@ disables only this plugin, quietly, which looks exactly like a render bug and is
 plugin.json              the manifest: slots, schema, access floors, config
 backend/                 Java 21, PF4J extension, depends only on the SDK
   src/main/java/dev/mosaicast/plugin/bingo/
-    BingoPlugin.java     register + the scheduled tick, and UserDataHandler
+    BingoPlugin.java     register + the scheduled tick, and every extension point
+    BingoDocs.java       doc keys, document records, row shapes
+    BingoLifecycle.java  the phase: podcaster intent + episode release + archive timer
+    BingoRecord.java     cards into schema rows (the freeze), scoring
+    BingoPublish.java    featured cards, notifications, site standings
     BingoFuzzy.java      pure entry grouping — no ctx, no clock, no I/O
 frontend/                React 18 + Vite, bundled as one ES module
-  src/bingo-element.tsx  defines the three custom elements
+  src/bingo-element.tsx  defines the custom elements
   src/components/        the tile, the feed badge, the podcaster board
   locales/{en,de}.json   UI strings
 ```

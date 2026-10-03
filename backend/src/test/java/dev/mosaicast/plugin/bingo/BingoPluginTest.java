@@ -59,9 +59,9 @@ class BingoPluginTest {
 
         new BingoPlugin(clock).register(ctx);
 
-        assertTrue(ctx.store().get(Scope.episode(EPISODE), BingoPlugin.KEY_PHASE, Object.class).isEmpty(),
+        assertTrue(ctx.store().get(Scope.episode(EPISODE), BingoDocs.KEY_PHASE, Object.class).isEmpty(),
                 "no template means no bingo, and no work at all for a back catalogue");
-        assertTrue(ctx.store().get(Scope.episode(EPISODE), BingoPlugin.KEY_CANDIDATES, Object.class).isEmpty());
+        assertTrue(ctx.store().get(Scope.episode(EPISODE), BingoDocs.KEY_CANDIDATES, Object.class).isEmpty());
     }
 
     @Test
@@ -74,8 +74,8 @@ class BingoPluginTest {
         // Written at boot, not only on the schedule: `backendOwned` closes a key from the moment it is
         // declared but never removes a value forged before that.
         assertTrue(phase(ctx).isPresent());
-        assertTrue(ctx.store().get(Scope.episode(EPISODE), BingoPlugin.KEY_CANDIDATES, Object.class).isPresent());
-        assertTrue(ctx.store().get(Scope.site(), BingoPlugin.KEY_STATS, Object.class).isPresent());
+        assertTrue(ctx.store().get(Scope.episode(EPISODE), BingoDocs.KEY_CANDIDATES, Object.class).isPresent());
+        assertTrue(ctx.store().get(Scope.site(), BingoDocs.KEY_STATS, Object.class).isPresent());
         assertEquals(1, ctx.scheduledCount());
     }
 
@@ -125,7 +125,7 @@ class BingoPluginTest {
         new BingoPlugin(clock).register(ctx);
 
         var candidates = ctx.store()
-                .get(Scope.episode(EPISODE), BingoPlugin.KEY_CANDIDATES, BingoPlugin.Candidates.class)
+                .get(Scope.episode(EPISODE), BingoDocs.KEY_CANDIDATES, BingoDocs.Candidates.class)
                 .orElseThrow();
         assertEquals(1, candidates.items().size(), "one thing to tick off, not two");
         assertEquals(2, candidates.items().get(0).count());
@@ -143,7 +143,7 @@ class BingoPluginTest {
         seedCard(ctx, alice, List.of("kraken"));
         plugin.tick();
 
-        assertEquals(1, ctx.schema().count(BingoPlugin.ENTITY_ENTRY,
+        assertEquals(1, ctx.schema().count(BingoDocs.ENTITY_ENTRY,
                 dev.mosaicast.plugin.api.Criteria.where("author", dev.mosaicast.plugin.api.Criteria.Op.EQ,
                         alice.toString())),
                 "a pre-lock edit is free and simply replaces what was there");
@@ -198,7 +198,7 @@ class BingoPluginTest {
         plugin.tick();
 
         var board = leaderboard(ctx);
-        assertEquals(List.of(bob.toString()), board.ranked().stream().map(BingoPlugin.Row::author).toList(),
+        assertEquals(List.of(bob.toString()), board.ranked().stream().map(BingoDocs.Row::author).toList(),
                 "written while the tile said predictions were open");
         assertTrue(board.late().isEmpty());
     }
@@ -220,8 +220,8 @@ class BingoPluginTest {
         plugin.tick();
 
         var board = leaderboard(ctx);
-        assertEquals(List.of(alice.toString()), board.ranked().stream().map(BingoPlugin.Row::author).toList());
-        assertEquals(List.of(bob.toString()), board.late().stream().map(BingoPlugin.Row::author).toList());
+        assertEquals(List.of(alice.toString()), board.ranked().stream().map(BingoDocs.Row::author).toList());
+        assertEquals(List.of(bob.toString()), board.late().stream().map(BingoDocs.Row::author).toList());
         assertEquals(2, board.late().get(0).fields(), "a latecomer still finds out how they did");
     }
 
@@ -371,7 +371,7 @@ class BingoPluginTest {
 
         // The tally exists so a reader with no published row can still place themselves, and somebody who
         // opted out has no published row by definition - leaving them out empties it of its whole purpose.
-        int counted = board.distribution().stream().mapToInt(BingoPlugin.Tally::count).sum();
+        int counted = board.distribution().stream().mapToInt(BingoDocs.Tally::count).sum();
         assertEquals(2, counted, "the tally places everyone, including the people it names nowhere");
     }
 
@@ -386,7 +386,7 @@ class BingoPluginTest {
         plugin.register(ctx);
 
         var candidates = ctx.store()
-                .get(Scope.episode(EPISODE), BingoPlugin.KEY_CANDIDATES, BingoPlugin.Candidates.class)
+                .get(Scope.episode(EPISODE), BingoDocs.KEY_CANDIDATES, BingoDocs.Candidates.class)
                 .orElseThrow();
         var first = candidates.items().get(0);
         assertEquals(2, first.count(), "two entries did land in the group");
@@ -398,12 +398,12 @@ class BingoPluginTest {
     void aTemplateThatNeverSaidItsSizeTakesTheConfiguredDefault() {
         var ctx = ctx(published(false), new MapPluginConfig().with("defaultGridSize", 5));
         // As a hand-written template would be: no size at all.
-        ctx.store().put(Scope.episode(EPISODE), BingoPlugin.KEY_TEMPLATE, Map.of("title", "Bingo"));
+        ctx.store().put(Scope.episode(EPISODE), BingoDocs.KEY_TEMPLATE, Map.of("title", "Bingo"));
 
         new BingoPlugin(clock).register(ctx);
 
         var template = ctx.store()
-                .get(Scope.episode(EPISODE), BingoPlugin.KEY_TEMPLATE, BingoPlugin.Template.class)
+                .get(Scope.episode(EPISODE), BingoDocs.KEY_TEMPLATE, BingoDocs.Template.class)
                 .orElseThrow();
         // Written back rather than merely assumed: there is no ctx.config in a browser, so a template that
         // stays silent would be read as one size here and another there.
@@ -474,13 +474,13 @@ class BingoPluginTest {
         var plugin = new BingoPlugin(clock);
         plugin.register(ctx);
         var afterFirst = leaderboard(ctx);
-        long entriesAfterFirst = ctx.schema().count(BingoPlugin.ENTITY_ENTRY,
+        long entriesAfterFirst = ctx.schema().count(BingoDocs.ENTITY_ENTRY,
                 dev.mosaicast.plugin.api.Criteria.all());
 
         plugin.tick();
 
         assertEquals(entriesAfterFirst,
-                ctx.schema().count(BingoPlugin.ENTITY_ENTRY, dev.mosaicast.plugin.api.Criteria.all()));
+                ctx.schema().count(BingoDocs.ENTITY_ENTRY, dev.mosaicast.plugin.api.Criteria.all()));
         assertEquals(afterFirst.ranked(), leaderboard(ctx).ranked());
     }
 
@@ -504,10 +504,10 @@ class BingoPluginTest {
         assertEquals("ARCHIVED", phase(ctx).orElseThrow().phase());
 
         // Terminal: a later write records nothing, and the episode has left the working set for good.
-        long entries = ctx.schema().count(BingoPlugin.ENTITY_ENTRY, dev.mosaicast.plugin.api.Criteria.all());
+        long entries = ctx.schema().count(BingoDocs.ENTITY_ENTRY, dev.mosaicast.plugin.api.Criteria.all());
         seedCard(ctx, bob, List.of("kraken"));
         plugin.tick();
-        assertEquals(entries, ctx.schema().count(BingoPlugin.ENTITY_ENTRY,
+        assertEquals(entries, ctx.schema().count(BingoDocs.ENTITY_ENTRY,
                 dev.mosaicast.plugin.api.Criteria.all()));
     }
 
@@ -584,7 +584,7 @@ class BingoPluginTest {
         // Absent means no. The opposite default hands everyone a point they never earned, and hides a
         // square they meant to write in.
         var ctx = ctx(published(false));
-        ctx.store().put(Scope.episode(EPISODE), BingoPlugin.KEY_TEMPLATE, Map.of("size", 3));
+        ctx.store().put(Scope.episode(EPISODE), BingoDocs.KEY_TEMPLATE, Map.of("size", 3));
         seedCard(ctx, alice, List.of("a", "b", "c", "d", "e", "f", "g", "h", "i"));
 
         var plugin = new BingoPlugin(clock);
@@ -593,7 +593,7 @@ class BingoPluginTest {
         plugin.tick();
 
         assertEquals(0, leaderboard(ctx).ranked().get(0).fields(), "nothing resolved, so nothing scored");
-        assertEquals(9, ctx.schema().count(BingoPlugin.ENTITY_ENTRY,
+        assertEquals(9, ctx.schema().count(BingoDocs.ENTITY_ENTRY,
                 dev.mosaicast.plugin.api.Criteria.all()), "all nine squares are the player's to write");
     }
 
@@ -615,7 +615,7 @@ class BingoPluginTest {
         var tally = leaderboard(ctx).distribution();
         assertEquals(2, tally.size(), "two distinct scores, so two entries however many people played");
         assertEquals(1, tally.get(0).count());
-        assertEquals(2, tally.stream().mapToInt(BingoPlugin.Tally::count).sum());
+        assertEquals(2, tally.stream().mapToInt(BingoDocs.Tally::count).sum());
     }
 
     // ---------------------------------------------------------------- how people choose to appear
@@ -636,7 +636,7 @@ class BingoPluginTest {
         plugin.tick();
 
         assertEquals(List.of(alice.toString()),
-                leaderboard(ctx).ranked().stream().map(BingoPlugin.Row::author).toList());
+                leaderboard(ctx).ranked().stream().map(BingoDocs.Row::author).toList());
     }
 
     @Test
@@ -650,7 +650,7 @@ class BingoPluginTest {
 
         new BingoPlugin(clock).register(ctx);
 
-        assertEquals(1, ctx.schema().count(BingoPlugin.ENTITY_CARD_RESULT,
+        assertEquals(1, ctx.schema().count(BingoDocs.ENTITY_CARD_RESULT,
                 dev.mosaicast.plugin.api.Criteria.where("author",
                         dev.mosaicast.plugin.api.Criteria.Op.EQ, bob.toString())));
     }
@@ -699,7 +699,7 @@ class BingoPluginTest {
         new BingoPlugin(clock).register(ctx);
 
         assertEquals(List.of(alice.toString()),
-                participants(ctx).items().stream().map(BingoPlugin.Participant::userId).toList());
+                participants(ctx).items().stream().map(BingoDocs.Participant::userId).toList());
     }
 
     @Test
@@ -932,7 +932,7 @@ class BingoPluginTest {
 
         plugin.register(ctx); // refused: over the cap
         assertEquals(1, notifier.messagesFor(alice).size());
-        assertTrue(ctx.store().get(Scope.episode(EPISODE), BingoPlugin.KEY_NOTIFIED, Object.class).isEmpty(),
+        assertTrue(ctx.store().get(Scope.episode(EPISODE), BingoDocs.KEY_NOTIFIED, Object.class).isEmpty(),
                 "nobody is marked as told, so a later tick will try again rather than dropping it");
     }
 
@@ -982,29 +982,29 @@ class BingoPluginTest {
         Scope scope = Scope.episode(EPISODE);
 
         // The backend writes its computed keys freely; a client forging them is refused (a 403 in the host).
-        store.put(scope, BingoPlugin.KEY_LEADERBOARD, Map.of("ranked", List.of()));
+        store.put(scope, BingoDocs.KEY_LEADERBOARD, Map.of("ranked", List.of()));
         assertThrows(IllegalStateException.class,
-                () -> store.asUser(mallory).put(scope, BingoPlugin.KEY_LEADERBOARD, Map.of("forged", true)));
+                () -> store.asUser(mallory).put(scope, BingoDocs.KEY_LEADERBOARD, Map.of("forged", true)));
         assertThrows(IllegalStateException.class,
-                () -> store.asUser(mallory).put(Scope.site(), BingoPlugin.KEY_STATS, Map.of("forged", true)));
+                () -> store.asUser(mallory).put(Scope.site(), BingoDocs.KEY_STATS, Map.of("forged", true)));
         assertThrows(IllegalStateException.class,
-                () -> store.asUser(mallory).put(scope, BingoPlugin.KEY_SHOWCASED, Map.of("items", List.of())),
+                () -> store.asUser(mallory).put(scope, BingoDocs.KEY_SHOWCASED, Map.of("items", List.of())),
                 "a featured card is a copy the backend made, not something a client may plant");
         assertThrows(IllegalStateException.class,
-                () -> store.asUser(mallory).put(scope, BingoPlugin.KEY_PARTICIPANTS, Map.of("items", List.of())));
+                () -> store.asUser(mallory).put(scope, BingoDocs.KEY_PARTICIPANTS, Map.of("items", List.of())));
 
         // …and the keys the browser has to write are deliberately NOT reserved, or the plugin would 403
         // against its own UI.
-        store.asUser(mallory).put(scope, BingoPlugin.KEY_TEMPLATE, Map.of("size", 3));
-        store.asUser(mallory).put(scope, BingoPlugin.KEY_RESOLUTION, Map.of("hits", Map.of()));
-        store.asUser(mallory).put(scope, BingoPlugin.KEY_CONTROL, Map.of("phase", "LOCKED"));
-        store.asUser(mallory).put(scope, BingoPlugin.KEY_SHOWCASE, Map.of("userIds", List.of()));
+        store.asUser(mallory).put(scope, BingoDocs.KEY_TEMPLATE, Map.of("size", 3));
+        store.asUser(mallory).put(scope, BingoDocs.KEY_RESOLUTION, Map.of("hits", Map.of()));
+        store.asUser(mallory).put(scope, BingoDocs.KEY_CONTROL, Map.of("phase", "LOCKED"));
+        store.asUser(mallory).put(scope, BingoDocs.KEY_SHOWCASE, Map.of("userIds", List.of()));
     }
 
     @Test
     void aFansOwnPartitionIsNeverReservedEvenThoughTheBackendOwnsOtherKeys() {
         var store = new InMemoryDocStore().withBackendOwned(BingoSchemaFixture.backendOwned());
-        store.asUser(alice).put(Scope.user(), BingoPlugin.CARD_PREFIX + EPISODE, Map.of("label", "Alice"));
+        store.asUser(alice).put(Scope.user(), BingoDocs.CARD_PREFIX + EPISODE, Map.of("label", "Alice"));
         assertEquals(1, store.docsOf(alice).size());
     }
 
@@ -1026,7 +1026,7 @@ class BingoPluginTest {
         harness.eraseTwice(alice.toString()); // fails loudly if the second call is not a no-op
 
         assertEquals(0, entryCount(ctx, alice.toString()), "nothing is attributable to her any more");
-        assertEquals(1, ctx.schema().count(BingoPlugin.ENTITY_ENTRY, dev.mosaicast.plugin.api.Criteria.all()),
+        assertEquals(1, ctx.schema().count(BingoDocs.ENTITY_ENTRY, dev.mosaicast.plugin.api.Criteria.all()),
                 "but the game she played is still part of the record");
         assertTrue(leaderboard(ctx).ranked().stream().noneMatch(r -> r.author().equals(alice.toString())));
     }
@@ -1078,40 +1078,40 @@ class BingoPluginTest {
             Map.of("a", true, "b", true, "c", true, "d", true);
 
     private void seedPlainTemplate(FakePluginContext ctx) {
-        ctx.store().put(Scope.episode(EPISODE), BingoPlugin.KEY_TEMPLATE,
+        ctx.store().put(Scope.episode(EPISODE), BingoDocs.KEY_TEMPLATE,
                 Map.of("size", 3, "title", "Bingo", "freeCentre", false));
     }
 
     /** A 3x3 that asks for the free middle square. Absent, the square is one more thing to fill in. */
     private void seedTemplate(FakePluginContext ctx) {
-        ctx.store().put(Scope.episode(EPISODE), BingoPlugin.KEY_TEMPLATE,
+        ctx.store().put(Scope.episode(EPISODE), BingoDocs.KEY_TEMPLATE,
                 Map.of("size", 3, "title", "Bingo", "freeCentre", true));
     }
 
     /** As the browser would: a person's own card, written into their own partition, by them. */
     private void seedCard(FakePluginContext ctx, UUID user, List<String> entries) {
-        ctx.store().asUser(user).put(Scope.user(), BingoPlugin.CARD_PREFIX + EPISODE,
+        ctx.store().asUser(user).put(Scope.user(), BingoDocs.CARD_PREFIX + EPISODE,
                 Map.of("entries", entries));
     }
 
     /** How somebody wants to appear. Their own partition, so only they can write it. */
     private void seedPrefs(FakePluginContext ctx, UUID user, boolean listed, boolean showcasable) {
-        ctx.store().asUser(user).put(Scope.user(), BingoPlugin.KEY_PREFS,
+        ctx.store().asUser(user).put(Scope.user(), BingoDocs.KEY_PREFS,
                 Map.of("listed", listed, "showcasable", showcasable));
     }
 
     /** The podcaster's pick of whose card to feature. */
     private void seedShowcase(FakePluginContext ctx, UUID... users) {
-        ctx.store().put(Scope.episode(EPISODE), BingoPlugin.KEY_SHOWCASE,
+        ctx.store().put(Scope.episode(EPISODE), BingoDocs.KEY_SHOWCASE,
                 Map.of("userIds", java.util.Arrays.stream(users).map(UUID::toString).toList()));
     }
 
     private void resolve(FakePluginContext ctx, Map<String, Boolean> hits) {
-        ctx.store().put(Scope.episode(EPISODE), BingoPlugin.KEY_RESOLUTION, Map.of("hits", hits));
+        ctx.store().put(Scope.episode(EPISODE), BingoDocs.KEY_RESOLUTION, Map.of("hits", hits));
     }
 
     private void control(FakePluginContext ctx, String phase) {
-        ctx.store().put(Scope.episode(EPISODE), BingoPlugin.KEY_CONTROL,
+        ctx.store().put(Scope.episode(EPISODE), BingoDocs.KEY_CONTROL,
                 Map.of("phase", phase, "updatedAt", clock.instant().toString()));
     }
 
@@ -1119,48 +1119,48 @@ class BingoPluginTest {
         control(ctx, "LOCKED");
     }
 
-    private java.util.Optional<BingoPlugin.PhaseState> phase(FakePluginContext ctx) {
-        return ctx.store().get(Scope.episode(EPISODE), BingoPlugin.KEY_PHASE, BingoPlugin.PhaseState.class);
+    private java.util.Optional<BingoDocs.PhaseState> phase(FakePluginContext ctx) {
+        return ctx.store().get(Scope.episode(EPISODE), BingoDocs.KEY_PHASE, BingoDocs.PhaseState.class);
     }
 
-    private BingoPlugin.Leaderboard leaderboard(FakePluginContext ctx) {
+    private BingoDocs.Leaderboard leaderboard(FakePluginContext ctx) {
         return ctx.store()
-                .get(Scope.episode(EPISODE), BingoPlugin.KEY_LEADERBOARD, BingoPlugin.Leaderboard.class)
+                .get(Scope.episode(EPISODE), BingoDocs.KEY_LEADERBOARD, BingoDocs.Leaderboard.class)
                 .orElseThrow();
     }
 
-    private BingoPlugin.Participants participants(FakePluginContext ctx) {
+    private BingoDocs.Participants participants(FakePluginContext ctx) {
         return ctx.store()
-                .get(Scope.episode(EPISODE), BingoPlugin.KEY_PARTICIPANTS, BingoPlugin.Participants.class)
+                .get(Scope.episode(EPISODE), BingoDocs.KEY_PARTICIPANTS, BingoDocs.Participants.class)
                 .orElseThrow();
     }
 
-    private BingoPlugin.Showcased showcased(FakePluginContext ctx) {
+    private BingoDocs.Showcased showcased(FakePluginContext ctx) {
         return ctx.store()
-                .get(Scope.episode(EPISODE), BingoPlugin.KEY_SHOWCASED, BingoPlugin.Showcased.class)
+                .get(Scope.episode(EPISODE), BingoDocs.KEY_SHOWCASED, BingoDocs.Showcased.class)
                 .orElseThrow();
     }
 
-    private BingoPlugin.Stats stats(FakePluginContext ctx) {
-        return ctx.store().get(Scope.site(), BingoPlugin.KEY_STATS, BingoPlugin.Stats.class).orElseThrow();
+    private BingoDocs.Stats stats(FakePluginContext ctx) {
+        return ctx.store().get(Scope.site(), BingoDocs.KEY_STATS, BingoDocs.Stats.class).orElseThrow();
     }
 
     private long entryCount(FakePluginContext ctx, String author) {
-        return ctx.schema().count(BingoPlugin.ENTITY_ENTRY,
+        return ctx.schema().count(BingoDocs.ENTITY_ENTRY,
                 dev.mosaicast.plugin.api.Criteria.where("author",
                         dev.mosaicast.plugin.api.Criteria.Op.EQ, author));
     }
 
     /** Whether the frozen row counts towards the board, independent of whether the board is published. */
     private boolean rankedInSchema(FakePluginContext ctx, String author) {
-        return ctx.schema().select(BingoPlugin.ENTITY_CARD_RESULT,
+        return ctx.schema().select(BingoDocs.ENTITY_CARD_RESULT,
                         dev.mosaicast.plugin.api.Criteria.where("author",
                                 dev.mosaicast.plugin.api.Criteria.Op.EQ, author),
-                        BingoPlugin.CardResultRow.class)
+                        BingoDocs.CardResultRow.class)
                 .get(0).ranked();
     }
 
-    private BingoPlugin.Row rowFor(FakePluginContext ctx, String author) {
+    private BingoDocs.Row rowFor(FakePluginContext ctx, String author) {
         var board = leaderboard(ctx);
         return java.util.stream.Stream.concat(board.ranked().stream(), board.late().stream())
                 .filter(r -> r.author().equals(author))

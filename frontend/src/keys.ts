@@ -2,7 +2,7 @@
 // SPDX-FileCopyrightText: 2026 The Mosaicast Authors
 
 /**
- * The doc-store keys this plugin uses, in one place so the frontend and `BingoPlugin`'s constants cannot
+ * The doc-store keys this plugin uses, in one place so the frontend and `BingoDocs`' constants cannot
  * drift apart silently.
  *
  * Which of these the browser may write is not a matter of taste: everything marked backend-owned below is

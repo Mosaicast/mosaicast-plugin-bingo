@@ -4,7 +4,7 @@
 /**
  * The documents this plugin reads and writes, as they sit in the doc store.
  *
- * Keep these in step with the records nested on `BingoPlugin` — Jackson serialises those, so the record
+ * Keep these in step with the records nested on `BingoDocs` — Jackson serialises those, so the record
  * *is* the wire format and there is no generated type to lean on.
  *
  * Note what is absent: no document anywhere carries a person's name. Rows and cards carry a user id, and

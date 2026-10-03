@@ -25,12 +25,16 @@ scripts/set-version.sh <x.y.z>                # bumps the plugin version in all 
 ```
 plugin.json                             manifest: slots, storage.schema, data floors, config
 backend/src/main/java/dev/mosaicast/plugin/bingo/
-  BingoPlugin.java                      register + the scheduled tick + UserDataHandler
-  BingoFuzzy.java                       pure entry grouping (no ctx, no clock, no I/O)
+  BingoPlugin.java                      register + the scheduled tick + every extension point (PF4J singleton)
+  BingoDocs.java                        doc keys, document records, schema row shapes
+  BingoLifecycle.java                   phase derivation (intent + release + archive timer)
+  BingoRecord.java                      ingest into schema rows (the freeze) + scoring
+  BingoPublish.java                     showcase, notifications, site stats
+  BingoFuzzy.java / BingoScore.java     pure grouping and scoring (no ctx, no clock, no I/O)
 backend/src/test/.../BingoSchemaFixture.java   builds FakeSchemaStore FROM plugin.json
-frontend/src/bingo-element.tsx          defines the three custom elements
-frontend/src/{keys,types}.ts            doc keys and document shapes — mirror BingoPlugin's records
-frontend/src/components/                EpisodeBingo, EpisodeCardBadge, ResolutionBoard, useBingo
+frontend/src/bingo-element.tsx          defines the custom elements
+frontend/src/{keys,types}.ts            doc keys and document shapes — mirror BingoDocs' records
+frontend/src/components/                EpisodeBingo (+ CreatePanel, PodcasterActions, Results), EpisodeCardBadge, ResolveModal, FeatureModal, useBingo
 frontend/locales/{en,de}.json           UI strings
 ```
 
