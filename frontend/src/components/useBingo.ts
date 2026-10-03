@@ -107,7 +107,7 @@ const EMPTY: Omit<BingoData, 'reload'> = {
 /**
  * Reads everything one episode's bingo needs, in one pass.
  *
- * Three habits worth keeping. The episode's documents come in one fresh batch read ({@link readEpisode}),
+ * Three habits worth keeping. The episode's documents come in one fresh batch read ({@link readScope}),
  * never through `ctx.docs.get`, whose remembered misses would hide every document that appears later. A
  * missing document is the normal answer for a bingo nobody has written yet, so an absent key is success and
  * only a real rejection sets `failed` — the reflexive `.catch(() => undefined)` would swallow the 403 and
@@ -135,7 +135,7 @@ export function useBingo(ctx: PluginContext): BingoData {
 
     const load = async () => {
       const [episode, mine, myPrefs, vocabulary, suggestions] = await Promise.all([
-        readEpisode(ctx, scope, TILE_KEYS),
+        readScope(ctx, scope, TILE_KEYS),
         // The viewer's own partition changes only through this client, whose writes forget the miss they
         // replace, so the host's remembered misses are right here and worth keeping.
         signedIn ? ctx.docs.get<Card>('self', cardKey(scope.id)) : Promise.resolve(null),
@@ -229,7 +229,7 @@ export function useBingoBadge(ctx: PluginContext): BadgeData {
     const ctx = latest.current;
     const scope = ctx.scope;
 
-    readEpisode(ctx, scope, BADGE_KEYS)
+    readScope(ctx, scope, BADGE_KEYS)
       .then((episode) => {
         if (live) {
           setState({
@@ -283,7 +283,7 @@ const BADGE_KEYS = [KEY_TEMPLATE, KEY_PHASE, KEY_LEADERBOARD];
  * the window, so a `phase` or `candidates` the tick wrote meanwhile would stay hidden. This tile only ever
  * wants fresh, and the batch read costs the same one request.
  */
-async function readEpisode(
+export async function readScope(
   ctx: PluginContext,
   scope: PluginContext['scope'],
   keys: readonly string[],
@@ -295,7 +295,7 @@ async function readEpisode(
 }
 
 /** A key from a batch answer, `null` when absent — the shape the per-key reads used to hand over. */
-function pick<T>(episode: Record<string, unknown>, key: string): T | null {
+export function pick<T>(episode: Record<string, unknown>, key: string): T | null {
   return (episode[key] ?? null) as T | null;
 }
 
@@ -314,7 +314,7 @@ export interface BadgeData {
  * cannot be used to tell them apart — so the result is **not** index-aligned with the request. Hence a map
  * keyed on id, and callers that cope with a missing entry.
  */
-async function resolvePeople(
+export async function resolvePeople(
   ctx: PluginContext,
   ids: string[],
 ): Promise<Record<string, UserRef>> {

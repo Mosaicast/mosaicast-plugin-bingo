@@ -18,6 +18,7 @@ import {
   DEFAULT_FUZZY_THRESHOLD,
   lineCount,
   prefOrDefault,
+  type Leaderboard,
   type Phase,
   type RankBy,
 } from '../types';
@@ -30,6 +31,7 @@ import { Shell, nameOf, toRef } from './common';
 import { PodcasterActions } from './PodcasterActions';
 import { RecapPanel } from './RecapPanel';
 import { Results } from './Results';
+import { ShareButton } from './ShareButton';
 import { FeatureModal } from './FeatureModal';
 import { ResolveModal, undecided } from './ResolveModal';
 import { useBingo, type BingoData } from './useBingo';
@@ -445,8 +447,27 @@ export function EpisodeBingo({ ctx }: { ctx: PluginContext }) {
       />
       {/* It names what happened in the episode, so it sits behind the same cover as the grid. */}
       {!hideForSpoilers && <RecapPanel recap={data.recap} i18n={i18n} />}
+      <div className="bingo__actions">
+        {/* A player's own result only once the published board carries it — the backend answers for that
+            page and no other; everyone else shares the bingo itself. */}
+        <ShareButton
+          ctx={ctx}
+          i18n={i18n}
+          subpath={
+            ctx.user && data.leaderboard?.published && onBoard(data.leaderboard, ctx.user.id)
+              ? `e/${ctx.scope.id}/u/${ctx.user.id}`
+              : `e/${ctx.scope.id}`
+          }
+          title={data.template.title || i18n.t('episode.title')}
+        />
+      </div>
     </Shell>
   );
+}
+
+/** Whether the published board carries this person's row, ranked or late. */
+function onBoard(board: Leaderboard, id: string): boolean {
+  return [...(board.ranked ?? []), ...(board.late ?? [])].some((row) => row.author === id);
 }
 
 /** A card always renders `count` squares, however many entries were actually written. */

@@ -793,6 +793,37 @@ describe('<EpisodeBingo>', () => {
     expect(host.textContent).not.toContain('Most predicted');
   });
 
+  it('shares a player’s own result once the published board carries it, the bingo otherwise', async () => {
+    const written: string[] = [];
+    Object.defineProperty(navigator, 'clipboard', {
+      configurable: true,
+      value: { writeText: async (text: string) => void written.push(text) },
+    });
+    const board = {
+      published: true, players: 1, totalPlayers: 1, rankBy: 'lines',
+      ranked: [{ author: 'u1', fields: 2, lines: 0, cells: 9, ranked: true }], late: [],
+    };
+    const docs = makeMockDocs({
+      [docPath('template')]: { size: 3 },
+      [docPath('phase')]: { phase: 'RESOLVED', suggested: 'LOCKED' },
+      [docPath('leaderboard')]: board,
+      [`data/user/me/card:${EPISODE}`]: { entries: ['kraken'] },
+    });
+    await render(makeBingoCtx({ scope, docs, user: fan }));
+    const share = () =>
+      [...host.querySelectorAll<HTMLButtonElement>('button')].find((b) => b.textContent === 'Share')!;
+
+    await act(async () => share().click());
+    expect(written.at(-1)).toBe(`${window.location.origin}/p/bingo/e/${EPISODE}/u/u1`);
+    expect(host.textContent).toContain('Link copied');
+
+    act(() => root.unmount());
+    root = createRoot(host);
+    await render(makeBingoCtx({ scope, docs, user: { ...fan, id: 'u9' } }));
+    await act(async () => share().click());
+    expect(written.at(-1)).toBe(`${window.location.origin}/p/bingo/e/${EPISODE}`);
+  });
+
   it('shows no results at all until the bingo is resolved', async () => {
     // The backend does not publish rows before then either; this is the second lock on the same door.
     await render(

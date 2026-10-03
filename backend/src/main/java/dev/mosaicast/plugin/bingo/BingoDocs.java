@@ -324,7 +324,15 @@ final class BingoDocs {
     }
 
     /** Cumulative standings, in the site scope. */
-    record Stats(List<StandingRow> players, int episodes, String computedAt) {}
+    record Stats(List<StandingRow> players, int episodes, List<BingoSummary> bingos, String computedAt) {}
+
+    /**
+     * One bingo, as the site page lists it. Only episodes everyone may know about.
+     *
+     * @param title   the bingo's own name, if the podcaster gave one; the episode's title is read live
+     * @param players everyone who played, or {@code null} for an archived bingo, which is never read again
+     */
+    record BingoSummary(String slug, String title, String phase, Integer players) {}
 
     /**
      * One prediction people keep making.

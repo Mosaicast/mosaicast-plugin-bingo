@@ -353,3 +353,32 @@ export const DEFAULT_FUZZY_THRESHOLD = 0.82;
 export function prefOrDefault(value: boolean | undefined): boolean {
   return value !== false;
 }
+
+/** One player's cumulative standing across every resolved episode. */
+export interface StandingRow {
+  author: string;
+  fields: number;
+  lines: number;
+  /** How many ranked cards it is summed over. */
+  cards: number;
+  cells: number;
+}
+
+/** One bingo as the site page lists it — only episodes everyone may know about. */
+export interface BingoSummary {
+  slug: string;
+  /** The bingo's own name, if it has one; the episode's title is read live. */
+  title?: string | null;
+  phase: Phase;
+  /** Everyone who played; absent for an archived bingo, which the backend never reads again. */
+  players?: number | null;
+}
+
+/** Backend-owned, site scope: cumulative standings and the list of bingos, for the plugin's page. */
+export interface Stats {
+  players?: StandingRow[];
+  episodes?: number;
+  bingos?: BingoSummary[];
+  computedAt?: string;
+}
+

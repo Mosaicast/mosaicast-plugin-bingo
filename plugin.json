@@ -16,7 +16,8 @@
     "entry": "bingo.es.js",
     "elements": [
       "bingo-episode",
-      "bingo-episode-card"
+      "bingo-episode-card",
+      "bingo-page"
     ]
   },
   "slots": [
@@ -33,6 +34,20 @@
       "placement": "main",
       "visibleTo": "anonymous",
       "order": 100
+    },
+    {
+      "scope": "site",
+      "element": "bingo-page",
+      "placement": "page",
+      "visibleTo": "anonymous",
+      "order": 100
+    }
+  ],
+  "nav": [
+    {
+      "path": "",
+      "label": "Bingo",
+      "icon": "dice"
     }
   ],
   "storage": {

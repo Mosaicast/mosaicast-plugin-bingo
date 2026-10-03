@@ -5,11 +5,14 @@ package dev.mosaicast.plugin.bingo;
 
 import dev.mosaicast.plugin.api.CrossUserStore;
 import dev.mosaicast.plugin.api.EpisodePhase;
+import dev.mosaicast.plugin.api.OgMeta;
 import dev.mosaicast.plugin.api.OwnedDocEntry;
+import dev.mosaicast.plugin.api.PageRouteProvider;
 import dev.mosaicast.plugin.api.PluginBackend;
 import dev.mosaicast.plugin.api.PluginContext;
 import dev.mosaicast.plugin.api.SchemaStore;
 import dev.mosaicast.plugin.api.Scope;
+import dev.mosaicast.plugin.api.ShareMetadataProvider;
 import dev.mosaicast.plugin.api.UserDataHandler;
 import org.pf4j.Extension;
 
@@ -73,7 +76,7 @@ import static dev.mosaicast.plugin.bingo.BingoDocs.*;
  * that {@code register} never reached.
  */
 @Extension
-public class BingoPlugin implements PluginBackend, UserDataHandler {
+public class BingoPlugin implements PluginBackend, UserDataHandler, PageRouteProvider, ShareMetadataProvider {
 
     static final int DEFAULT_INGEST_SECONDS = 60;
     static final double DEFAULT_FUZZY_THRESHOLD = 0.82;
@@ -98,6 +101,8 @@ public class BingoPlugin implements PluginBackend, UserDataHandler {
     private BingoLifecycle lifecycle;
     private BingoRecord record;
     private BingoPublish publish;
+    /** Set once {@link #register} has run; the host may ask about pages before that. */
+    private volatile BingoPages pages;
     /** What the last site roll-up was computed from, and when; see {@link #rollUp}. */
     private String lastRollUpInputs;
     private Instant lastRollUp;
@@ -120,6 +125,7 @@ public class BingoPlugin implements PluginBackend, UserDataHandler {
         this.lifecycle = new BingoLifecycle(ctx, clock);
         this.record = new BingoRecord(ctx, clock);
         this.publish = new BingoPublish(ctx, clock, lifecycle);
+        this.pages = new BingoPages(ctx, lifecycle);
         this.everyone = Objects.requireNonNull(ctx.allUsers(),
                 "bingo needs data.readsAllUsers in plugin.json: it reads every player's card");
 
@@ -194,14 +200,15 @@ public class BingoPlugin implements PluginBackend, UserDataHandler {
      * episode with a bingo.
      */
     private Pass pass() {
-        return new Pass(settings(), readPrefs(), collectCards(), new LinkedHashSet<>());
+        return new Pass(settings(), readPrefs(), collectCards(), new LinkedHashSet<>(), new ArrayList<>());
     }
 
     /**
-     * @param quiet filled during the pass: working-set episodes nobody but a podcaster may know exist
+     * @param quiet   filled during the pass: working-set episodes nobody but a podcaster may know exist
+     * @param bingos  filled during the pass: every bingo there is, for the site page's list
      */
     private record Pass(Settings settings, Map<String, Prefs> prefs, Map<String, List<CardInput>> cards,
-                        Set<String> quiet) {}
+                        Set<String> quiet, List<BingoSummary> bingos) {}
 
     /**
      * The site-wide roll-up, recomputed only when something it is computed from moved.
@@ -220,13 +227,14 @@ public class BingoPlugin implements PluginBackend, UserDataHandler {
                 .toList();
         String fingerprint = String.join("|", pass.settings().rankBy().name(),
                 Double.toString(pass.settings().threshold()), String.join(",", unlisted),
-                Integer.toHexString(slugs.hashCode()), String.join(",", new TreeSet<>(pass.quiet())));
+                Integer.toHexString(slugs.hashCode()), String.join(",", new TreeSet<>(pass.quiet())),
+                Integer.toHexString(pass.bingos().hashCode()));
         Instant now = now();
         boolean stale = lastRollUp == null || !now.isBefore(lastRollUp.plus(ROLL_UP_REFRESH));
         if (!rowsChanged && !stale && fingerprint.equals(lastRollUpInputs)) {
             return;
         }
-        publish.stats(pass.prefs(), pass.settings().rankBy());
+        publish.stats(pass.prefs(), pass.settings().rankBy(), pass.bingos());
         publish.suggestions(pass.settings().threshold());
         lastRollUpInputs = fingerprint;
         lastRollUp = now;
@@ -264,7 +272,10 @@ public class BingoPlugin implements PluginBackend, UserDataHandler {
 
         PhaseState previous = ctx.store().get(scope, KEY_PHASE, PhaseState.class).orElse(null);
         if (previous != null && Phase.ARCHIVED.name().equals(previous.phase())) {
-            return; // terminal: this episode has left the working set for good
+            // Terminal: this episode has left the working set for good. It is still a bingo that happened,
+            // so it stays on the site page's list - with no headcount, which would cost a read per episode.
+            pass.bingos().add(new BingoSummary(slug, template.get().title(), Phase.ARCHIVED.name(), null));
+            return;
         }
 
         EpisodePhase release = lifecycle.releasePhaseOf(slug);
@@ -350,6 +361,7 @@ public class BingoPlugin implements PluginBackend, UserDataHandler {
 
         if (phase == Phase.ARCHIVED) {
             // Newly archived this tick: the documents above are its final state, and nothing is ingested.
+            pass.bingos().add(new BingoSummary(slug, template.get().title(), Phase.ARCHIVED.name(), null));
             return;
         }
 
@@ -357,6 +369,9 @@ public class BingoPlugin implements PluginBackend, UserDataHandler {
         BingoRecord.Scored scored = record.score(slug, template.get(), grouping, resolution, prefs, phase, rankBy);
         ctx.store().put(scope, KEY_LEADERBOARD, scored.board());
         ctx.store().put(scope, KEY_RECAP, record.recap(scored, items, cardCounts, resolution, phase));
+        if (release != EpisodePhase.PLANNED) {
+            pass.bingos().add(new BingoSummary(slug, template.get().title(), phase.name(), scored.players()));
+        }
 
         publish.showcase(slug, cards, prefs);
 
@@ -542,6 +557,27 @@ public class BingoPlugin implements PluginBackend, UserDataHandler {
             return Optional.empty();
         }
         return Optional.of(Map.of("entries", entries, "results", results));
+    }
+
+    // ---------------------------------------------------------------- pages
+
+    /**
+     * {@inheritDoc}
+     *
+     * <p>Before {@link #register} has run there is nothing to look anything up in, and guessing 404 from a
+     * plugin that has not finished starting would hide real pages - so every path renders until then.
+     */
+    @Override
+    public boolean hasRoute(String subpath) {
+        BingoPages current = pages;
+        return current == null || current.hasRoute(subpath);
+    }
+
+    /** {@inheritDoc} See {@link BingoPages} for what a card says, and what it never does. */
+    @Override
+    public Optional<OgMeta> metaFor(String subpath) {
+        BingoPages current = pages;
+        return current == null ? Optional.empty() : current.metaFor(subpath);
     }
 
     // ---------------------------------------------------------------- helpers

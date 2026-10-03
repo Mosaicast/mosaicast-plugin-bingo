@@ -225,7 +225,7 @@ final class BingoPublish {
      * everyone can see. This document is public, so cards played on a quiet planned episode would announce
      * that it exists; and a plan that was cancelled took its documents with it but not these rows.
      */
-    void stats(Map<String, Prefs> prefs, BingoScore.RankBy rankBy) {
+    void stats(Map<String, Prefs> prefs, BingoScore.RankBy rankBy, List<BingoSummary> bingos) {
         SchemaStore schema = ctx.schema();
         if (schema == null) {
             return;
@@ -255,7 +255,13 @@ final class BingoPublish {
                 .toList();
         long episodes = rows.stream().map(CardResultRow::episode).distinct().count();
 
-        ctx.store().put(Scope.site(), KEY_STATS, new Stats(standings, (int) episodes, now().toString()));
+        // An archived bingo was never checked against the feed on this pass; a quiet one was left out already.
+        List<BingoSummary> listed = bingos.stream()
+                .filter(b -> !Phase.ARCHIVED.name().equals(b.phase())
+                        || visible.computeIfAbsent(b.slug(), lifecycle::publiclyVisible))
+                .toList();
+        ctx.store().put(Scope.site(), KEY_STATS,
+                new Stats(standings, (int) episodes, listed, now().toString()));
     }
 
     // ---------------------------------------------------------------- suggestions

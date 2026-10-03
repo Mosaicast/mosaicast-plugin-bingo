@@ -178,6 +178,12 @@ export const BINGO_CSS =
   }
   .bingo__row-score { margin-left: auto; font-variant-numeric: tabular-nums; }
   .bingo__recap-list { margin: 0; padding-left: 1.1rem; display: flex; flex-direction: column; gap: .2rem; font-size: .875rem; }
+  .bingo__list { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: .35rem; }
+  .bingo__list li { overflow-wrap: anywhere; }
+  .bingo__link { color: var(--mc-accent-text); text-decoration: underline; }
+  .bingo__link:focus-visible { outline: 2px solid var(--mc-accent-text); outline-offset: 1px; }
+  a.bingo__btn { display: inline-flex; align-items: center; text-decoration: none; }
+  .bingo__share { display: inline-flex; align-items: center; gap: .5rem; flex-wrap: wrap; }
   .bingo__section-title { font-size: .8125rem; color: var(--mc-text-muted); margin: .75rem 0 .25rem; }
 
   .bingo__spoiler { border: 1px dashed var(--mc-border); border-radius: .5rem; padding: 1rem; text-align: center; }
