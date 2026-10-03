@@ -130,32 +130,38 @@ public final class BingoFuzzy {
     public static Grouping group(Collection<String> rawTexts, double threshold) {
         double cut = Math.clamp(threshold, 0.0, 1.0);
 
+        // Normalised once per entry, not once per comparison: the sort alone would otherwise run the regex
+        // n log n times.
+        record Entry(String raw, String normalised) {}
         // Sorted so grouping cannot depend on the doc store's arbitrary query order (see the class note).
-        List<String> ordered = rawTexts.stream()
-                .filter(t -> !normalise(t).isEmpty())
-                .sorted(Comparator.comparing(BingoFuzzy::normalise).thenComparing(t -> t))
+        List<Entry> ordered = rawTexts.stream()
+                .map(raw -> new Entry(raw, normalise(raw)))
+                .filter(e -> !e.normalised().isEmpty())
+                .sorted(Comparator.comparing(Entry::normalised).thenComparing(Entry::raw))
                 .toList();
 
         List<Bucket> buckets = new ArrayList<>();
+        Map<String, Bucket> byCanonical = new HashMap<>();
         Map<String, String> canonicalByNormalised = new HashMap<>();
 
-        for (String raw : ordered) {
-            String normalised = normalise(raw);
+        for (Entry entry : ordered) {
+            String normalised = entry.normalised();
             String existing = canonicalByNormalised.get(normalised);
             if (existing != null) {
-                bucketFor(buckets, existing).count++;
+                byCanonical.get(existing).count++;
                 continue;
             }
             Bucket match = null;
             for (Bucket b : buckets) {
-                if (similarity(normalised, b.canonical) >= cut) {
+                if (similarEnough(normalised, b.canonical, cut)) {
                     match = b;
                     break;
                 }
             }
             if (match == null) {
-                match = new Bucket(normalised, raw.strip());
+                match = new Bucket(normalised, entry.raw().strip());
                 buckets.add(match);
+                byCanonical.put(match.canonical, match);
             }
             match.count++;
             canonicalByNormalised.put(normalised, match.canonical);
@@ -170,13 +176,33 @@ public final class BingoFuzzy {
         return new Grouping(Map.copyOf(canonicalByNormalised), candidates);
     }
 
-    private static Bucket bucketFor(List<Bucket> buckets, String canonical) {
-        for (Bucket b : buckets) {
-            if (b.canonical.equals(canonical)) {
-                return b;
-            }
+    /**
+     * Exactly {@code similarity(a, b) >= cut}, without paying for a full edit distance when the answer is no.
+     *
+     * <p>Two strings whose lengths differ by more than the allowed number of edits cannot be similar enough,
+     * and the distance itself is computed only within that bound. The final comparison is the same
+     * expression {@link #similarity} uses, so the two can never disagree on a borderline pair.
+     */
+    static boolean similarEnough(String a, String b, double cut) {
+        if (a.equals(b)) {
+            return true;
         }
-        throw new IllegalStateException("no bucket for canonical " + canonical);
+        String digitsA = digitsOf(a);
+        String digitsB = digitsOf(b);
+        if (!digitsA.isEmpty() && !digitsB.isEmpty() && !digitsA.equals(digitsB)) {
+            return cut <= 0.0; // similarity 0, which only a threshold of 0 accepts
+        }
+        int longer = Math.max(a.length(), b.length());
+        if (longer == 0) {
+            return true;
+        }
+        // One spare edit, so floating-point rounding at the boundary is left to the exact check below.
+        int bound = (int) Math.floor((1.0 - cut) * longer) + 1;
+        if (Math.abs(a.length() - b.length()) > bound) {
+            return false;
+        }
+        int distance = boundedLevenshtein(a, b, bound);
+        return distance <= bound && 1.0 - ((double) distance / longer) >= cut;
     }
 
     private static int levenshtein(String a, String b) {
@@ -197,6 +223,47 @@ public final class BingoFuzzy {
         }
         return previous[b.length()];
     }
+
+    /**
+     * The edit distance, or {@code bound + 1} once it is certain to exceed {@code bound}.
+     *
+     * <p>Only the diagonal band {@code |i - j| <= bound} can hold a path within the bound, so cells outside
+     * it are never filled, and a row whose best cell is already over the bound ends the search.
+     */
+    private static int boundedLevenshtein(String a, String b, int bound) {
+        int over = bound + 1;
+        int[] previous = new int[b.length() + 1];
+        int[] current = new int[b.length() + 1];
+        for (int j = 0; j <= b.length(); j++) {
+            previous[j] = Math.min(j, over);
+        }
+        for (int i = 1; i <= a.length(); i++) {
+            int from = Math.max(1, i - bound);
+            int to = Math.min(b.length(), i + bound);
+            current[0] = Math.min(i, over);
+            if (from > 1) {
+                current[from - 1] = over;
+            }
+            int best = from == 1 ? current[0] : over;
+            for (int j = from; j <= to; j++) {
+                int cost = a.charAt(i - 1) == b.charAt(j - 1) ? 0 : 1;
+                int value = Math.min(Math.min(current[j - 1] + 1, previous[j] + 1), previous[j - 1] + cost);
+                current[j] = Math.min(value, over);
+                best = Math.min(best, current[j]);
+            }
+            if (to < b.length()) {
+                current[to + 1] = over;
+            }
+            if (best > bound) {
+                return over;
+            }
+            int[] swap = previous;
+            previous = current;
+            current = swap;
+        }
+        return previous[b.length()];
+    }
+
 
     private static final class Bucket {
         private final String canonical;

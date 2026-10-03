@@ -150,4 +150,86 @@ class BingoFuzzyTest {
 
         assertEquals(1, grouping.candidates().size(), "same number, same thing");
     }
+
+    // ---------------------------------------------------------------- the pruned comparison
+
+    /**
+     * The pruned comparison must never change an answer: it exists only to skip work whose result is
+     * already known. Checked against the plain definition over a corpus built to sit near the threshold -
+     * short words with single-character edits, so many pairs land right on the boundary.
+     */
+    @Test
+    void thePrunedComparisonAgreesWithTheDefinitionEverywhere() {
+        java.util.Random random = new java.util.Random(20261003L);
+        String alphabet = "aabcdeeiklmnorstu 12";
+        List<String> corpus = new ArrayList<>();
+        for (int i = 0; i < 300; i++) {
+            StringBuilder word = new StringBuilder();
+            int length = 1 + random.nextInt(18);
+            for (int c = 0; c < length; c++) {
+                word.append(alphabet.charAt(random.nextInt(alphabet.length())));
+            }
+            corpus.add(BingoFuzzy.normalise(word.toString()));
+        }
+        double[] cuts = { 0.0, 0.5, 0.7, 0.75, 0.8, 0.82, 0.9, 0.95, 1.0 };
+        for (double cut : cuts) {
+            for (String a : corpus) {
+                for (String b : corpus) {
+                    assertEquals(BingoFuzzy.similarity(a, b) >= cut, BingoFuzzy.similarEnough(a, b, cut),
+                            () -> "'" + a + "' vs '" + b + "' at " + cut);
+                }
+            }
+        }
+    }
+
+    @Test
+    void groupingIsUnchangedByThePruning() {
+        java.util.Random random = new java.util.Random(7L);
+        String[] stems = { "alex says damn it", "kraken", "merch plug", "sponsor read", "guest is late",
+                "3 sponsor reads", "comet fact 16", "über grüßen" };
+        List<String> entries = new ArrayList<>();
+        for (int i = 0; i < 400; i++) {
+            StringBuilder text = new StringBuilder(stems[random.nextInt(stems.length)]);
+            int edits = random.nextInt(4);
+            for (int e = 0; e < edits && text.length() > 1; e++) {
+                int at = random.nextInt(text.length());
+                switch (random.nextInt(3)) {
+                    case 0 -> text.deleteCharAt(at);
+                    case 1 -> text.insert(at, (char) ('a' + random.nextInt(26)));
+                    default -> text.setCharAt(at, (char) ('a' + random.nextInt(26)));
+                }
+            }
+            entries.add(random.nextBoolean() ? text.toString().toUpperCase() : text + "!");
+        }
+
+        for (double cut : new double[] { 0.6, 0.82, 0.9 }) {
+            assertEquals(oracle(entries, cut), BingoFuzzy.group(entries, cut).canonicalByNormalised(),
+                    "at " + cut);
+        }
+    }
+
+    /** The grouping as first written: first matching bucket by plain similarity, over a sorted copy. */
+    private static java.util.Map<String, String> oracle(List<String> raw, double cut) {
+        List<String> sorted = raw.stream().map(BingoFuzzy::normalise).filter(s -> !s.isEmpty()).sorted().toList();
+        List<String> buckets = new ArrayList<>();
+        java.util.Map<String, String> out = new java.util.HashMap<>();
+        for (String n : sorted) {
+            if (out.containsKey(n)) {
+                continue;
+            }
+            String match = null;
+            for (String b : buckets) {
+                if (BingoFuzzy.similarity(n, b) >= cut) {
+                    match = b;
+                    break;
+                }
+            }
+            if (match == null) {
+                match = n;
+                buckets.add(n);
+            }
+            out.put(n, match);
+        }
+        return out;
+    }
 }
