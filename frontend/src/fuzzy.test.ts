@@ -29,6 +29,13 @@ describe('cardIssues', () => {
     ]);
   });
 
+  it('reports a repeat even when a merely similar square comes first', () => {
+    expect(cardIssues(['Espresso machin', 'Espresso machine', 'espresso machine'], 0.82)).toEqual([
+      { index: 1, other: 0, kind: 'similar' },
+      { index: 2, other: 1, kind: 'duplicate' },
+    ]);
+  });
+
   it('leaves different numbers and blank squares alone', () => {
     expect(cardIssues(['3 sponsor reads', '5 sponsor reads', '', ''], 0.82)).toEqual([]);
   });

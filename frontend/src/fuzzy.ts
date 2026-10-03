@@ -106,17 +106,15 @@ export function cardIssues(entries: readonly string[], threshold: number): CardI
   const issues: CardIssue[] = [];
   for (let i = 0; i < forms.length; i++) {
     if (forms[i] === '') continue;
-    for (let j = 0; j < i; j++) {
-      if (forms[j] === '') continue;
-      if (forms[i] === forms[j]) {
-        issues.push({ index: i, other: j, kind: 'duplicate' });
-        break;
-      }
-      if (similarity(forms[i], forms[j]) >= threshold) {
-        issues.push({ index: i, other: j, kind: 'similar' });
-        break;
-      }
+    // A repeat anywhere earlier outranks a near miss: only the repeat blocks saving, so it must not be
+    // hidden behind a merely similar square that happens to come first.
+    const repeat = forms.findIndex((form, j) => j < i && form === forms[i]);
+    if (repeat !== -1) {
+      issues.push({ index: i, other: repeat, kind: 'duplicate' });
+      continue;
     }
+    const close = forms.findIndex((form, j) => j < i && form !== '' && similarity(form, forms[i]) >= threshold);
+    if (close !== -1) issues.push({ index: i, other: close, kind: 'similar' });
   }
   return issues;
 }
