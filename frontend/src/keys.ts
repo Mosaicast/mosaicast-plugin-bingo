@@ -72,8 +72,11 @@ export const KEY_STATS = 'stats';
  * The partition is flat — one per person, not one per person and episode — so the episode goes in the key.
  */
 export function cardKey(episodeSlug: string): string {
-  return `card:${episodeSlug}`;
+  return `${CARD_PREFIX}${episodeSlug}`;
 }
+
+/** The prefix every one of a player's cards shares, for listing their own partition. */
+export const CARD_PREFIX = 'card:';
 
 /**
  * A player's own visibility preferences, in their own partition.
