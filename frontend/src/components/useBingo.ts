@@ -11,6 +11,7 @@ import {
   KEY_PREFS,
   KEY_RESOLUTION,
   KEY_CONTROL,
+  KEY_GROUPING,
   KEY_SHOWCASE,
   KEY_SHOWCASED,
   KEY_TEMPLATE,
@@ -21,6 +22,7 @@ import type {
   Control,
   Candidates,
   Card,
+  GroupingDoc,
   Leaderboard,
   Participants,
   PhaseState,
@@ -51,6 +53,8 @@ export interface BingoData {
   cardCounts: Record<string, number>;
   assignments: Record<string, string>;
   resolution: Resolution | null;
+  /** The podcaster's corrections to the grouping; read so one not applied yet can say so. */
+  grouping: GroupingDoc | null;
   leaderboard: Leaderboard | null;
   /** Cards a podcaster chose to feature, copied out by the backend so anyone can read them. */
   showcased: ShowcasedCard[];
@@ -78,6 +82,7 @@ const EMPTY: Omit<BingoData, 'reload'> = {
   cardCounts: {},
   assignments: {},
   resolution: null,
+  grouping: null,
   leaderboard: null,
   showcased: [],
   participants: [],
@@ -149,6 +154,7 @@ export function useBingo(ctx: PluginContext): BingoData {
         cardCounts: candidates?.cards ?? {},
         assignments: candidates?.assignments ?? {},
         resolution,
+        grouping: pick<GroupingDoc>(episode, KEY_GROUPING),
         leaderboard,
         showcased: showcasedCards,
         participants: (participants?.items ?? []).map((p) => p.userId),
@@ -232,7 +238,7 @@ export function useBingoBadge(ctx: PluginContext): BadgeData {
 /** Every episode document the tile draws, in one request. */
 const TILE_KEYS = [
   KEY_TEMPLATE, KEY_PHASE, KEY_CONTROL, KEY_CANDIDATES, KEY_RESOLUTION,
-  KEY_LEADERBOARD, KEY_SHOWCASED, KEY_PARTICIPANTS, KEY_SHOWCASE,
+  KEY_LEADERBOARD, KEY_SHOWCASED, KEY_PARTICIPANTS, KEY_SHOWCASE, KEY_GROUPING,
 ];
 
 /** The three a feed badge draws, in one request. */

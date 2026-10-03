@@ -128,6 +128,32 @@ public final class BingoFuzzy {
      * @return the grouping, ordered by descending count then canonical form
      */
     public static Grouping group(Collection<String> rawTexts, double threshold) {
+        return group(rawTexts, threshold, List.of(), Map.of());
+    }
+
+    /**
+     * Groups entries around groups that already exist, and lets a person overrule the matching.
+     *
+     * <p><strong>Seeds keep a decided group's identity.</strong> Left to itself, a group is named after its
+     * first member in sorted order, so an entry arriving later that happens to sort earlier - "alex says
+     * damn" next to "alex says damn it" - would rename the group, and the podcaster's decision, which is
+     * keyed by that name, would no longer apply to anything. Seeded groups exist before any entry is placed
+     * and are tried first, so a newcomer joins them instead of displacing them. A seed nobody's entry lands
+     * in produces no candidate.
+     *
+     * <p><strong>Pins are the podcaster's word over the arithmetic.</strong> A pinned entry skips matching:
+     * pinned to another group it joins that group (a merge); pinned to its own normalised form it becomes a
+     * group of its own (a split). A pin naming a group that no longer exists is ignored and the entry is
+     * matched as usual. A seed that has itself been pinned elsewhere is not created - it was merged away.
+     *
+     * @param rawTexts  every entry, in any order
+     * @param threshold similarity at or above which two entries are the same thing; clamped to [0, 1]
+     * @param seeds     canonical forms of groups that must keep their identity, typically the decided ones
+     * @param pins      normalised entry to the canonical form of the group it belongs to
+     * @return the grouping, ordered by descending count then canonical form
+     */
+    public static Grouping group(Collection<String> rawTexts, double threshold, Collection<String> seeds,
+                                 Map<String, String> pins) {
         double cut = Math.clamp(threshold, 0.0, 1.0);
 
         // Normalised once per entry, not once per comparison: the sort alone would otherwise run the regex
@@ -144,36 +170,74 @@ public final class BingoFuzzy {
         Map<String, Bucket> byCanonical = new HashMap<>();
         Map<String, String> canonicalByNormalised = new HashMap<>();
 
+        // Seeds first, then splits, so both exist before anything is matched against them.
+        List<String> fixed = new ArrayList<>();
+        seeds.stream().filter(s -> s != null && !s.isEmpty())
+                .filter(s -> pins.getOrDefault(s, s).equals(s))
+                .sorted().forEach(fixed::add);
+        pins.entrySet().stream().filter(e -> e.getKey().equals(e.getValue())).map(Map.Entry::getKey)
+                .sorted().forEach(fixed::add);
+        for (String canonical : fixed) {
+            if (!byCanonical.containsKey(canonical)) {
+                Bucket bucket = new Bucket(canonical, null);
+                buckets.add(bucket);
+                byCanonical.put(canonical, bucket);
+            }
+        }
+
+        // Unpinned entries match as usual; pinned ones go where they were told, after every group exists.
+        List<Entry> pinned = new ArrayList<>();
         for (Entry entry : ordered) {
-            String normalised = entry.normalised();
-            String existing = canonicalByNormalised.get(normalised);
-            if (existing != null) {
-                byCanonical.get(existing).count++;
+            if (pins.containsKey(entry.normalised())) {
+                pinned.add(entry);
                 continue;
             }
-            Bucket match = null;
-            for (Bucket b : buckets) {
-                if (similarEnough(normalised, b.canonical, cut)) {
-                    match = b;
-                    break;
-                }
+            place(entry.raw(), entry.normalised(), cut, buckets, byCanonical, canonicalByNormalised);
+        }
+        for (Entry entry : pinned) {
+            Bucket target = byCanonical.get(pins.get(entry.normalised()));
+            if (target == null) {
+                place(entry.raw(), entry.normalised(), cut, buckets, byCanonical, canonicalByNormalised);
+                continue;
             }
-            if (match == null) {
-                match = new Bucket(normalised, entry.raw().strip());
-                buckets.add(match);
-                byCanonical.put(match.canonical, match);
-            }
-            match.count++;
-            canonicalByNormalised.put(normalised, match.canonical);
+            target.join(entry.raw(), entry.normalised());
+            canonicalByNormalised.put(entry.normalised(), target.canonical);
         }
 
         List<Candidate> candidates = buckets.stream()
+                .filter(b -> b.count > 0)
                 .map(b -> new Candidate(b.canonical, b.label, b.count))
                 .sorted(Comparator.comparingInt(Candidate::count).reversed()
                         .thenComparing(Candidate::canonical))
                 .toList();
 
         return new Grouping(Map.copyOf(canonicalByNormalised), candidates);
+    }
+
+    /** Puts one entry in the group it matches, or in a new one. */
+    private static void place(String raw, String normalised, double cut, List<Bucket> buckets,
+                              Map<String, Bucket> byCanonical, Map<String, String> canonicalByNormalised) {
+        String existing = canonicalByNormalised.get(normalised);
+        if (existing != null) {
+            byCanonical.get(existing).join(raw, normalised);
+            return;
+        }
+        Bucket match = byCanonical.get(normalised);
+        if (match == null) {
+            for (Bucket b : buckets) {
+                if (similarEnough(normalised, b.canonical, cut)) {
+                    match = b;
+                    break;
+                }
+            }
+        }
+        if (match == null) {
+            match = new Bucket(normalised, null);
+            buckets.add(match);
+            byCanonical.put(normalised, match);
+        }
+        match.join(raw, normalised);
+        canonicalByNormalised.put(normalised, match.canonical);
     }
 
     /**
@@ -267,12 +331,28 @@ public final class BingoFuzzy {
 
     private static final class Bucket {
         private final String canonical;
-        private final String label;
+        private String label;
+        /** Whether {@link #label} is a spelling of the canonical form itself, not of a neighbour. */
+        private boolean exact;
         private int count;
 
         private Bucket(String canonical, String label) {
             this.canonical = canonical;
             this.label = label;
+        }
+
+        /**
+         * Names the group for people after the first spelling of the canonical form itself, or the first
+         * spelling at all until one arrives. For an ordinary group that is its first member, as it always
+         * was; for a seeded one it keeps the label the decision was made under rather than whichever
+         * neighbour happened to sort first.
+         */
+        private void join(String raw, String normalised) {
+            if (label == null || (!exact && normalised.equals(canonical))) {
+                label = raw.strip();
+                exact = normalised.equals(canonical);
+            }
+            count++;
         }
     }
 

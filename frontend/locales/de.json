@@ -84,5 +84,15 @@
   "showcase.save": "Auswahl speichern",
   "showcase.title": "Hervorgehobene Karten",
   "stats.cards": "{{count}} Karte(n)",
-  "stats.title": "Host-Wertung"
+  "stats.title": "Host-Wertung",
+  "regroup.toggle": "Schreibweisen ({{count}})",
+  "regroup.split": "Abtrennen",
+  "regroup.undo": "Rückgängig",
+  "regroup.mergeInto": "Zusammenführen mit",
+  "regroup.choose": "Eintrag wählen…",
+  "regroup.merge": "Zusammenführen",
+  "regroup.conflict": "Du hast die beiden unterschiedlich entschieden. Nach dem Zusammenführen gilt die Entscheidung für „{{target}}“ für beide.",
+  "regroup.hint": "Korrekturen gelten auch für bereits eingefrorene Karten und greifen bei der nächsten Aktualisierung.",
+  "regroup.pending": "wird verschoben…",
+  "regroup.waiting": "Deine Korrekturen werden bei der nächsten Aktualisierung übernommen."
 }

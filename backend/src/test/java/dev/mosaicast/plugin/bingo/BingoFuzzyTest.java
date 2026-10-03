@@ -232,4 +232,85 @@ class BingoFuzzyTest {
         }
         return out;
     }
+
+    // ---------------------------------------------------------------- seeds and pins
+
+    @Test
+    void aSeededGroupKeepsItsNameWhenAnEarlierSortingEntryArrives() {
+        // Unseeded, the shorter spelling sorts first and names the group, which orphans a decision made on
+        // the longer one.
+        assertEquals("alex says damn",
+                BingoFuzzy.group(List.of("Alex says damn it", "alex says damn"), 0.82).canonicalOf("alex says damn"));
+
+        var seeded = BingoFuzzy.group(List.of("Alex says damn it", "alex says damn"), 0.82,
+                List.of("alex says damn it"), java.util.Map.of());
+        assertEquals("alex says damn it", seeded.canonicalOf("alex says damn"));
+        assertEquals(1, seeded.candidates().size());
+        assertEquals("Alex says damn it", seeded.candidates().get(0).label());
+    }
+
+    @Test
+    void aSeedNobodyWroteProducesNoCandidate() {
+        var grouping = BingoFuzzy.group(List.of("kraken"), 0.82, List.of("merch plug"), java.util.Map.of());
+
+        assertEquals(List.of("kraken"), grouping.candidates().stream().map(BingoFuzzy.Candidate::canonical).toList());
+    }
+
+    @Test
+    void aPinMergesAnEntryIntoAnotherGroup() {
+        var grouping = BingoFuzzy.group(List.of("kraken", "giant squid"), 0.82, List.of(),
+                java.util.Map.of("giant squid", "kraken"));
+
+        assertEquals("kraken", grouping.canonicalOf("Giant Squid!"));
+        assertEquals(1, grouping.candidates().size());
+        assertEquals(2, grouping.candidates().get(0).count());
+    }
+
+    @Test
+    void aPinToItselfSplitsAnEntryOff() {
+        var grouping = BingoFuzzy.group(List.of("alex says damn it", "alex says damn"), 0.82,
+                List.of("alex says damn it"), java.util.Map.of("alex says damn", "alex says damn"));
+
+        assertEquals("alex says damn", grouping.canonicalOf("alex says damn"));
+        assertEquals("alex says damn it", grouping.canonicalOf("alex says damn it"));
+        assertEquals(2, grouping.candidates().size());
+    }
+
+    @Test
+    void aPinToAGroupThatIsGoneIsIgnored() {
+        var grouping = BingoFuzzy.group(List.of("kraken", "krakken"), 0.82, List.of(),
+                java.util.Map.of("krakken", "no such group"));
+
+        assertEquals("kraken", grouping.canonicalOf("krakken"), "matched as if it had never been pinned");
+    }
+
+    @Test
+    void aDecidedGroupThatWasMergedAwayIsNotRecreated() {
+        var grouping = BingoFuzzy.group(List.of("kraken", "giant squid"), 0.82, List.of("giant squid", "kraken"),
+                java.util.Map.of("giant squid", "kraken"));
+
+        assertEquals(List.of("kraken"), grouping.candidates().stream().map(BingoFuzzy.Candidate::canonical).toList());
+    }
+
+    // ---------------------------------------------------------------- one answer key for both halves
+
+    /**
+     * {@code frontend/src/fuzzy.ts} copies these rules to warn a player about two squares that will count as
+     * one. The copy is advisory, but it must not drift: both test suites read this one file.
+     */
+    @Test
+    void agreesWithTheSharedVectorsTheFrontendIsHeldTo() throws Exception {
+        var vectors = tools.jackson.databind.json.JsonMapper.builder().build()
+                .readTree(java.nio.file.Files.readString(java.nio.file.Path.of("..", "shared", "fuzzy-vectors.json")));
+        assertTrue(vectors.path("normalise").size() > 10);
+        for (var pair : vectors.path("normalise")) {
+            assertEquals(pair.get(1).asString(), BingoFuzzy.normalise(pair.get(0).asString()),
+                    "normalise " + pair.get(0));
+        }
+        for (var triple : vectors.path("similarity")) {
+            assertEquals(triple.get(2).asDouble(),
+                    BingoFuzzy.similarity(triple.get(0).asString(), triple.get(1).asString()), 1e-12,
+                    "similarity " + triple.get(0) + " / " + triple.get(1));
+        }
+    }
 }

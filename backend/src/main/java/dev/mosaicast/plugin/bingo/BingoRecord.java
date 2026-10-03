@@ -183,7 +183,7 @@ final class BingoRecord {
      * the leaderboard still has rows, still has a score, and still sees it on their own card - the tile
      * works that out from their own document without asking anybody.
      */
-    Leaderboard score(String slug, Template template, Resolution resolution,
+    Leaderboard score(String slug, Template template, BingoFuzzy.Grouping grouping, Resolution resolution,
                       Map<String, Prefs> prefs, Phase phase, BingoScore.RankBy rankBy) {
         SchemaStore schema = ctx.schema();
         if (schema == null) {
@@ -213,9 +213,13 @@ final class BingoRecord {
             List<int[]> marks = BingoScore.marks();
             boolean isRanked = true;
             for (EntryRow row : cardRows) {
-                boolean hit = resolution.isHit(row.canonical());
-                if (hit != row.hit()) {
-                    schema.update(ENTITY_ENTRY, row.id(), Map.of("hit", hit));
+                // Which group a frozen square belongs to is a judgement the podcaster may still correct, so
+                // it follows the current grouping: what freezes is what a card says, not what it is worth.
+                String current = grouping.canonicalOf(row.text());
+                String canonical = current != null ? current : row.canonical();
+                boolean hit = resolution.isHit(canonical);
+                if (hit != row.hit() || !canonical.equals(row.canonical())) {
+                    schema.update(ENTITY_ENTRY, row.id(), Map.of("hit", hit, "canonical", canonical));
                     changed = true;
                 }
                 marks.add(new int[] { row.position(), hit ? 1 : 0 });

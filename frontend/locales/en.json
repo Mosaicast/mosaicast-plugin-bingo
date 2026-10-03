@@ -84,5 +84,15 @@
   "showcase.save": "Save selection",
   "showcase.title": "Featured cards",
   "stats.cards": "{{count}} card(s)",
-  "stats.title": "Host standings"
+  "stats.title": "Host standings",
+  "regroup.toggle": "Spellings ({{count}})",
+  "regroup.split": "Split off",
+  "regroup.undo": "Undo",
+  "regroup.mergeInto": "Merge into",
+  "regroup.choose": "Choose an entry…",
+  "regroup.merge": "Merge",
+  "regroup.conflict": "You decided these two differently. After merging, the decision on “{{target}}” counts for both.",
+  "regroup.hint": "Corrections also apply to cards that are already frozen, and take effect on the next update.",
+  "regroup.pending": "moving…",
+  "regroup.waiting": "Your corrections are applied on the next update."
 }

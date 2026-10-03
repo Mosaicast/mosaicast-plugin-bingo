@@ -7,7 +7,7 @@
  *
  * Which of these the browser may write is not a matter of taste: everything marked backend-owned below is
  * declared in the manifest, so a `PUT` to it is refused with a 403 whose problem type is
- * `problems/backend-owned-key`. The browser writes `template`, `resolution`, `control` and `showcase`; a
+ * `problems/backend-owned-key`. The browser writes `template`, `resolution`, `control`, `showcase` and `grouping`; a
  * player writes only into their own partition.
  */
 
@@ -19,6 +19,12 @@ export const KEY_RESOLUTION = 'resolution';
 
 /** The podcaster's lifecycle intent. Written here, obeyed by the backend over its own suggestion. */
 export const KEY_CONTROL = 'control';
+
+/**
+ * The podcaster's corrections to the automatic grouping: which written entry belongs in which group.
+ * Written by the podcaster, applied on the backend's next pass — so deliberately not backend-owned.
+ */
+export const KEY_GROUPING = 'grouping';
 
 /** Which players a podcaster has chosen to feature. Written by the podcaster. */
 export const KEY_SHOWCASE = 'showcase';

@@ -1,0 +1,35 @@
+{
+  "normalise": [
+    ["  Alex says: \"Damn it!\"  ", "alex says damn it"],
+    ["\u00dcber gr\u00fc\u00dfen", "uber grussen"],
+    ["Wei\u00dfbier", "weissbier"],
+    ["   ", ""],
+    ["Caf\u00e9\u2014cr\u00e8me", "cafe creme"],
+    ["\u00c5NGSTR\u00d6M 3", "angstrom 3"],
+    ["comet fact 16!", "comet fact 16"],
+    ["tab\u0009and\u000anewline", "tab and newline"],
+    ["\ufb01ve \ufb02ights", "five flights"],
+    ["\u216b o'clock", "xii o clock"],
+    ["\u65e5\u672c\u8a9e\u306e\u30c6\u30ad\u30b9\u30c8", "\u65e5\u672c\u8a9e\u306e\u30c6\u30ad\u30b9\u30c8"],
+    ["emoji \ud83d\ude00 here", "emoji here"],
+    ["x\u00b2+y\u00b2", "x2 y2"],
+    ["\u0130stanbul", "istanbul"],
+    ["--leading and trailing--", "leading and trailing"],
+    ["MiXeD   CaSe", "mixed case"]
+  ],
+  "similarity": [
+    ["alex says damn it", "alex says damn it", 1.0],
+    ["alex says damn it", "alex says damn", 0.8235294117647058],
+    ["3 sponsor reads", "5 sponsor reads", 0.0],
+    ["episode 1", "episode one", 0.7272727272727273],
+    ["comet fact 1", "comet fact 16", 0.0],
+    ["kraken", "krakken", 0.8571428571428572],
+    ["kraken", "giant squid", 0.09090909090909094],
+    ["", "", 1.0],
+    ["a", "", 0.0],
+    ["1 2", "12", 0.0],
+    ["guest is late", "the guest is late", 0.7647058823529411],
+    ["uber grussen", "ueber gruessen", 0.8571428571428572],
+    ["merch plug", "merch plugs", 0.9090909090909091]
+  ]
+}

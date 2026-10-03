@@ -291,12 +291,20 @@ public class BingoPlugin implements PluginBackend, UserDataHandler {
         Phase writtenUnder =
                 phase == Phase.OPEN || previousPhase == Phase.OPEN ? Phase.OPEN : phase;
 
-        List<CardInput> cards = pass.cards().getOrDefault(slug, List.of());
         Map<String, List<EntryRow>> rows = record.rowsOf(slug);
+        List<CardInput> cards = whatCardsSay(pass.cards().getOrDefault(slug, List.of()), rows, template.get(),
+                writtenUnder, allowLate);
+        Resolution resolution = ctx.store().get(scope, KEY_RESOLUTION, Resolution.class)
+                .orElseGet(() -> new Resolution(Map.of()));
+        Map<String, String> pins = ctx.store().get(scope, KEY_GROUPING, GroupingDoc.class)
+                .map(GroupingDoc::normalisedPins)
+                .orElseGet(Map::of);
 
         List<String> everyEntry = new ArrayList<>();
         cards.forEach(c -> everyEntry.addAll(c.entries()));
-        BingoFuzzy.Grouping grouping = BingoFuzzy.group(everyEntry, threshold);
+        // Decided groups are seeded so a later entry cannot rename them out from under their decision, and
+        // the podcaster's merges and splits are applied over the matching (see BingoFuzzy.group).
+        BingoFuzzy.Grouping grouping = BingoFuzzy.group(everyEntry, threshold, resolution.decided(), pins);
 
         // Publish the grouping decision itself, not just its result. Without this the browser would have to
         // re-derive which candidate an entry belongs to, which means a second copy of the fuzzy rules in
@@ -342,11 +350,8 @@ public class BingoPlugin implements PluginBackend, UserDataHandler {
             return;
         }
 
-        Resolution resolution = ctx.store().get(scope, KEY_RESOLUTION, Resolution.class)
-                .orElseGet(() -> new Resolution(Map.of()));
-
         record.ingest(slug, cards, rows, grouping, template.get(), writtenUnder, allowLate);
-        Leaderboard board = record.score(slug, template.get(), resolution, prefs, phase, rankBy);
+        Leaderboard board = record.score(slug, template.get(), grouping, resolution, prefs, phase, rankBy);
         ctx.store().put(scope, KEY_LEADERBOARD, board);
 
         publish.showcase(slug, cards, prefs);
@@ -360,6 +365,51 @@ public class BingoPlugin implements PluginBackend, UserDataHandler {
     }
 
     // ---------------------------------------------------------------- cards and preferences
+
+    /**
+     * What each card says for this pass: the live document while it is still read, the frozen record
+     * once it is not.
+     *
+     * <p>Everything derived from cards - the candidate list, its counts, a featured card - is built from
+     * this, never straight from the documents. After the freeze a document is a scratchpad its owner can
+     * still write, and reading it here let anyone put text in the public candidate list, or change a
+     * featured card, that no record carried.
+     *
+     * <p>A card is read live while predictions were open, or once for a latecomer who has no rows yet and
+     * may still play. Someone with rows and no document any more is still on the record.
+     */
+    private static List<CardInput> whatCardsSay(List<CardInput> live, Map<String, List<EntryRow>> rows,
+                                                Template template, Phase writtenUnder, boolean allowLate) {
+        Map<String, CardInput> out = new java.util.TreeMap<>();
+        for (CardInput card : live) {
+            boolean frozen = writtenUnder != Phase.OPEN && rows.containsKey(card.author());
+            boolean reading = writtenUnder == Phase.OPEN || (!frozen && allowLate);
+            if (reading) {
+                out.put(card.author(), card);
+            }
+        }
+        rows.forEach((author, authorRows) -> {
+            if (!out.containsKey(author)) {
+                out.put(author, new CardInput(author, entriesOf(authorRows, template)));
+            }
+        });
+        return List.copyOf(out.values());
+    }
+
+    /** A card's entries back from its rows, in the order they were written, blanks where nothing was. */
+    private static List<String> entriesOf(List<EntryRow> rows, Template template) {
+        int size = template.gridSize();
+        boolean freeCentre = template.hasFreeCentre();
+        String[] entries = new String[BingoScore.fillableCells(size, freeCentre)];
+        java.util.Arrays.fill(entries, "");
+        for (EntryRow row : rows) {
+            int index = BingoScore.entryIndex(row.position(), size, freeCentre);
+            if (index >= 0 && index < entries.length) {
+                entries[index] = row.text();
+            }
+        }
+        return List.of(entries);
+    }
 
     /**
      * Everyone's card, by episode.

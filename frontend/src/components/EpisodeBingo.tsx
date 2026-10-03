@@ -365,6 +365,8 @@ export function EpisodeBingo({ ctx }: { ctx: PluginContext }) {
           i18n={i18n}
           candidates={data.candidates}
           cardCounts={data.cardCounts}
+          assignments={data.assignments}
+          grouping={data.grouping}
           resolution={data.resolution}
           mode={modal}
           onClose={() => setModal(null)}
@@ -372,6 +374,7 @@ export function EpisodeBingo({ ctx }: { ctx: PluginContext }) {
             setModal(null);
             data.reload();
           }}
+          onRegroup={data.reload}
         />
       )}
 

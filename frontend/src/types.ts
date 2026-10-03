@@ -50,6 +50,15 @@ export interface Control {
   updatedAt: string;
 }
 
+/**
+ * The podcaster's corrections to the grouping, keyed by an entry as written. The value is the canonical
+ * form of the group it belongs in, or `''` for a group of its own. Client-written.
+ */
+export interface GroupingDoc {
+  pins?: Record<string, string>;
+  updatedAt?: string;
+}
+
 /** Whom the podcaster picked to feature. Client-written. */
 export interface Showcase {
   userIds?: string[];

@@ -340,7 +340,7 @@ describe('<EpisodeBingo>', () => {
         method: 'get',
         path:
           `data/episode?ids=${EPISODE}&keys=template,phase,control,candidates,resolution,` +
-          'leaderboard,showcased,participants,showcase',
+          'leaderboard,showcased,participants,showcase,grouping',
       },
     ]);
     expect(

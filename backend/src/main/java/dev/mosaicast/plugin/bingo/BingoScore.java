@@ -70,6 +70,19 @@ public final class BingoScore {
         return -1;
     }
 
+    /**
+     * The inverse of {@link #gridPosition}: which written entry a grid square holds.
+     *
+     * @return the entry index, or {@code -1} for the free centre or a square outside the grid
+     */
+    public static int entryIndex(int position, int size, boolean freeCentre) {
+        int centre = centreOf(size, freeCentre);
+        if (position < 0 || position >= size * size || position == centre) {
+            return -1;
+        }
+        return centre >= 0 && position > centre ? position - 1 : position;
+    }
+
     /** The free square's grid index, or {@code -1} when this bingo has none. */
     public static int centreOf(int size, boolean freeCentre) {
         return freeCentre && size % 2 == 1 ? (size * size) / 2 : -1;

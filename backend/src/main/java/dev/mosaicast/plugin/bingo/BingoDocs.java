@@ -30,6 +30,11 @@ final class BingoDocs {
     static final String KEY_RESOLUTION = "resolution";
     /** The podcaster's lifecycle <em>intent</em>. Client-written, deliberately not backend-owned. */
     static final String KEY_CONTROL = "control";
+    /**
+     * The podcaster's corrections to the automatic grouping: which entry belongs to which group. Client-written,
+     * deliberately not backend-owned - it is an intent, applied on the next pass.
+     */
+    static final String KEY_GROUPING = "grouping";
     /** Which players the podcaster has chosen to feature, as ids. Client-written. */
     static final String KEY_SHOWCASE = "showcase";
 
@@ -154,6 +159,37 @@ final class BingoDocs {
     record Resolution(Map<String, Boolean> hits) {
         boolean isHit(String canonical) {
             return hits != null && Boolean.TRUE.equals(hits.get(canonical));
+        }
+
+        /** Every group somebody has decided on, hit or miss: the ones whose identity must not move. */
+        java.util.Set<String> decided() {
+            return hits == null ? java.util.Set.of() : hits.keySet();
+        }
+    }
+
+    /**
+     * The podcaster's corrections to the grouping, keyed by an entry as written.
+     *
+     * <p>The value is the canonical form of the group the entry belongs in (a merge), or an empty string for
+     * "a group of its own" (a split). Keyed by the written text rather than its normalised form so the
+     * browser, which only ever sees written texts, never needs its own copy of the normalisation rules.
+     */
+    record GroupingDoc(Map<String, String> pins, String updatedAt) {
+        /** The pins as {@link BingoFuzzy#group} takes them: normalised entry to canonical form. */
+        Map<String, String> normalisedPins() {
+            Map<String, String> out = new java.util.LinkedHashMap<>();
+            if (pins == null) {
+                return out;
+            }
+            pins.forEach((text, target) -> {
+                String key = BingoFuzzy.normalise(text);
+                if (key.isEmpty()) {
+                    return;
+                }
+                String value = target == null || target.isBlank() ? key : BingoFuzzy.normalise(target);
+                out.put(key, value.isEmpty() ? key : value);
+            });
+            return out;
         }
     }
 
