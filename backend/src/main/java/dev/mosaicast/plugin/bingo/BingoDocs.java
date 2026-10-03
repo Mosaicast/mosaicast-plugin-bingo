@@ -204,14 +204,24 @@ final class BingoDocs {
     }
 
     /**
-     * The lifecycle state this class derives. Backend-owned.
+     * The lifecycle state the backend derives. Backend-owned.
      *
      * <p>{@code openedBeforeRelease} is sticky and decided on first sight. Without it, a bingo created for
      * an episode that is already out would auto-lock on the next tick and produce a board on which nobody
      * could ever be ranked - the normal case while a podcaster is still setting one up.
+     *
+     * <p>{@code fuzzyThreshold} rides along because there is no {@code ctx.config} in a browser, and the card
+     * editor warns about two squares that will count as one by the same threshold the tick groups with.
      */
     record PhaseState(String phase, String suggested, boolean openedBeforeRelease,
-                      boolean allowLate, String lockedAt, String resolvedAt, String archiveAt) {}
+                      boolean allowLate, String lockedAt, String resolvedAt, String archiveAt,
+                      Double fuzzyThreshold) {
+
+        PhaseState withThreshold(double threshold) {
+            return new PhaseState(phase, suggested, openedBeforeRelease, allowLate, lockedAt, resolvedAt,
+                    archiveAt, threshold);
+        }
+    }
 
     /**
      * The things there are to tick off, from every card including the ones the browser cannot see.

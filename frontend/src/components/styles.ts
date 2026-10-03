@@ -67,6 +67,10 @@ export const BINGO_CSS =
   .bingo__cell--hit { border-color: var(--mc-accent-text); color: var(--mc-accent-text); font-weight: 600; }
   .bingo__cell--free { color: var(--mc-text-muted); font-style: italic; }
   .bingo__cell--empty { color: var(--mc-text-muted); border-style: dashed; }
+  .bingo__cell--duplicate { border-color: var(--mc-accent-text); border-width: 2px; border-style: dashed; }
+  .bingo__cell--similar { border-style: dashed; }
+  .bingo__checks { list-style: none; margin: .5rem 0; padding: 0; display: flex; flex-direction: column; gap: .35rem; }
+  .bingo__checks .bingo__warn { margin: 0; }
   .bingo__cell-input {
     width: 100%; height: 100%; min-height: 3.4rem; resize: none; font: inherit; font-size: .8125rem;
     text-align: center; color: var(--mc-text); background: none; border: 0; padding: 0;

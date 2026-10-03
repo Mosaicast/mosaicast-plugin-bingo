@@ -125,4 +125,15 @@ class BingoGroupingTest extends BingoTestSupport {
         return ctx.store().get(Scope.episode(EPISODE), BingoDocs.KEY_CANDIDATES, BingoDocs.Candidates.class)
                 .orElseThrow();
     }
+
+    @Test
+    void thePhasePublishesTheThresholdTheCardEditorWarnsBy() {
+        var ctx = ctx(published(false), new dev.mosaicast.plugin.testkit.MapPluginConfig()
+                .with("fuzzyThreshold", 0.9));
+        seedTemplate(ctx);
+
+        new BingoPlugin(clock).register(ctx);
+
+        assertEquals(0.9, phase(ctx).orElseThrow().fuzzyThreshold(), "there is no ctx.config in a browser");
+    }
 }

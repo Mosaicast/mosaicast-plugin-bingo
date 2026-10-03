@@ -269,7 +269,8 @@ public class BingoPlugin implements PluginBackend, UserDataHandler {
         if (release == EpisodePhase.PLANNED) {
             pass.quiet().add(slug);
         }
-        PhaseState state = lifecycle.resolvePhase(slug, release, previous, archiveAfterDays, allowLate);
+        PhaseState state = lifecycle.resolvePhase(slug, release, previous, archiveAfterDays, allowLate)
+                .withThreshold(threshold);
         ctx.store().put(scope, KEY_PHASE, state);
         Phase phase = Phase.valueOf(state.phase());
 

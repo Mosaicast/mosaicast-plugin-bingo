@@ -15,12 +15,15 @@ import {
   canEditCard,
   isFinalSubmission,
   countLines,
+  DEFAULT_FUZZY_THRESHOLD,
   lineCount,
   prefOrDefault,
   type Phase,
   type RankBy,
 } from '../types';
+import { cardIssues } from '../fuzzy';
 import { BingoGrid } from './BingoGrid';
+import { CardChecks, blocksSaving } from './CardChecks';
 import { CreatePanel } from './CreatePanel';
 import { Shell, nameOf, toRef } from './common';
 import { PodcasterActions } from './PodcasterActions';
@@ -183,6 +186,9 @@ export function EpisodeBingo({ ctx }: { ctx: PluginContext }) {
   const finalSubmission = editable && isFinalSubmission(phase);
   // A standing choice about how you appear, not part of the card — so it stays changeable after the freeze.
   const canChoose = active.id === 'me' && signedIn && phase !== 'ARCHIVED';
+  // Two of the player's own squares that would count as one, worked out here as they type — no request.
+  const issues = editable && draft ? cardIssues(draft, data.phase?.fuzzyThreshold ?? DEFAULT_FUZZY_THRESHOLD) : [];
+  const blocked = blocksSaving(issues);
 
   return (
     <Shell>
@@ -263,6 +269,7 @@ export function EpisodeBingo({ ctx }: { ctx: PluginContext }) {
             hits={hitsFor(active.entries)}
             i18n={i18n}
             label={active.label}
+            flags={Object.fromEntries(issues.map((issue) => [issue.index, issue.kind]))}
             onChange={
               editable
                 ? (index, value) =>
@@ -275,6 +282,7 @@ export function EpisodeBingo({ ctx }: { ctx: PluginContext }) {
                 : undefined
             }
           />
+          <CardChecks issues={issues} i18n={i18n} />
         </>
       )}
 
@@ -299,7 +307,12 @@ export function EpisodeBingo({ ctx }: { ctx: PluginContext }) {
                 <p className="bingo__note">{i18n.t('prefs.hint')}</p>
               </div>
               <div className="bingo__actions">
-                <button type="button" className="bingo__btn" onClick={save} disabled={saving === 'saving'}>
+                <button
+                  type="button"
+                  className="bingo__btn"
+                  onClick={save}
+                  disabled={saving === 'saving' || blocked}
+                >
                   {saving === 'saving'
                     ? i18n.t('episode.saving')
                     : !editable

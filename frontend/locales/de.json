@@ -94,5 +94,7 @@
   "regroup.conflict": "Du hast die beiden unterschiedlich entschieden. Nach dem Zusammenführen gilt die Entscheidung für „{{target}}“ für beide.",
   "regroup.hint": "Korrekturen gelten auch für bereits eingefrorene Karten und greifen bei der nächsten Aktualisierung.",
   "regroup.pending": "wird verschoben…",
-  "regroup.waiting": "Deine Korrekturen werden bei der nächsten Aktualisierung übernommen."
+  "regroup.waiting": "Deine Korrekturen werden bei der nächsten Aktualisierung übernommen.",
+  "checks.duplicate": "Feld {{square}} wiederholt Feld {{other}}. Ein Moment würde beide abhaken, schreib dort also etwas anderes — Speichern geht erst danach.",
+  "checks.similar": "Feld {{square}} ist Feld {{other}} sehr ähnlich, die beiden zählen daher wahrscheinlich als dieselbe Vorhersage."
 }

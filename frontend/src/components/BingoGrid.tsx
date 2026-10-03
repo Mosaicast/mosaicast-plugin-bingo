@@ -3,7 +3,6 @@
 
 import type { PluginI18n } from '../i18n';
 
-
 /** One square: a written entry, or the free middle of an odd grid. */
 type Cell = { kind: 'free' } | { kind: 'entry'; index: number };
 
@@ -35,9 +34,11 @@ interface Props {
   onChange?: (index: number, value: string) => void;
   /** Labels the inputs for assistive tech; the visible name lives in the tab above. */
   label: string;
+  /** Squares the card editor has something to say about, by entry index (see `CardChecks`). */
+  flags?: Record<number, 'duplicate' | 'similar'>;
 }
 
-export function BingoGrid({ size, freeCentre, entries, i18n, hits, onChange, label }: Props) {
+export function BingoGrid({ size, freeCentre, entries, i18n, hits, onChange, label, flags }: Props) {
   const cells = cellsFor(size, freeCentre);
   const editable = Boolean(onChange);
 
@@ -58,9 +59,11 @@ export function BingoGrid({ size, freeCentre, entries, i18n, hits, onChange, lab
         }
         const value = entries[cell.index] ?? '';
         const hit = hits?.[cell.index] ?? false;
+        const flag = flags?.[cell.index];
         const classes = [
           'bingo__cell',
           hit ? 'bingo__cell--hit' : '',
+          flag ? `bingo__cell--${flag}` : '',
           !editable && !value ? 'bingo__cell--empty' : '',
         ]
           .filter(Boolean)
@@ -73,6 +76,7 @@ export function BingoGrid({ size, freeCentre, entries, i18n, hits, onChange, lab
                 className="bingo__cell-input"
                 value={value}
                 aria-label={`${label} ${cell.index + 1}`}
+                aria-invalid={flag === 'duplicate' || undefined}
                 onChange={(e) => onChange?.(cell.index, e.target.value)}
               />
             </div>

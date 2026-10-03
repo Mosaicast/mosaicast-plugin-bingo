@@ -75,6 +75,8 @@ export interface PhaseState {
   lockedAt: string | null;
   resolvedAt: string | null;
   archiveAt: string | null;
+  /** How alike two entries must be to count as one. Published because there is no `ctx.config`. */
+  fuzzyThreshold?: number;
 }
 
 /** One distinct thing to tick off, merged across every card. */
@@ -297,6 +299,9 @@ export function placeIn(
 }
 
 /** Absent means yes: someone who has never touched the toggles is listed and may be featured. */
+/** The grouping threshold until the backend's first pass has published the site's own. */
+export const DEFAULT_FUZZY_THRESHOLD = 0.82;
+
 export function prefOrDefault(value: boolean | undefined): boolean {
   return value !== false;
 }

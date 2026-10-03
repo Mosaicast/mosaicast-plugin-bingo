@@ -373,6 +373,55 @@ describe('<EpisodeBingo>', () => {
     expect(docs.stored[`data/user/me/card:${EPISODE}`]).toBeDefined();
   });
 
+  /** Types into the n-th square, as a person would. */
+  const typeInto = async (index: number, value: string) => {
+    const cell = host.querySelectorAll('textarea')[index] as HTMLTextAreaElement;
+    await act(async () => {
+      Object.getOwnPropertyDescriptor(HTMLTextAreaElement.prototype, 'value')!.set!.call(cell, value);
+      cell.dispatchEvent(new Event('input', { bubbles: true }));
+    });
+  };
+  const saveButton = () =>
+    [...host.querySelectorAll<HTMLButtonElement>('.bingo__actions .bingo__btn')].find((b) =>
+      b.textContent?.includes('Save'),
+    )!;
+
+  it('refuses to save a square written twice, without asking the backend', async () => {
+    const docs = makeMockDocs({ [docPath('template')]: { size: 3 } });
+    const ctx = makeBingoCtx({ scope, docs, user: fan });
+    await render(ctx);
+    const before = ctx.api.calls.length;
+
+    await typeInto(0, 'Kraken!');
+    await typeInto(3, 'kraken');
+
+    expect(host.textContent).toContain('Square 4 repeats square 1');
+    expect(saveButton().disabled).toBe(true);
+    expect(host.querySelectorAll('textarea')[3].getAttribute('aria-invalid')).toBe('true');
+    expect(ctx.api.calls.length).toBe(before);
+
+    await typeInto(3, 'merch plug');
+    expect(saveButton().disabled).toBe(false);
+  });
+
+  it('warns about two squares that will most likely count as one, by the published threshold', async () => {
+    await render(
+      ctxWith(
+        {
+          [docPath('template')]: { size: 3 },
+          [docPath('phase')]: { phase: 'OPEN', suggested: 'OPEN', fuzzyThreshold: 0.8 },
+        },
+        { user: fan },
+      ),
+    );
+
+    await typeInto(0, 'kraken');
+    await typeInto(1, 'krakken');
+
+    expect(host.textContent).toContain('Square 2 is very close to square 1');
+    expect(saveButton().disabled).toBe(false);
+  });
+
   it('offers the site vocabulary as entry suggestions, and fills the next empty square', async () => {
     const docs = makeMockDocs({ [docPath('template')]: { size: 3 } });
     const ctx = makeBingoCtx({

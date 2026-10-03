@@ -86,7 +86,8 @@ final class BingoLifecycle {
                 allowLate,
                 lockedAt == null ? null : lockedAt.toString(),
                 resolvedAt == null ? null : resolvedAt.toString(),
-                archiveAt == null ? null : archiveAt.toString());
+                archiveAt == null ? null : archiveAt.toString(),
+                null);
     }
 
     /**
