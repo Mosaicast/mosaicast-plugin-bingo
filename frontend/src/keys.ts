@@ -35,6 +35,9 @@ export const KEY_PHASE = 'phase';
 /** Backend-owned: cards are invisible here, so this list can only be computed on the backend. */
 export const KEY_CANDIDATES = 'candidates';
 
+/** Backend-owned: what happened, in a few lines. Empty until the bingo is resolved, like the board. */
+export const KEY_RECAP = 'recap';
+
 /** Backend-owned: per-episode scores, for players who allow being listed. */
 export const KEY_LEADERBOARD = 'leaderboard';
 

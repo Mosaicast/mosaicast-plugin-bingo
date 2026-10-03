@@ -352,8 +352,9 @@ public class BingoPlugin implements PluginBackend, UserDataHandler {
         }
 
         record.ingest(slug, cards, rows, grouping, template.get(), writtenUnder, allowLate);
-        Leaderboard board = record.score(slug, template.get(), grouping, resolution, prefs, phase, rankBy);
-        ctx.store().put(scope, KEY_LEADERBOARD, board);
+        BingoRecord.Scored scored = record.score(slug, template.get(), grouping, resolution, prefs, phase, rankBy);
+        ctx.store().put(scope, KEY_LEADERBOARD, scored.board());
+        ctx.store().put(scope, KEY_RECAP, record.recap(scored, items, cardCounts, resolution, phase));
 
         publish.showcase(slug, cards, prefs);
 

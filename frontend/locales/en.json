@@ -96,5 +96,12 @@
   "regroup.pending": "moving…",
   "regroup.waiting": "Your corrections are applied on the next update.",
   "checks.duplicate": "Square {{square}} repeats square {{other}}. One moment would tick off both, so write something different there — saving waits until you do.",
-  "checks.similar": "Square {{square}} is very close to square {{other}}, so the two will most likely count as the same prediction."
+  "checks.similar": "Square {{square}} is very close to square {{other}}, so the two will most likely count as the same prediction.",
+  "recap.title": "What happened",
+  "recap.mostPredicted": "Most predicted: “{{label}}”, on {{cards}} card(s)",
+  "recap.happened": "it happened",
+  "recap.didNotHappen": "it did not happen",
+  "recap.rarestHit": "Rarest hit: “{{label}}”, on only {{cards}} card(s)",
+  "recap.biggestMiss": "Biggest miss: “{{label}}”, on {{cards}} card(s)",
+  "recap.average": "An average card got {{fields}} squares; {{percent}}% got at least one line."
 }

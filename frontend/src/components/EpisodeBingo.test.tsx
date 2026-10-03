@@ -340,7 +340,7 @@ describe('<EpisodeBingo>', () => {
         method: 'get',
         path:
           `data/episode?ids=${EPISODE}&keys=template,phase,control,candidates,resolution,` +
-          'leaderboard,showcased,participants,showcase,grouping',
+          'leaderboard,showcased,participants,showcase,grouping,recap',
       },
     ]);
     expect(
@@ -692,6 +692,44 @@ describe('<EpisodeBingo>', () => {
 
     expect(host.textContent).toContain('Former listener');
     expect(host.textContent).toContain('6/9 fields');
+  });
+
+  const RECAP = {
+    published: true, players: 3, ranked: 3, avgFields: 2.33, withLine: 0.333,
+    mostPredicted: { label: 'kraken', cards: 3, hit: true },
+    rarestHit: { label: 'guest is late', cards: 1, hit: true },
+    biggestMiss: { label: 'merch plug', cards: 2, hit: false },
+  };
+
+  it('tells what happened once it is resolved', async () => {
+    await render(
+      ctxWith({
+        [docPath('template')]: { size: 3 },
+        [docPath('phase')]: { phase: 'RESOLVED', suggested: 'LOCKED' },
+        [docPath('recap')]: RECAP,
+      }),
+    );
+
+    expect(host.textContent).toContain('Most predicted: “kraken”, on 3 card(s) · it happened');
+    expect(host.textContent).toContain('Rarest hit: “guest is late”');
+    expect(host.textContent).toContain('Biggest miss: “merch plug”');
+    expect(host.textContent).toContain('33% got at least one line');
+  });
+
+  it('keeps the recap behind the spoiler cover', async () => {
+    const ctx = makeBingoCtx({
+      scope,
+      docs: makeMockDocs({
+        [docPath('template')]: { size: 3 },
+        [docPath('phase')]: { phase: 'RESOLVED', suggested: 'LOCKED' },
+        [docPath('resolution')]: { hits: { kraken: true } },
+        [docPath('recap')]: RECAP,
+      }),
+    });
+    ctx.progress.get = async () => null; // never listened on this device
+    await render(ctx);
+
+    expect(host.textContent).not.toContain('Most predicted');
   });
 
   it('shows no results at all until the bingo is resolved', async () => {

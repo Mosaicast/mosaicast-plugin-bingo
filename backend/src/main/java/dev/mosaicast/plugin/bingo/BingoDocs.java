@@ -44,6 +44,8 @@ final class BingoDocs {
     static final String KEY_CANDIDATES = "candidates";
     /** Per-episode scores, for players who allow being listed. Backend-owned. */
     static final String KEY_LEADERBOARD = "leaderboard";
+    /** What happened in one bingo, in a few lines - once it is resolved. Backend-owned. */
+    static final String KEY_RECAP = "recap";
     /** Who could be featured, as ids only - the picker's raw material. Backend-owned. */
     static final String KEY_PARTICIPANTS = "participants";
     /** The featured cards, copied out so anyone may read them. Backend-owned. */
@@ -266,6 +268,26 @@ final class BingoDocs {
                     players, totalPlayers, published, distribution, rankBy, computedAt);
         }
     }
+
+    /**
+     * One bingo in a few lines. Backend-owned, and empty until it is resolved, for the same reason the board
+     * is: "the most predicted thing came true" is the spoiler.
+     *
+     * @param players   everyone who played, late ones included
+     * @param ranked    how many cards were in the running
+     * @param avgFields squares that came true on an average ranked card, the free centre included
+     * @param withLine  the share of ranked cards, 0 to 1, with at least one complete line
+     */
+    record Recap(boolean published, int players, int ranked, double avgFields, double withLine,
+                 Highlight mostPredicted, Highlight rarestHit, Highlight biggestMiss, String computedAt) {
+
+        static Recap unpublished(int players, String computedAt) {
+            return new Recap(false, players, 0, 0, 0, null, null, null, computedAt);
+        }
+    }
+
+    /** A candidate worth naming in a recap: what people called it, on how many cards, whether it happened. */
+    record Highlight(String label, int cards, boolean hit) {}
 
     /** How many ranked cards share one score. Named nobody, bounded by the grid rather than the crowd. */
     record Tally(int lines, int fields, int count) {}

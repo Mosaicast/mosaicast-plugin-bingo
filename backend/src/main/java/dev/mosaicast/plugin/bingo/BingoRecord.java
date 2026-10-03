@@ -183,11 +183,11 @@ final class BingoRecord {
      * the leaderboard still has rows, still has a score, and still sees it on their own card - the tile
      * works that out from their own document without asking anybody.
      */
-    Leaderboard score(String slug, Template template, BingoFuzzy.Grouping grouping, Resolution resolution,
-                      Map<String, Prefs> prefs, Phase phase, BingoScore.RankBy rankBy) {
+    Scored score(String slug, Template template, BingoFuzzy.Grouping grouping, Resolution resolution,
+                 Map<String, Prefs> prefs, Phase phase, BingoScore.RankBy rankBy) {
         SchemaStore schema = ctx.schema();
         if (schema == null) {
-            return Leaderboard.empty(now().toString());
+            return new Scored(Leaderboard.empty(now().toString()), List.of(), 0);
         }
 
         Map<String, List<EntryRow>> byAuthor = rowsOf(slug);
@@ -265,15 +265,67 @@ final class BingoRecord {
         // podcaster ticks answers off tells anyone watching how much has already come true - which is
         // exactly what the spoiler cover over the grid is there to prevent.
         if (phase != Phase.RESOLVED && phase != Phase.ARCHIVED) {
-            return new Leaderboard(List.of(), List.of(), players, players, false, List.of(),
-                    name(rankBy), now.toString());
+            return new Scored(new Leaderboard(List.of(), List.of(), players, players, false, List.of(),
+                    name(rankBy), now.toString()), List.copyOf(everyRanked), players);
         }
 
         Comparator<Row> best = comparing(rankBy).thenComparing(Row::author);
         ranked.sort(best);
         late.sort(best);
-        return new Leaderboard(cap(ranked), cap(late), players, players, true,
-                distributionOf(everyRanked), name(rankBy), now.toString());
+        return new Scored(new Leaderboard(cap(ranked), cap(late), players, players, true,
+                distributionOf(everyRanked), name(rankBy), now.toString()), List.copyOf(everyRanked), players);
+    }
+
+    /**
+     * One pass's scores: the board as published, and what the recap is computed from.
+     *
+     * @param everyRanked every ranked card's score, listed or not - an aggregate names nobody
+     * @param players     everyone who played, late ones included
+     */
+    record Scored(Leaderboard board, List<Row> everyRanked, int players) {}
+
+    /**
+     * What happened in one bingo, in a few lines - published only once it is resolved, like the board.
+     *
+     * <p>Built from the candidate list rather than from rows: "most predicted" means on the most cards,
+     * which is exactly what the list's card counts say, and its labels are the spellings a podcaster ticked.
+     * Before the resolution there is nothing to say that would not give away how much has come true.
+     */
+    Recap recap(Scored scored, List<BingoFuzzy.Candidate> items, Map<String, Integer> cardCounts,
+                Resolution resolution, Phase phase) {
+        if (phase != Phase.RESOLVED && phase != Phase.ARCHIVED) {
+            return Recap.unpublished(scored.players(), now().toString());
+        }
+        Highlight most = null;
+        Highlight rarestHit = null;
+        Highlight biggestMiss = null;
+        Map<String, Boolean> hits = resolution.hits() == null ? Map.of() : resolution.hits();
+        // Items arrive ordered by card count, most first, ties by canonical form - so "first" and "last"
+        // below are stable from tick to tick.
+        for (BingoFuzzy.Candidate c : items) {
+            int cards = cardCounts.getOrDefault(c.canonical(), c.count());
+            Boolean decision = hits.get(c.canonical());
+            boolean hit = Boolean.TRUE.equals(decision);
+            if (most == null) {
+                most = new Highlight(c.label(), cards, hit);
+            }
+            if (hit && (rarestHit == null || cards <= rarestHit.cards())) {
+                rarestHit = new Highlight(c.label(), cards, true);
+            }
+            if (Boolean.FALSE.equals(decision) && biggestMiss == null) {
+                biggestMiss = new Highlight(c.label(), cards, false);
+            }
+        }
+        List<Row> ranked = scored.everyRanked();
+        double avgFields = ranked.stream().mapToInt(Row::fields).average().orElse(0);
+        double withLine = ranked.isEmpty() ? 0 : (double) ranked.stream().filter(r -> r.lines() > 0).count()
+                / ranked.size();
+        return new Recap(true, scored.players(), ranked.size(), round(avgFields), round(withLine), most,
+                rarestHit, biggestMiss, now().toString());
+    }
+
+    private static double round(double value) {
+        return Math.round(value * 100) / 100.0;
     }
 
     /**

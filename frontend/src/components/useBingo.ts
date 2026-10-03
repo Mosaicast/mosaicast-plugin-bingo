@@ -9,6 +9,7 @@ import {
   KEY_PARTICIPANTS,
   KEY_PHASE,
   KEY_PREFS,
+  KEY_RECAP,
   KEY_RESOLUTION,
   KEY_CONTROL,
   KEY_GROUPING,
@@ -27,6 +28,7 @@ import type {
   Participants,
   PhaseState,
   Prefs,
+  Recap,
   Resolution,
   Showcase,
   Showcased,
@@ -56,6 +58,8 @@ export interface BingoData {
   /** The podcaster's corrections to the grouping; read so one not applied yet can say so. */
   grouping: GroupingDoc | null;
   leaderboard: Leaderboard | null;
+  /** What happened, once it is resolved. */
+  recap: Recap | null;
   /** Cards a podcaster chose to feature, copied out by the backend so anyone can read them. */
   showcased: ShowcasedCard[];
   /** Ids a podcaster may feature — only people who allow it. Empty for anyone but a podcaster's picker. */
@@ -84,6 +88,7 @@ const EMPTY: Omit<BingoData, 'reload'> = {
   resolution: null,
   grouping: null,
   leaderboard: null,
+  recap: null,
   showcased: [],
   participants: [],
   showcasePick: [],
@@ -156,6 +161,7 @@ export function useBingo(ctx: PluginContext): BingoData {
         resolution,
         grouping: pick<GroupingDoc>(episode, KEY_GROUPING),
         leaderboard,
+        recap: pick<Recap>(episode, KEY_RECAP),
         showcased: showcasedCards,
         participants: (participants?.items ?? []).map((p) => p.userId),
         showcasePick: showcasePick?.userIds ?? [],
@@ -238,7 +244,7 @@ export function useBingoBadge(ctx: PluginContext): BadgeData {
 /** Every episode document the tile draws, in one request. */
 const TILE_KEYS = [
   KEY_TEMPLATE, KEY_PHASE, KEY_CONTROL, KEY_CANDIDATES, KEY_RESOLUTION,
-  KEY_LEADERBOARD, KEY_SHOWCASED, KEY_PARTICIPANTS, KEY_SHOWCASE, KEY_GROUPING,
+  KEY_LEADERBOARD, KEY_SHOWCASED, KEY_PARTICIPANTS, KEY_SHOWCASE, KEY_GROUPING, KEY_RECAP,
 ];
 
 /** The three a feed badge draws, in one request. */
@@ -256,7 +262,8 @@ const BADGE_KEYS = [KEY_TEMPLATE, KEY_PHASE, KEY_LEADERBOARD];
  * guaranteed to be batched, not fresh.
  *
  * `ctx.api` is uncached by contract, and one batch read costs one request where the per-key reads cost
- * nine for the tile and three for each badge. The answer is `{ scopeId: { key: value } }`, misses absent.
+ * one per key — eleven for the tile, three for each badge. The answer is `{ scopeId: { key: value } }`,
+ * misses absent.
  *
  * Core 0.7.5 fixed the worst of it (core#237): a miss is now remembered for 30 s and forgotten on every
  * navigation. That is still not a reason to switch: the `reload()` after a podcaster's action lands inside

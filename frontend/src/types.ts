@@ -79,6 +79,32 @@ export interface PhaseState {
   fuzzyThreshold?: number;
 }
 
+/** A candidate worth naming in a recap. */
+export interface Highlight {
+  label: string;
+  /** On how many cards. */
+  cards: number;
+  hit: boolean;
+}
+
+/**
+ * Backend-owned: one bingo in a few lines. `published` is false — and everything but `players` empty —
+ * until it is resolved, because "the most predicted thing came true" is the spoiler.
+ */
+export interface Recap {
+  published: boolean;
+  players: number;
+  ranked: number;
+  /** Squares that came true on an average ranked card, the free centre included. */
+  avgFields: number;
+  /** The share of ranked cards, 0 to 1, with at least one line. */
+  withLine: number;
+  mostPredicted: Highlight | null;
+  rarestHit: Highlight | null;
+  biggestMiss: Highlight | null;
+  computedAt?: string;
+}
+
 /** One distinct thing to tick off, merged across every card. */
 export interface Candidate {
   canonical: string;

@@ -96,5 +96,12 @@
   "regroup.pending": "wird verschoben…",
   "regroup.waiting": "Deine Korrekturen werden bei der nächsten Aktualisierung übernommen.",
   "checks.duplicate": "Feld {{square}} wiederholt Feld {{other}}. Ein Moment würde beide abhaken, schreib dort also etwas anderes — Speichern geht erst danach.",
-  "checks.similar": "Feld {{square}} ist Feld {{other}} sehr ähnlich, die beiden zählen daher wahrscheinlich als dieselbe Vorhersage."
+  "checks.similar": "Feld {{square}} ist Feld {{other}} sehr ähnlich, die beiden zählen daher wahrscheinlich als dieselbe Vorhersage.",
+  "recap.title": "Was passiert ist",
+  "recap.mostPredicted": "Am häufigsten getippt: „{{label}}“, auf {{cards}} Karte(n)",
+  "recap.happened": "ist eingetreten",
+  "recap.didNotHappen": "ist nicht eingetreten",
+  "recap.rarestHit": "Seltenster Treffer: „{{label}}“, nur auf {{cards}} Karte(n)",
+  "recap.biggestMiss": "Größter Fehltipp: „{{label}}“, auf {{cards}} Karte(n)",
+  "recap.average": "Eine Karte hatte im Schnitt {{fields}} Treffer; {{percent}} % hatten mindestens eine Reihe."
 }

@@ -175,6 +175,7 @@ export const BINGO_CSS =
     border: 1px solid var(--mc-border); color: var(--mc-text-muted);
   }
   .bingo__row-score { margin-left: auto; font-variant-numeric: tabular-nums; }
+  .bingo__recap-list { margin: 0; padding-left: 1.1rem; display: flex; flex-direction: column; gap: .2rem; font-size: .875rem; }
   .bingo__section-title { font-size: .8125rem; color: var(--mc-text-muted); margin: .75rem 0 .25rem; }
 
   .bingo__spoiler { border: 1px dashed var(--mc-border); border-radius: .5rem; padding: 1rem; text-align: center; }

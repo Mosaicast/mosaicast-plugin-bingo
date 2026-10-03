@@ -27,6 +27,7 @@ import { CardChecks, blocksSaving } from './CardChecks';
 import { CreatePanel } from './CreatePanel';
 import { Shell, nameOf, toRef } from './common';
 import { PodcasterActions } from './PodcasterActions';
+import { RecapPanel } from './RecapPanel';
 import { Results } from './Results';
 import { FeatureModal } from './FeatureModal';
 import { ResolveModal, undecided } from './ResolveModal';
@@ -416,6 +417,8 @@ export function EpisodeBingo({ ctx }: { ctx: PluginContext }) {
         }
         rankBy={rankBy}
       />
+      {/* It names what happened in the episode, so it sits behind the same cover as the grid. */}
+      {!hideForSpoilers && <RecapPanel recap={data.recap} i18n={i18n} />}
     </Shell>
   );
 }
