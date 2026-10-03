@@ -43,9 +43,9 @@ const SIZES = [3, 4, 5];
 /**
  * The episode tile: the featured cards, the viewer's own, and the results.
  *
- * The lifecycle shown here comes from the backend-published `phase` document, never from
- * `ctx.episode.status` — the shell has never populated that field, so branching on it would leave every
- * bingo permanently in whichever state the fallback happened to be.
+ * The lifecycle shown here comes from the backend-published `phase` document, never from `ctx.episode`.
+ * Since core 0.7.7 that field is filled, but it says where the *episode* stands, not the bingo: a podcaster
+ * may lock before the release or reopen after it, and only the backend merges that intent with the release.
  */
 export function EpisodeBingo({ ctx }: { ctx: PluginContext }) {
   // Keyed on the locale handle, not on `ctx`: the element hands this component every new context in place

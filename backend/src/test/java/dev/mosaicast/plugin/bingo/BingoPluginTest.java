@@ -4,6 +4,7 @@
 package dev.mosaicast.plugin.bingo;
 
 import dev.mosaicast.plugin.api.DisplaySnapshot;
+import dev.mosaicast.plugin.api.EpisodePhase;
 import dev.mosaicast.plugin.api.Scope;
 import dev.mosaicast.plugin.api.NotifyMessage;
 import dev.mosaicast.plugin.testkit.FakeFeedAccess;
@@ -736,6 +737,107 @@ class BingoPluginTest {
         assertTrue(showcased(ctx).items().isEmpty());
     }
 
+    // ---------------------------------------------------------------- planned episodes (platformApi 0.18.0)
+
+    @Test
+    void listensForReleases() {
+        var ctx = ctx(published(false));
+
+        new BingoPlugin(clock).register(ctx);
+
+        assertEquals(1, ctx.episodeReleasedListenerCount());
+    }
+
+    @Test
+    void aReleaseClosesPredictionsWithoutWaitingForTheNextTick() {
+        var ctx = ctx(published(false));
+        seedTemplate(ctx);
+        seedCard(ctx, alice, List.of("kraken"));
+        new BingoPlugin(clock).register(ctx);
+        // Saved after the last tick and before the release: inside the deadline, so it must count.
+        seedCard(ctx, bob, List.of("kraken"));
+
+        release();
+        ctx.fireEpisodeReleased(EPISODE);
+
+        assertEquals("LOCKED", phase(ctx).orElseThrow().phase(), "closed at the release, not an interval later");
+        assertTrue(rankedInSchema(ctx, bob.toString()),
+                "the pass that applies the lock still takes the last cards as ranked, not as latecomers");
+        assertTrue(ctx.logger().events(org.slf4j.event.Level.ERROR).isEmpty());
+    }
+
+    @Test
+    void aBingoPreparedWhileTheEpisodeIsQuietLocksWhenItIsReleased() {
+        var ctx = ctx(snapshot(EpisodePhase.PLANNED));
+        seedTemplate(ctx);
+
+        var plugin = new BingoPlugin(clock);
+        plugin.register(ctx);
+        assertEquals("OPEN", phase(ctx).orElseThrow().phase());
+        assertTrue(phase(ctx).orElseThrow().openedBeforeRelease());
+
+        feeds.withPhase(EPISODE, EpisodePhase.UPCOMING); // announced: still open, now for everyone
+        plugin.tick();
+        assertEquals("OPEN", phase(ctx).orElseThrow().phase());
+
+        release(); // and the event is missed: the tick reconciles by phase on its own
+        plugin.tick();
+        assertEquals("LOCKED", phase(ctx).orElseThrow().phase());
+    }
+
+    @Test
+    void withdrawingAReleasedEpisodeDoesNotReopenItsBingo() {
+        var ctx = ctx(published(false));
+        seedTemplate(ctx);
+        var plugin = new BingoPlugin(clock);
+        plugin.register(ctx);
+        release();
+        plugin.tick();
+
+        feeds.withPhase(EPISODE, EpisodePhase.WITHDRAWN);
+        plugin.tick();
+
+        assertEquals("LOCKED", phase(ctx).orElseThrow().phase(), "it came out; dropping from the feed undoes nothing");
+    }
+
+    @Test
+    void aQuietEpisodeStaysOutOfThePublicStandings() {
+        // Site stats are readable by anyone, so a podcaster rehearsing on a quiet episode would otherwise
+        // announce that something is coming.
+        var ctx = ctx(snapshot(EpisodePhase.PLANNED));
+        seedTemplate(ctx);
+        seedCard(ctx, alice, List.of("kraken"));
+        resolve(ctx, Map.of("kraken", true));
+
+        var plugin = new BingoPlugin(clock);
+        plugin.register(ctx);
+        assertTrue(stats(ctx).players().isEmpty());
+        assertEquals(0, stats(ctx).episodes());
+
+        feeds.withPhase(EPISODE, EpisodePhase.UPCOMING);
+        plugin.tick();
+        assertEquals(1, stats(ctx).players().size(), "announced, so it counts");
+    }
+
+    @Test
+    void theNewsOfAResolvedQuietBingoWaitsUntilTheEpisodeIsAnnounced() {
+        var ctx = ctx(snapshot(EpisodePhase.PLANNED));
+        var notifier = new FakeNotifier(ctx.store());
+        ctx.withNotifier(notifier);
+        seedTemplate(ctx);
+        seedCard(ctx, alice, List.of("kraken"));
+        resolve(ctx, Map.of("kraken", true));
+        control(ctx, "RESOLVED");
+
+        var plugin = new BingoPlugin(clock);
+        plugin.register(ctx);
+        assertTrue(notifier.delivered().isEmpty(), "a notification names and links an episode nobody may see");
+
+        feeds.withPhase(EPISODE, EpisodePhase.UPCOMING);
+        plugin.tick();
+        assertEquals(1, notifier.messagesFor(alice).size(), "told on the first tick after the announcement");
+    }
+
     // ---------------------------------------------------------------- telling people
 
     @Test
@@ -941,14 +1043,25 @@ class BingoPluginTest {
         return new FakePluginContext(new InMemoryDocStore(), config, feeds, schema).withReadsAllUsers();
     }
 
-    /** The episode goes out: the feed grows a publication date where it had none. */
+    /** The episode goes out: the host now says it is released. */
     private void release() {
-        feeds.withDisplay(EPISODE, published(true));
+        feeds.withPhase(EPISODE, EpisodePhase.RELEASED);
     }
 
+    /** Announced and waiting for the feed ({@code UPCOMING}), or already out ({@code RELEASED}). */
     private static DisplaySnapshot published(boolean isPublished) {
-        return new DisplaySnapshot("Episode 4", "", isPublished ? "https://example/a.mp3" : null,
-                isPublished ? T0.minus(Duration.ofDays(1)) : null, null, null, null, null, null, "");
+        return snapshot(isPublished ? EpisodePhase.RELEASED : EpisodePhase.UPCOMING);
+    }
+
+    /**
+     * The episode as the host hands it over in a given phase. Only a released one has audio and a date, but
+     * nothing here reads either: the phase alone says where the episode stands.
+     */
+    private static DisplaySnapshot snapshot(EpisodePhase phase) {
+        boolean out = phase == EpisodePhase.RELEASED || phase == EpisodePhase.WITHDRAWN;
+        return new DisplaySnapshot("Episode 4", "", out ? "https://example/a.mp3" : null,
+                out ? T0.minus(Duration.ofDays(1)) : null, null, null, null, null, null, "",
+                null, null, null, phase, null);
     }
 
     /**
