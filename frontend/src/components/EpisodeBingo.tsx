@@ -24,6 +24,7 @@ import {
 import { cardIssues } from '../fuzzy';
 import { BingoGrid } from './BingoGrid';
 import { CardChecks, blocksSaving } from './CardChecks';
+import { SuggestionChips } from './SuggestionChips';
 import { CreatePanel } from './CreatePanel';
 import { Shell, nameOf, toRef } from './common';
 import { PodcasterActions } from './PodcasterActions';
@@ -60,6 +61,8 @@ export function EpisodeBingo({ ctx }: { ctx: PluginContext }) {
   const [draft, setDraft] = useState<string[] | null>(null);
   const [listed, setListed] = useState(true);
   const [showcasable, setShowcasable] = useState(true);
+  const [showSuggestions, setShowSuggestions] = useState(true);
+  const [focused, setFocused] = useState<number | null>(null);
   const [saving, setSaving] = useState<'idle' | 'saving' | 'saved'>('idle');
   const [revealed, setRevealed] = useState(false);
   const [unheard, setUnheard] = useState(false);
@@ -99,6 +102,7 @@ export function EpisodeBingo({ ctx }: { ctx: PluginContext }) {
     // Prefilled with whatever they decided last time, so the question is asked once and then remembered.
     setListed(prefOrDefault(data.myPrefs?.listed));
     setShowcasable(prefOrDefault(data.myPrefs?.showcasable));
+    setShowSuggestions(prefOrDefault(data.myPrefs?.suggestions));
   }, [data.loading, data.myCard, data.myPrefs, size, freeCentre]);
 
   if (data.loading) return <Shell>{i18n.t('common.loading')}</Shell>;
@@ -133,7 +137,7 @@ export function EpisodeBingo({ ctx }: { ctx: PluginContext }) {
       await ctx.docs.put(
         'self',
         KEY_PREFS,
-        { listed, showcasable, updatedAt: new Date().toISOString() },
+        { listed, showcasable, suggestions: showSuggestions, updatedAt: new Date().toISOString() },
       );
       // The card only when it may still change: after the freeze this button saves the choices alone.
       if (editable) {
@@ -146,6 +150,27 @@ export function EpisodeBingo({ ctx }: { ctx: PluginContext }) {
       ctx.log(
         'warn',
         `bingo: could not save this card (${isPluginApiError(error) ? error.status : String(error)})`,
+      );
+    }
+  };
+
+  /**
+   * Saved the moment it is flipped, on its own: it is about this person's screen, not about their card,
+   * so it should not wait for — or ride along with — a card save. Only the stored choices are written
+   * back next to it, never toggles the player has changed and not saved yet.
+   */
+  const toggleSuggestions = async (next: boolean) => {
+    setShowSuggestions(next);
+    try {
+      await ctx.docs.put('self', KEY_PREFS, {
+        ...(data.myPrefs ?? {}),
+        suggestions: next,
+        updatedAt: new Date().toISOString(),
+      });
+    } catch (error) {
+      ctx.log(
+        'warn',
+        `bingo: could not save the suggestions choice (${isPluginApiError(error) ? error.status : String(error)})`,
       );
     }
   };
@@ -188,7 +213,8 @@ export function EpisodeBingo({ ctx }: { ctx: PluginContext }) {
   // A standing choice about how you appear, not part of the card — so it stays changeable after the freeze.
   const canChoose = active.id === 'me' && signedIn && phase !== 'ARCHIVED';
   // Two of the player's own squares that would count as one, worked out here as they type — no request.
-  const issues = editable && draft ? cardIssues(draft, data.phase?.fuzzyThreshold ?? DEFAULT_FUZZY_THRESHOLD) : [];
+  const threshold = data.phase?.fuzzyThreshold ?? DEFAULT_FUZZY_THRESHOLD;
+  const issues = editable && draft ? cardIssues(draft, threshold) : [];
   const blocked = blocksSaving(issues);
 
   return (
@@ -238,29 +264,28 @@ export function EpisodeBingo({ ctx }: { ctx: PluginContext }) {
         </div>
       ) : (
         <>
-          {editable && data.vocabulary.length > 0 && (
-            <div className="bingo__suggest">
-              <span className="bingo__note">{i18n.t('episode.suggestions')}</span>
-              {data.vocabulary.slice(0, 12).map((tag) => (
-                <button
-                  key={tag}
-                  type="button"
-                  className="bingo__chip"
-                  onClick={() =>
-                    setDraft((current) => {
-                      const next = [...(current ?? [])];
-                      const slot = next.findIndex((e) => !e.trim());
-                      if (slot === -1) return next; // every square is taken
-                      next[slot] = tag;
-                      setSaving('idle');
-                      return next;
-                    })
-                  }
-                >
-                  {tag}
-                </button>
-              ))}
-            </div>
+          {editable && draft && (
+            <SuggestionChips
+              i18n={i18n}
+              suggestions={data.suggestions}
+              vocabulary={data.vocabulary}
+              draft={draft}
+              threshold={threshold}
+              shown={showSuggestions}
+              onToggle={toggleSuggestions}
+              onPick={(text) =>
+                setDraft((current) => {
+                  const next = [...(current ?? [])];
+                  // The square the player was last in, if it is still empty; otherwise the first empty one.
+                  const slot =
+                    focused !== null && !next[focused]?.trim() ? focused : next.findIndex((e) => !e.trim());
+                  if (slot === -1) return next; // every square is taken
+                  next[slot] = text;
+                  setSaving('idle');
+                  return next;
+                })
+              }
+            />
           )}
           {editable && <p className="bingo__note">{i18n.t('episode.entryPlaceholder')}</p>}
           <BingoGrid
@@ -271,6 +296,7 @@ export function EpisodeBingo({ ctx }: { ctx: PluginContext }) {
             i18n={i18n}
             label={active.label}
             flags={Object.fromEntries(issues.map((issue) => [issue.index, issue.kind]))}
+            onFocusCell={setFocused}
             onChange={
               editable
                 ? (index, value) =>

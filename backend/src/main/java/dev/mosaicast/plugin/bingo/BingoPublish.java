@@ -257,4 +257,61 @@ final class BingoPublish {
 
         ctx.store().put(Scope.site(), KEY_STATS, new Stats(standings, (int) episodes, now().toString()));
     }
+
+    // ---------------------------------------------------------------- suggestions
+
+    /**
+     * Predictions people keep making, for the card editor to offer.
+     *
+     * <p>Grouped the way a single bingo is, across every ranked entry of every episode everyone can see, and
+     * published only where at least {@link #MIN_AUTHORS} different people wrote the same thing: a prediction
+     * one person made is their own words, and offering it to everybody else would quietly publish them.
+     * Quiet episodes are left out for the same reason the standings leave them out.
+     *
+     * <p>Run with the site roll-up, so only when something it is computed from changed.
+     */
+    void suggestions(double threshold) {
+        SchemaStore schema = ctx.schema();
+        if (schema == null) {
+            return;
         }
+        Map<String, Boolean> visible = new LinkedHashMap<>();
+        List<EntryRow> rows = schema.select(ENTITY_ENTRY, Criteria.where("ranked", Criteria.Op.EQ, true),
+                        EntryRow.class).stream()
+                .filter(row -> visible.computeIfAbsent(row.episode(), lifecycle::publiclyVisible))
+                .toList();
+
+        BingoFuzzy.Grouping grouping = BingoFuzzy.group(rows.stream().map(EntryRow::text).toList(), threshold);
+        Map<String, Set<String>> authors = new LinkedHashMap<>();
+        Map<String, Set<String>> episodes = new LinkedHashMap<>();
+        Map<String, Set<String>> hitIn = new LinkedHashMap<>();
+        for (EntryRow row : rows) {
+            String canonical = grouping.canonicalOf(row.text());
+            if (canonical == null) {
+                continue;
+            }
+            authors.computeIfAbsent(canonical, c -> new LinkedHashSet<>()).add(row.author());
+            episodes.computeIfAbsent(canonical, c -> new LinkedHashSet<>()).add(row.episode());
+            if (row.hit()) {
+                hitIn.computeIfAbsent(canonical, c -> new LinkedHashSet<>()).add(row.episode());
+            }
+        }
+
+        List<Suggestion> items = grouping.candidates().stream()
+                .filter(c -> authors.getOrDefault(c.canonical(), Set.of()).size() >= MIN_AUTHORS)
+                .map(c -> new Suggestion(c.label(), authors.get(c.canonical()).size(),
+                        episodes.get(c.canonical()).size(), hitIn.getOrDefault(c.canonical(), Set.of()).size()))
+                .sorted(Comparator.comparingInt(Suggestion::episodes).reversed()
+                        .thenComparing(Comparator.comparingInt(Suggestion::people).reversed())
+                        .thenComparing(Suggestion::label))
+                .limit(MAX_SUGGESTIONS)
+                .toList();
+
+        ctx.store().put(Scope.site(), KEY_SUGGESTIONS, new Suggestions(items, now().toString()));
+    }
+
+    /** How many different people must have written a prediction before it is offered to anybody else. */
+    static final int MIN_AUTHORS = 2;
+    /** How many suggestions the document carries; every card editor on the site reads it. */
+    static final int MAX_SUGGESTIONS = 30;
+}

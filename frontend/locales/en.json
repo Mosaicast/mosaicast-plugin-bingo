@@ -103,5 +103,8 @@
   "recap.didNotHappen": "it did not happen",
   "recap.rarestHit": "Rarest hit: “{{label}}”, on only {{cards}} card(s)",
   "recap.biggestMiss": "Biggest miss: “{{label}}”, on {{cards}} card(s)",
-  "recap.average": "An average card got {{fields}} squares; {{percent}}% got at least one line."
+  "recap.average": "An average card got {{fields}} squares; {{percent}}% got at least one line.",
+  "suggest.toggle": "Show suggestions",
+  "suggest.popular": "Often predicted:",
+  "suggest.meta": "Predicted by {{people}} people; came true in {{hits}} of {{episodes}} episode(s)"
 }

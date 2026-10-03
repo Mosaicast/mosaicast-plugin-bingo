@@ -36,9 +36,21 @@ interface Props {
   label: string;
   /** Squares the card editor has something to say about, by entry index (see `CardChecks`). */
   flags?: Record<number, 'duplicate' | 'similar'>;
+  /** Told which square the player is in, so a picked suggestion can land there. */
+  onFocusCell?: (index: number) => void;
 }
 
-export function BingoGrid({ size, freeCentre, entries, i18n, hits, onChange, label, flags }: Props) {
+export function BingoGrid({
+  size,
+  freeCentre,
+  entries,
+  i18n,
+  hits,
+  onChange,
+  label,
+  flags,
+  onFocusCell,
+}: Props) {
   const cells = cellsFor(size, freeCentre);
   const editable = Boolean(onChange);
 
@@ -78,6 +90,7 @@ export function BingoGrid({ size, freeCentre, entries, i18n, hits, onChange, lab
                 aria-label={`${label} ${cell.index + 1}`}
                 aria-invalid={flag === 'duplicate' || undefined}
                 onChange={(e) => onChange?.(cell.index, e.target.value)}
+                onFocus={() => onFocusCell?.(cell.index)}
               />
             </div>
           );

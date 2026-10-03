@@ -50,6 +50,8 @@ final class BingoDocs {
     static final String KEY_PARTICIPANTS = "participants";
     /** The featured cards, copied out so anyone may read them. Backend-owned. */
     static final String KEY_SHOWCASED = "showcased";
+    /** Predictions people keep making, in the site scope, for the card editor to offer. Backend-owned. */
+    static final String KEY_SUGGESTIONS = "suggestions";
     /** Cumulative standings, in the site scope. Backend-owned. */
     static final String KEY_STATS = "stats";
     /** Who has already been told this bingo resolved, so nobody is told twice. Backend-owned. */
@@ -323,6 +325,19 @@ final class BingoDocs {
 
     /** Cumulative standings, in the site scope. */
     record Stats(List<StandingRow> players, int episodes, String computedAt) {}
+
+    /**
+     * One prediction people keep making.
+     *
+     * @param label    the first spelling of it anyone used
+     * @param people   how many different people wrote it - never fewer than two
+     * @param episodes on how many episodes' cards it appeared
+     * @param hits     on how many of those it came true
+     */
+    record Suggestion(String label, int people, int episodes, int hits) {}
+
+    /** Predictions people keep making, for the card editor. Site scope, backend-owned. */
+    record Suggestions(List<Suggestion> items, String computedAt) {}
 
     /** Who has already been told this bingo resolved. Backend-owned, and why nobody is told twice. */
     record NotifyState(List<String> userIds, String updatedAt) {}

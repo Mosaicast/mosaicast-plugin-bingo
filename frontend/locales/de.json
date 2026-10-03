@@ -103,5 +103,8 @@
   "recap.didNotHappen": "ist nicht eingetreten",
   "recap.rarestHit": "Seltenster Treffer: „{{label}}“, nur auf {{cards}} Karte(n)",
   "recap.biggestMiss": "Größter Fehltipp: „{{label}}“, auf {{cards}} Karte(n)",
-  "recap.average": "Eine Karte hatte im Schnitt {{fields}} Treffer; {{percent}} % hatten mindestens eine Reihe."
+  "recap.average": "Eine Karte hatte im Schnitt {{fields}} Treffer; {{percent}} % hatten mindestens eine Reihe.",
+  "suggest.toggle": "Vorschläge anzeigen",
+  "suggest.popular": "Oft getippt:",
+  "suggest.meta": "Von {{people}} Personen getippt; in {{hits}} von {{episodes}} Folge(n) eingetreten"
 }

@@ -57,6 +57,12 @@ export const KEY_PARTICIPANTS = 'participants';
  */
 export const KEY_SHOWCASED = 'showcased';
 
+/**
+ * Backend-owned, in the site scope: predictions several people keep making, for the card editor to offer.
+ * Never one person's own words — the backend publishes only what at least two different people wrote.
+ */
+export const KEY_SUGGESTIONS = 'suggestions';
+
 /** Backend-owned, in the site scope: cumulative standings. */
 export const KEY_STATS = 'stats';
 

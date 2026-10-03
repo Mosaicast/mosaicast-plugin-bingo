@@ -343,9 +343,10 @@ describe('<EpisodeBingo>', () => {
           'leaderboard,showcased,participants,showcase,grouping,recap',
       },
     ]);
+    // Plus the site-wide suggestions, the one shared document a remembered miss cannot hurt.
     expect(
       docs.calls.filter((c) => c.method === 'get').flatMap((c) => c.partitions),
-    ).toEqual(['data/user/me', 'data/user/me']);
+    ).toEqual(['data/user/me', 'data/user/me', 'data/site/main']);
   });
 
   it('lets a signed-in fan edit and save into their own partition', async () => {
@@ -437,6 +438,66 @@ describe('<EpisodeBingo>', () => {
     await act(async () => chip.click());
 
     expect((host.querySelector('textarea') as HTMLTextAreaElement).value).toBe(chip.textContent);
+  });
+
+  const SUGGESTIONS = {
+    items: [
+      { label: 'Kraken!', people: 5, episodes: 3, hits: 2 },
+      { label: 'merch plug', people: 2, episodes: 1, hits: 0 },
+    ],
+  };
+
+  it('offers what several people keep predicting, and nothing already on the card', async () => {
+    const docs = makeMockDocs({
+      [docPath('template')]: { size: 3 },
+      'data/site/main/suggestions': SUGGESTIONS,
+    });
+    const ctx = makeBingoCtx({ scope, docs, user: fan });
+    await render(ctx);
+
+    const chips = () => [...host.querySelectorAll<HTMLButtonElement>('.bingo__chip')].map((c) => c.textContent);
+    expect(chips()).toEqual(['Kraken!', 'merch plug']);
+
+    await typeInto(4, 'kraken');
+    expect(chips()).toEqual(['merch plug']);
+
+    await act(async () => host.querySelectorAll('textarea')[2].dispatchEvent(new FocusEvent('focusin', { bubbles: true })));
+    await act(async () => (host.querySelector('.bingo__chip') as HTMLButtonElement).click());
+    expect((host.querySelectorAll('textarea')[2] as HTMLTextAreaElement).value).toBe('merch plug');
+  });
+
+  it('remembers turning suggestions off, at once and in the player’s own partition', async () => {
+    const docs = makeMockDocs({
+      [docPath('template')]: { size: 3 },
+      'data/site/main/suggestions': SUGGESTIONS,
+      'data/user/me/prefs': { listed: false },
+    });
+    const ctx = makeBingoCtx({ scope, docs, user: fan });
+    await render(ctx);
+
+    const toggle = [...host.querySelectorAll<HTMLInputElement>('.bingo__suggestions input')][0];
+    await act(async () => toggle.click());
+    await flush(ctx);
+
+    expect(host.querySelector('.bingo__chip')).toBeNull();
+    // The stored choices ride along untouched; nothing unsaved is written behind the player's back.
+    expect(docs.stored['data/user/me/prefs']).toMatchObject({ listed: false, suggestions: false });
+  });
+
+  it('starts with suggestions hidden for someone who turned them off', async () => {
+    await render(
+      ctxWith(
+        {
+          [docPath('template')]: { size: 3 },
+          'data/site/main/suggestions': SUGGESTIONS,
+          'data/user/me/prefs': { suggestions: false },
+        },
+        { user: fan },
+      ),
+    );
+
+    expect(host.querySelector('.bingo__chip')).toBeNull();
+    expect(host.querySelector<HTMLInputElement>('.bingo__suggestions input')?.checked).toBe(false);
   });
 
   it('renders no suggestions when the host offers no tag surface', async () => {

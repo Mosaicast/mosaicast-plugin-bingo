@@ -15,6 +15,7 @@ import {
   KEY_GROUPING,
   KEY_SHOWCASE,
   KEY_SHOWCASED,
+  KEY_SUGGESTIONS,
   KEY_TEMPLATE,
   cardKey,
 } from '../keys';
@@ -33,6 +34,8 @@ import type {
   Showcase,
   Showcased,
   ShowcasedCard,
+  Suggestion,
+  Suggestions,
   Phase,
   Template,
 } from '../types';
@@ -71,6 +74,8 @@ export interface BingoData {
   myPrefs: Prefs | null;
   /** The site's shared tag vocabulary, or empty when the host offers none. */
   vocabulary: string[];
+  /** Predictions several people keep making across the site. Only read for someone who can fill a card. */
+  suggestions: Suggestion[];
   /** Everyone who needs drawing, resolved at render. Keyed by id — never index-aligned. */
   people: Record<string, UserRef>;
   reload: () => void;
@@ -95,6 +100,7 @@ const EMPTY: Omit<BingoData, 'reload'> = {
   myCard: null,
   myPrefs: null,
   vocabulary: [],
+  suggestions: [],
   people: {},
 };
 
@@ -128,7 +134,7 @@ export function useBingo(ctx: PluginContext): BingoData {
     const ctx = latest.current;
 
     const load = async () => {
-      const [episode, mine, myPrefs, vocabulary] = await Promise.all([
+      const [episode, mine, myPrefs, vocabulary, suggestions] = await Promise.all([
         readEpisode(ctx, scope, TILE_KEYS),
         // The viewer's own partition changes only through this client, whose writes forget the miss they
         // replace, so the host's remembered misses are right here and worth keeping.
@@ -136,6 +142,12 @@ export function useBingo(ctx: PluginContext): BingoData {
         signedIn ? ctx.docs.get<Prefs>('self', KEY_PREFS) : Promise.resolve(null),
         // `ctx.tags` is null unless the manifest declares a tags block, so this must survive its absence.
         ctx.tags ? ctx.tags.all().catch(() => []) : Promise.resolve([]),
+        // Through `ctx.docs`, unlike the episode: a site-wide list that changes on the backend's slow roll-up,
+        // shared by every tile on the page, where a remembered miss costs nothing worse than no chips for a
+        // while. Optional all the way — a failure here must not cost anyone their card.
+        signedIn
+          ? ctx.docs.get<Suggestions>('site', KEY_SUGGESTIONS).catch(() => null)
+          : Promise.resolve(null),
       ]);
       const template = pick<Template>(episode, KEY_TEMPLATE);
       const phase = pick<PhaseState>(episode, KEY_PHASE);
@@ -168,6 +180,7 @@ export function useBingo(ctx: PluginContext): BingoData {
         myCard: mine,
         myPrefs,
         vocabulary: vocabulary.map((t) => t.label),
+        suggestions: suggestions?.items ?? [],
         people: await resolvePeople(ctx, [
           ...(leaderboard?.ranked ?? []).map((r) => r.author),
           ...(leaderboard?.late ?? []).map((r) => r.author),

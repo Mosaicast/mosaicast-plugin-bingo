@@ -98,6 +98,8 @@ export const BINGO_CSS =
     font-size: .875rem;
   }
 
+  .bingo__suggestions { display: flex; flex-direction: column; gap: .4rem; margin-bottom: .6rem; }
+  .bingo__suggestions .bingo__suggest { margin-bottom: 0; }
   .bingo__suggest { display: flex; flex-wrap: wrap; gap: .35rem; align-items: center; margin-bottom: .6rem; }
   .bingo__chip {
     appearance: none; font: inherit; font-size: .8125rem; cursor: pointer;

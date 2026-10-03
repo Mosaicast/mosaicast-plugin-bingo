@@ -36,6 +36,11 @@ export interface Card {
 export interface Prefs {
   listed?: boolean;
   showcasable?: boolean;
+  /**
+   * Whether the card editor offers suggestions. A choice about this person's own screen only, so it sits
+   * in their partition with the rest and the backend never reads it. Absent means yes.
+   */
+  suggestions?: boolean;
   updatedAt?: string;
 }
 
@@ -77,6 +82,23 @@ export interface PhaseState {
   archiveAt: string | null;
   /** How alike two entries must be to count as one. Published because there is no `ctx.config`. */
   fuzzyThreshold?: number;
+}
+
+/** One prediction several people keep making. */
+export interface Suggestion {
+  label: string;
+  /** How many different people wrote it — never fewer than two. */
+  people: number;
+  /** On how many episodes' cards it appeared. */
+  episodes: number;
+  /** On how many of those it came true. */
+  hits: number;
+}
+
+/** Backend-owned, site scope: what the card editor offers. */
+export interface Suggestions {
+  items?: Suggestion[];
+  computedAt?: string;
 }
 
 /** A candidate worth naming in a recap. */

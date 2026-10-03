@@ -218,7 +218,8 @@ public class BingoPlugin implements PluginBackend, UserDataHandler {
                 .map(Map.Entry::getKey)
                 .sorted()
                 .toList();
-        String fingerprint = String.join("|", pass.settings().rankBy().name(), String.join(",", unlisted),
+        String fingerprint = String.join("|", pass.settings().rankBy().name(),
+                Double.toString(pass.settings().threshold()), String.join(",", unlisted),
                 Integer.toHexString(slugs.hashCode()), String.join(",", new TreeSet<>(pass.quiet())));
         Instant now = now();
         boolean stale = lastRollUp == null || !now.isBefore(lastRollUp.plus(ROLL_UP_REFRESH));
@@ -226,6 +227,7 @@ public class BingoPlugin implements PluginBackend, UserDataHandler {
             return;
         }
         publish.stats(pass.prefs(), pass.settings().rankBy());
+        publish.suggestions(pass.settings().threshold());
         lastRollUpInputs = fingerprint;
         lastRollUp = now;
     }
