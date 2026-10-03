@@ -11,9 +11,11 @@ import java.time.Clock;
 import java.time.Instant;
 import java.util.ArrayList;
 import java.util.Comparator;
+import java.util.HashSet;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 
 import static dev.mosaicast.plugin.bingo.BingoDocs.*;
 
@@ -25,6 +27,8 @@ final class BingoRecord {
 
     private final PluginContext ctx;
     private final Clock clock;
+    /** Set by any write, cleared by {@link #takeChanged}. One pass at a time runs, under the plugin's lock. */
+    private boolean changed;
 
     BingoRecord(PluginContext ctx, Clock clock) {
         this.ctx = ctx;
@@ -36,11 +40,40 @@ final class BingoRecord {
     }
 
     /**
+     * The rows one episode already has, by author. Read once per pass: both the ingest and the grouping
+     * need to know which cards are frozen, and asking per card was a query per player per tick.
+     */
+    Map<String, List<EntryRow>> rowsOf(String slug) {
+        SchemaStore schema = ctx.schema();
+        Map<String, List<EntryRow>> byAuthor = new LinkedHashMap<>();
+        if (schema == null) {
+            return byAuthor;
+        }
+        for (EntryRow row : schema.select(ENTITY_ENTRY, Criteria.where("episode", Criteria.Op.EQ, slug),
+                EntryRow.class)) {
+            byAuthor.computeIfAbsent(row.author(), a -> new ArrayList<>()).add(row);
+        }
+        return byAuthor;
+    }
+
+    /**
+     * Whether any row this helper keeps changed since the last call, which then forgets it.
+     *
+     * <p>What lets the site roll-up skip a pass in which nothing it is computed from moved.
+     */
+    boolean takeChanged() {
+        boolean was = changed;
+        changed = false;
+        return was;
+    }
+
+    /**
      * Copies cards into the schema, which is where the freeze actually happens.
      *
      * <ul>
-     *   <li>{@code OPEN} - rewrite from the live document every tick, so editing a card before the lock is
-     *       free and costs nothing but a delete-and-insert.</li>
+     *   <li>{@code OPEN} - reread from the live document every tick, so editing a card before the lock is
+     *       free. A card whose rows already say what it says is left alone: rewriting it would cost a
+     *       delete and an insert per square per tick and move its {@code recordedAt} for nothing.</li>
      *   <li>{@code LOCKED} or later - a card that already has rows is never re-read; a card arriving now is
      *       taken once and marked {@code ranked = false}, so catch-up listeners still get to play without
      *       reaching the board.</li>
@@ -50,9 +83,11 @@ final class BingoRecord {
      * just derived. On the tick that closes predictions the two differ, and using the new one would demote
      * everybody who saved inside the last interval - up to a whole {@code ingestIntervalSeconds}, which is
      * exactly when people rush to fill a card - to a latecomer who never reaches the board.
+     *
+     * @param existing what {@link #rowsOf} returned for this episode at the start of the pass
      */
-    void ingest(String slug, List<CardInput> cards, BingoFuzzy.Grouping grouping,
-                        Template template, Phase phase, boolean allowLate) {
+    void ingest(String slug, List<CardInput> cards, Map<String, List<EntryRow>> existing,
+                BingoFuzzy.Grouping grouping, Template template, Phase phase, boolean allowLate) {
         SchemaStore schema = ctx.schema();
         if (schema == null) {
             return;
@@ -60,24 +95,32 @@ final class BingoRecord {
         Instant now = now();
 
         for (CardInput card : cards) {
-            boolean hasRows = schema.count(ENTITY_ENTRY, byCard(slug, card.author())) > 0;
+            List<EntryRow> rows = existing.getOrDefault(card.author(), List.of());
 
             if (phase == Phase.OPEN) {
+                List<Map<String, Object>> wanted = rowsFor(slug, card, grouping, template, true, now);
+                if (sameEntries(rows, wanted)) {
+                    continue;
+                }
                 schema.delete(ENTITY_ENTRY, byCard(slug, card.author()));
-                insertEntries(schema, slug, card, grouping, template, true, now);
-            } else if (!hasRows) {
+                wanted.forEach(values -> schema.insert(ENTITY_ENTRY, values));
+                changed = true;
+            } else if (rows.isEmpty()) {
                 if (!allowLate) {
                     continue;
                 }
-                insertEntries(schema, slug, card, grouping, template, false, now);
+                rowsFor(slug, card, grouping, template, false, now)
+                        .forEach(values -> schema.insert(ENTITY_ENTRY, values));
+                changed = true;
             }
             // else: frozen - the document may have changed, and nothing here reads it again.
         }
     }
 
-    void insertEntries(SchemaStore schema, String slug, CardInput card,
-                               BingoFuzzy.Grouping grouping, Template template, boolean ranked,
-                               Instant now) {
+    /** The rows a card becomes, one per square that has something comparable written in it. */
+    private static List<Map<String, Object>> rowsFor(String slug, CardInput card, BingoFuzzy.Grouping grouping,
+                                                     Template template, boolean ranked, Instant now) {
+        List<Map<String, Object>> out = new ArrayList<>();
         List<String> entries = card.entries();
         for (int index = 0; index < entries.size(); index++) {
             String text = entries.get(index);
@@ -100,8 +143,31 @@ final class BingoRecord {
             values.put("hit", false);
             values.put("ranked", ranked);
             values.put("recordedAt", now);
-            schema.insert(ENTITY_ENTRY, values);
+            out.add(values);
         }
+        return out;
+    }
+
+    /** Whether stored rows already say what a card says - same squares, same words, same grouping. */
+    private static boolean sameEntries(List<EntryRow> rows, List<Map<String, Object>> wanted) {
+        if (rows.size() != wanted.size()) {
+            return false;
+        }
+        Set<String> have = new HashSet<>();
+        for (EntryRow row : rows) {
+            have.add(entryKey(row.position(), row.text(), row.canonical(), row.ranked()));
+        }
+        for (Map<String, Object> values : wanted) {
+            if (!have.remove(entryKey(values.get("position"), values.get("text"), values.get("canonical"),
+                    values.get("ranked")))) {
+                return false;
+            }
+        }
+        return have.isEmpty();
+    }
+
+    private static String entryKey(Object position, Object text, Object canonical, Object ranked) {
+        return position + "\u0000" + text + "\u0000" + canonical + "\u0000" + ranked;
     }
 
     // ---------------------------------------------------------------- scoring
@@ -124,12 +190,11 @@ final class BingoRecord {
             return Leaderboard.empty(now().toString());
         }
 
-        List<EntryRow> rows = schema.select(ENTITY_ENTRY,
-                Criteria.where("episode", Criteria.Op.EQ, slug), EntryRow.class);
-
-        Map<String, List<EntryRow>> byAuthor = new LinkedHashMap<>();
-        for (EntryRow row : rows) {
-            byAuthor.computeIfAbsent(row.author(), a -> new ArrayList<>()).add(row);
+        Map<String, List<EntryRow>> byAuthor = rowsOf(slug);
+        Map<String, CardResultRow> results = new LinkedHashMap<>();
+        for (CardResultRow row : schema.select(ENTITY_CARD_RESULT,
+                Criteria.where("episode", Criteria.Op.EQ, slug), CardResultRow.class)) {
+            results.put(row.author(), row);
         }
 
         int size = template.gridSize();
@@ -151,6 +216,7 @@ final class BingoRecord {
                 boolean hit = resolution.isHit(row.canonical());
                 if (hit != row.hit()) {
                     schema.update(ENTITY_ENTRY, row.id(), Map.of("hit", hit));
+                    changed = true;
                 }
                 marks.add(new int[] { row.position(), hit ? 1 : 0 });
                 isRanked = isRanked && row.ranked();
@@ -160,17 +226,23 @@ final class BingoRecord {
             BingoScore.Score score = BingoScore.of(marks, size, freeCentre);
 
             // The row is kept whatever the preference says: it is what the standings are recomputed from,
-            // and dropping it would make an aggregate that quietly disagrees with what happened.
-            schema.delete(ENTITY_CARD_RESULT, byCard(slug, author));
-            Map<String, Object> values = new LinkedHashMap<>();
-            values.put("episode", slug);
-            values.put("author", author);
-            values.put("fields", score.fields());
-            values.put("lines", score.lines());
-            values.put("cells", score.cells());
-            values.put("ranked", isRanked);
-            values.put("recordedAt", now);
-            schema.insert(ENTITY_CARD_RESULT, values);
+            // and dropping it would make an aggregate that quietly disagrees with what happened. Rewritten
+            // only when the score moved, so `recordedAt` says when it last did.
+            CardResultRow stored = results.get(author);
+            if (stored == null || stored.fields() != score.fields() || stored.lines() != score.lines()
+                    || stored.cells() != score.cells() || stored.ranked() != isRanked) {
+                schema.delete(ENTITY_CARD_RESULT, byCard(slug, author));
+                Map<String, Object> values = new LinkedHashMap<>();
+                values.put("episode", slug);
+                values.put("author", author);
+                values.put("fields", score.fields());
+                values.put("lines", score.lines());
+                values.put("cells", score.cells());
+                values.put("ranked", isRanked);
+                values.put("recordedAt", now);
+                schema.insert(ENTITY_CARD_RESULT, values);
+                changed = true;
+            }
 
             Row row = new Row(author, score.fields(), score.lines(), score.cells(), isRanked);
             everyPlayer++;

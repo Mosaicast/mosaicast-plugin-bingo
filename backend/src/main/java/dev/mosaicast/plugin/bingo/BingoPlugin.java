@@ -25,6 +25,7 @@ import java.util.Map;
 import java.util.Objects;
 import java.util.Optional;
 import java.util.Set;
+import java.util.TreeSet;
 import java.util.UUID;
 
 import tools.jackson.databind.JsonNode;
@@ -78,6 +79,8 @@ public class BingoPlugin implements PluginBackend, UserDataHandler {
     static final double DEFAULT_FUZZY_THRESHOLD = 0.82;
     static final int DEFAULT_GRID_SIZE = 3;
     static final int DEFAULT_ARCHIVE_AFTER_DAYS = 30;
+    /** How stale the site roll-up may get while none of its inputs visibly moved. */
+    static final Duration ROLL_UP_REFRESH = Duration.ofHours(1);
 
     private final Clock clock;
     private PluginContext ctx;
@@ -95,6 +98,9 @@ public class BingoPlugin implements PluginBackend, UserDataHandler {
     private BingoLifecycle lifecycle;
     private BingoRecord record;
     private BingoPublish publish;
+    /** What the last site roll-up was computed from, and when; see {@link #rollUp}. */
+    private String lastRollUpInputs;
+    private Instant lastRollUp;
 
     public BingoPlugin() {
         this(Clock.systemUTC());
@@ -146,13 +152,12 @@ public class BingoPlugin implements PluginBackend, UserDataHandler {
     /** One scheduled pass over the working set, then the site-wide roll-up. */
     void tick() {
         synchronized (passLock) {
-            Settings settings = settings();
-            // One read of everyone's preferences for the whole pass, rather than once per episode.
-            Map<String, Prefs> prefs = readPrefs();
+            Pass pass = pass();
+            List<String> slugs = ctx.feeds().episodesIn(Scope.site());
 
-            for (String slug : ctx.feeds().episodesIn(Scope.site())) {
+            for (String slug : slugs) {
                 try {
-                    tickEpisode(slug, settings, prefs);
+                    tickEpisode(slug, pass);
                 } catch (RuntimeException e) {
                     // One broken episode must not cost every other episode its tick.
                     ctx.logger().warn("bingo tick failed for episode {}", slug, e);
@@ -160,7 +165,7 @@ public class BingoPlugin implements PluginBackend, UserDataHandler {
             }
 
             try {
-                publish.stats(prefs, settings.rankBy());
+                rollUp(pass, slugs);
             } catch (RuntimeException e) {
                 ctx.logger().warn("bingo stats pass failed", e);
             }
@@ -177,8 +182,52 @@ public class BingoPlugin implements PluginBackend, UserDataHandler {
      */
     void released(String slug) {
         synchronized (passLock) {
-            tickEpisode(slug, settings(), readPrefs());
+            tickEpisode(slug, pass());
         }
+    }
+
+    /**
+     * What one pass works from, read once: the configuration, everyone's preferences and everyone's cards.
+     *
+     * <p>Cards are read here, across every partition at once, rather than per episode: the cross-user read
+     * has no filter but a key prefix, so asking once per episode read every card on the site once per
+     * episode with a bingo.
+     */
+    private Pass pass() {
+        return new Pass(settings(), readPrefs(), collectCards(), new LinkedHashSet<>());
+    }
+
+    /**
+     * @param quiet filled during the pass: working-set episodes nobody but a podcaster may know exist
+     */
+    private record Pass(Settings settings, Map<String, Prefs> prefs, Map<String, List<CardInput>> cards,
+                        Set<String> quiet) {}
+
+    /**
+     * The site-wide roll-up, recomputed only when something it is computed from moved.
+     *
+     * <p>It reads every ranked result on the site, so running it every tick for a quiet site was the most
+     * expensive thing the plugin did. Its inputs are the result rows ({@link BingoRecord#takeChanged}), who
+     * may be listed, how the site ranks, which episodes exist and which of them are still quiet. A slow
+     * refresh covers anything else - a feed that changed under an archived episode, say.
+     */
+    private void rollUp(Pass pass, List<String> slugs) {
+        boolean rowsChanged = record.takeChanged();
+        List<String> unlisted = pass.prefs().entrySet().stream()
+                .filter(e -> !e.getValue().listedOrDefault())
+                .map(Map.Entry::getKey)
+                .sorted()
+                .toList();
+        String fingerprint = String.join("|", pass.settings().rankBy().name(), String.join(",", unlisted),
+                Integer.toHexString(slugs.hashCode()), String.join(",", new TreeSet<>(pass.quiet())));
+        Instant now = now();
+        boolean stale = lastRollUp == null || !now.isBefore(lastRollUp.plus(ROLL_UP_REFRESH));
+        if (!rowsChanged && !stale && fingerprint.equals(lastRollUpInputs)) {
+            return;
+        }
+        publish.stats(pass.prefs(), pass.settings().rankBy());
+        lastRollUpInputs = fingerprint;
+        lastRollUp = now;
     }
 
     /** The configuration one pass works under, read once per pass. */
@@ -194,7 +243,9 @@ public class BingoPlugin implements PluginBackend, UserDataHandler {
     private record Settings(double threshold, boolean allowLate, int archiveAfterDays, int defaultGridSize,
                             BingoScore.RankBy rankBy) {}
 
-    private void tickEpisode(String slug, Settings settings, Map<String, Prefs> prefs) {
+    private void tickEpisode(String slug, Pass pass) {
+        Settings settings = pass.settings();
+        Map<String, Prefs> prefs = pass.prefs();
         double threshold = settings.threshold();
         boolean allowLate = settings.allowLate();
         int archiveAfterDays = settings.archiveAfterDays();
@@ -215,6 +266,9 @@ public class BingoPlugin implements PluginBackend, UserDataHandler {
         }
 
         EpisodePhase release = lifecycle.releasePhaseOf(slug);
+        if (release == EpisodePhase.PLANNED) {
+            pass.quiet().add(slug);
+        }
         PhaseState state = lifecycle.resolvePhase(slug, release, previous, archiveAfterDays, allowLate);
         ctx.store().put(scope, KEY_PHASE, state);
         Phase phase = Phase.valueOf(state.phase());
@@ -237,7 +291,8 @@ public class BingoPlugin implements PluginBackend, UserDataHandler {
         Phase writtenUnder =
                 phase == Phase.OPEN || previousPhase == Phase.OPEN ? Phase.OPEN : phase;
 
-        List<CardInput> cards = collectCards(slug);
+        List<CardInput> cards = pass.cards().getOrDefault(slug, List.of());
+        Map<String, List<EntryRow>> rows = record.rowsOf(slug);
 
         List<String> everyEntry = new ArrayList<>();
         cards.forEach(c -> everyEntry.addAll(c.entries()));
@@ -290,7 +345,7 @@ public class BingoPlugin implements PluginBackend, UserDataHandler {
         Resolution resolution = ctx.store().get(scope, KEY_RESOLUTION, Resolution.class)
                 .orElseGet(() -> new Resolution(Map.of()));
 
-        record.ingest(slug, cards, grouping, template.get(), writtenUnder, allowLate);
+        record.ingest(slug, cards, rows, grouping, template.get(), writtenUnder, allowLate);
         Leaderboard board = record.score(slug, template.get(), resolution, prefs, phase, rankBy);
         ctx.store().put(scope, KEY_LEADERBOARD, board);
 
@@ -307,28 +362,24 @@ public class BingoPlugin implements PluginBackend, UserDataHandler {
     // ---------------------------------------------------------------- cards and preferences
 
     /**
-     * Everyone's card for one episode.
+     * Everyone's card, by episode.
      *
      * <p>Read across partitions, because that is the only way anything sees more than its own card. This is
      * backend-only and has no HTTP surface, which is what makes the aggregate honest: the id comes from the
      * partition the document lives in, never from something a client said.
      */
-    private List<CardInput> collectCards(String slug) {
-        String wanted = CARD_PREFIX + slug;
-        List<CardInput> cards = new ArrayList<>();
-
+    private Map<String, List<CardInput>> collectCards() {
+        Map<String, List<CardInput>> bySlug = new LinkedHashMap<>();
         for (OwnedDocEntry entry : everyone.query(CARD_PREFIX)) {
-            if (!wanted.equals(entry.key())) {
-                continue;
-            }
+            String slug = entry.key().substring(CARD_PREFIX.length());
             Card card = read(entry.value(), Card.class);
-            if (card != null) {
-                cards.add(new CardInput(entry.userId().toString(), card.safeEntries()));
+            if (card != null && !slug.isEmpty()) {
+                bySlug.computeIfAbsent(slug, s -> new ArrayList<>())
+                        .add(new CardInput(entry.userId().toString(), card.safeEntries()));
             }
         }
-
-        cards.sort(Comparator.comparing(CardInput::author));
-        return cards;
+        bySlug.values().forEach(cards -> cards.sort(Comparator.comparing(CardInput::author)));
+        return bySlug;
     }
 
     /**
