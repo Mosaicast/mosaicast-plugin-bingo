@@ -340,12 +340,13 @@ describe('<EpisodeBingo>', () => {
         method: 'get',
         path:
           `data/episode?ids=${EPISODE}&keys=template,phase,control,candidates,resolution,` +
-          'leaderboard,showcased,participants,showcase',
+          'leaderboard,showcased,participants,showcase,grouping,recap',
       },
     ]);
+    // Plus the site-wide suggestions, the one shared document a remembered miss cannot hurt.
     expect(
       docs.calls.filter((c) => c.method === 'get').flatMap((c) => c.partitions),
-    ).toEqual(['data/user/me', 'data/user/me']);
+    ).toEqual(['data/user/me', 'data/user/me', 'data/site/main']);
   });
 
   it('lets a signed-in fan edit and save into their own partition', async () => {
@@ -373,6 +374,55 @@ describe('<EpisodeBingo>', () => {
     expect(docs.stored[`data/user/me/card:${EPISODE}`]).toBeDefined();
   });
 
+  /** Types into the n-th square, as a person would. */
+  const typeInto = async (index: number, value: string) => {
+    const cell = host.querySelectorAll('textarea')[index] as HTMLTextAreaElement;
+    await act(async () => {
+      Object.getOwnPropertyDescriptor(HTMLTextAreaElement.prototype, 'value')!.set!.call(cell, value);
+      cell.dispatchEvent(new Event('input', { bubbles: true }));
+    });
+  };
+  const saveButton = () =>
+    [...host.querySelectorAll<HTMLButtonElement>('.bingo__actions .bingo__btn')].find((b) =>
+      b.textContent?.includes('Save'),
+    )!;
+
+  it('refuses to save a square written twice, without asking the backend', async () => {
+    const docs = makeMockDocs({ [docPath('template')]: { size: 3 } });
+    const ctx = makeBingoCtx({ scope, docs, user: fan });
+    await render(ctx);
+    const before = ctx.api.calls.length;
+
+    await typeInto(0, 'Kraken!');
+    await typeInto(3, 'kraken');
+
+    expect(host.textContent).toContain('Square 4 repeats square 1');
+    expect(saveButton().disabled).toBe(true);
+    expect(host.querySelectorAll('textarea')[3].getAttribute('aria-invalid')).toBe('true');
+    expect(ctx.api.calls.length).toBe(before);
+
+    await typeInto(3, 'merch plug');
+    expect(saveButton().disabled).toBe(false);
+  });
+
+  it('warns about two squares that will most likely count as one, by the published threshold', async () => {
+    await render(
+      ctxWith(
+        {
+          [docPath('template')]: { size: 3 },
+          [docPath('phase')]: { phase: 'OPEN', suggested: 'OPEN', fuzzyThreshold: 0.8 },
+        },
+        { user: fan },
+      ),
+    );
+
+    await typeInto(0, 'kraken');
+    await typeInto(1, 'krakken');
+
+    expect(host.textContent).toContain('Square 2 is very close to square 1');
+    expect(saveButton().disabled).toBe(false);
+  });
+
   it('offers the site vocabulary as entry suggestions, and fills the next empty square', async () => {
     const docs = makeMockDocs({ [docPath('template')]: { size: 3 } });
     const ctx = makeBingoCtx({
@@ -388,6 +438,66 @@ describe('<EpisodeBingo>', () => {
     await act(async () => chip.click());
 
     expect((host.querySelector('textarea') as HTMLTextAreaElement).value).toBe(chip.textContent);
+  });
+
+  const SUGGESTIONS = {
+    items: [
+      { label: 'Kraken!', people: 5, episodes: 3, hits: 2 },
+      { label: 'merch plug', people: 2, episodes: 1, hits: 0 },
+    ],
+  };
+
+  it('offers what several people keep predicting, and nothing already on the card', async () => {
+    const docs = makeMockDocs({
+      [docPath('template')]: { size: 3 },
+      'data/site/main/suggestions': SUGGESTIONS,
+    });
+    const ctx = makeBingoCtx({ scope, docs, user: fan });
+    await render(ctx);
+
+    const chips = () => [...host.querySelectorAll<HTMLButtonElement>('.bingo__chip')].map((c) => c.textContent);
+    expect(chips()).toEqual(['Kraken!', 'merch plug']);
+
+    await typeInto(4, 'kraken');
+    expect(chips()).toEqual(['merch plug']);
+
+    await act(async () => host.querySelectorAll('textarea')[2].dispatchEvent(new FocusEvent('focusin', { bubbles: true })));
+    await act(async () => (host.querySelector('.bingo__chip') as HTMLButtonElement).click());
+    expect((host.querySelectorAll('textarea')[2] as HTMLTextAreaElement).value).toBe('merch plug');
+  });
+
+  it('remembers turning suggestions off, at once and in the player’s own partition', async () => {
+    const docs = makeMockDocs({
+      [docPath('template')]: { size: 3 },
+      'data/site/main/suggestions': SUGGESTIONS,
+      'data/user/me/prefs': { listed: false },
+    });
+    const ctx = makeBingoCtx({ scope, docs, user: fan });
+    await render(ctx);
+
+    const toggle = [...host.querySelectorAll<HTMLInputElement>('.bingo__suggestions input')][0];
+    await act(async () => toggle.click());
+    await flush(ctx);
+
+    expect(host.querySelector('.bingo__chip')).toBeNull();
+    // The stored choices ride along untouched; nothing unsaved is written behind the player's back.
+    expect(docs.stored['data/user/me/prefs']).toMatchObject({ listed: false, suggestions: false });
+  });
+
+  it('starts with suggestions hidden for someone who turned them off', async () => {
+    await render(
+      ctxWith(
+        {
+          [docPath('template')]: { size: 3 },
+          'data/site/main/suggestions': SUGGESTIONS,
+          'data/user/me/prefs': { suggestions: false },
+        },
+        { user: fan },
+      ),
+    );
+
+    expect(host.querySelector('.bingo__chip')).toBeNull();
+    expect(host.querySelector<HTMLInputElement>('.bingo__suggestions input')?.checked).toBe(false);
   });
 
   it('renders no suggestions when the host offers no tag surface', async () => {
@@ -643,6 +753,75 @@ describe('<EpisodeBingo>', () => {
 
     expect(host.textContent).toContain('Former listener');
     expect(host.textContent).toContain('6/9 fields');
+  });
+
+  const RECAP = {
+    published: true, players: 3, ranked: 3, avgFields: 2.33, withLine: 0.333,
+    mostPredicted: { label: 'kraken', cards: 3, hit: true },
+    rarestHit: { label: 'guest is late', cards: 1, hit: true },
+    biggestMiss: { label: 'merch plug', cards: 2, hit: false },
+  };
+
+  it('tells what happened once it is resolved', async () => {
+    await render(
+      ctxWith({
+        [docPath('template')]: { size: 3 },
+        [docPath('phase')]: { phase: 'RESOLVED', suggested: 'LOCKED' },
+        [docPath('recap')]: RECAP,
+      }),
+    );
+
+    expect(host.textContent).toContain('Most predicted: “kraken”, on 3 card(s) · it happened');
+    expect(host.textContent).toContain('Rarest hit: “guest is late”');
+    expect(host.textContent).toContain('Biggest miss: “merch plug”');
+    expect(host.textContent).toContain('33% got at least one line');
+  });
+
+  it('keeps the recap behind the spoiler cover', async () => {
+    const ctx = makeBingoCtx({
+      scope,
+      docs: makeMockDocs({
+        [docPath('template')]: { size: 3 },
+        [docPath('phase')]: { phase: 'RESOLVED', suggested: 'LOCKED' },
+        [docPath('resolution')]: { hits: { kraken: true } },
+        [docPath('recap')]: RECAP,
+      }),
+    });
+    ctx.progress.get = async () => null; // never listened on this device
+    await render(ctx);
+
+    expect(host.textContent).not.toContain('Most predicted');
+  });
+
+  it('shares a player’s own result once the published board carries it, the bingo otherwise', async () => {
+    const written: string[] = [];
+    Object.defineProperty(navigator, 'clipboard', {
+      configurable: true,
+      value: { writeText: async (text: string) => void written.push(text) },
+    });
+    const board = {
+      published: true, players: 1, totalPlayers: 1, rankBy: 'lines',
+      ranked: [{ author: 'u1', fields: 2, lines: 0, cells: 9, ranked: true }], late: [],
+    };
+    const docs = makeMockDocs({
+      [docPath('template')]: { size: 3 },
+      [docPath('phase')]: { phase: 'RESOLVED', suggested: 'LOCKED' },
+      [docPath('leaderboard')]: board,
+      [`data/user/me/card:${EPISODE}`]: { entries: ['kraken'] },
+    });
+    await render(makeBingoCtx({ scope, docs, user: fan }));
+    const share = () =>
+      [...host.querySelectorAll<HTMLButtonElement>('button')].find((b) => b.textContent === 'Share')!;
+
+    await act(async () => share().click());
+    expect(written.at(-1)).toBe(`${window.location.origin}/p/bingo/e/${EPISODE}/u/u1`);
+    expect(host.textContent).toContain('Link copied');
+
+    act(() => root.unmount());
+    root = createRoot(host);
+    await render(makeBingoCtx({ scope, docs, user: { ...fan, id: 'u9' } }));
+    await act(async () => share().click());
+    expect(written.at(-1)).toBe(`${window.location.origin}/p/bingo/e/${EPISODE}`);
   });
 
   it('shows no results at all until the bingo is resolved', async () => {

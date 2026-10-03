@@ -7,13 +7,16 @@ import manifest from '../../plugin.json';
 import {
   KEY_CANDIDATES,
   KEY_CONTROL,
+  KEY_GROUPING,
   KEY_LEADERBOARD,
   KEY_PHASE,
+  KEY_RECAP,
   KEY_RESOLUTION,
   KEY_PARTICIPANTS,
   KEY_SHOWCASE,
   KEY_SHOWCASED,
   KEY_STATS,
+  KEY_SUGGESTIONS,
   KEY_TEMPLATE,
 } from './keys';
 
@@ -26,7 +29,7 @@ describe('plugin.json', () => {
 
   it('reserves every key the backend computes', () => {
     const owned = manifest.data.backendOwned;
-    for (const key of [KEY_PHASE, KEY_CANDIDATES, KEY_LEADERBOARD, KEY_STATS,
+    for (const key of [KEY_PHASE, KEY_CANDIDATES, KEY_LEADERBOARD, KEY_RECAP, KEY_STATS, KEY_SUGGESTIONS,
                        KEY_PARTICIPANTS, KEY_SHOWCASED]) {
       expect(owned).toContain(key);
     }
@@ -35,7 +38,7 @@ describe('plugin.json', () => {
   it('reserves none of the keys the browser has to write', () => {
     // Reserving a client-written key does not protect anything — it 403s the plugin against its own UI.
     const owned = manifest.data.backendOwned;
-    for (const key of [KEY_TEMPLATE, KEY_RESOLUTION, KEY_CONTROL, KEY_SHOWCASE]) {
+    for (const key of [KEY_TEMPLATE, KEY_RESOLUTION, KEY_CONTROL, KEY_SHOWCASE, KEY_GROUPING]) {
       expect(owned).not.toContain(key);
     }
   });
@@ -49,13 +52,23 @@ describe('plugin.json', () => {
 
   it('declares only placements the shell actually renders', () => {
     // `admin` passes validation and is mounted by no region, so a board declared there would load cleanly
-    // and be invisible. The podcaster board is a sidebar slot for exactly that reason.
-    // `admin` passes validation and is mounted by no region. `sidebar` is gone on purpose: the podcaster's
-    // controls live on the tile itself now, where the thing they act on is.
+    // and be invisible. `sidebar` is gone on purpose: the podcaster's controls live on the tile itself,
+    // where the thing they act on is.
     const placements = manifest.slots.map((s) => s.placement);
     expect(placements).not.toContain('admin');
     expect(placements).not.toContain('sidebar');
-    expect(placements).toEqual(expect.arrayContaining(['card', 'main']));
+    expect(placements).toEqual(expect.arrayContaining(['card', 'main', 'page']));
+  });
+
+  it('declares its page at the site scope, with a menu entry the host actually parses', () => {
+    // `/p/bingo/*` is a real 404 without a site-scoped page slot.
+    expect(manifest.slots).toContainEqual(
+      expect.objectContaining({ scope: 'site', placement: 'page', element: 'bingo-page', visibleTo: 'anonymous' }),
+    );
+    const nav = (manifest as unknown as { nav: Record<string, unknown>[] }).nav;
+    expect(nav).toEqual([{ path: '', label: 'Bingo', icon: 'dice' }]);
+    // The SDK's TS type calls the gate `role`; core parses `visibleTo`. A `role` key would be ignored.
+    for (const entry of nav) expect(entry).not.toHaveProperty('role');
   });
 
   it('declares an element for every slot', () => {

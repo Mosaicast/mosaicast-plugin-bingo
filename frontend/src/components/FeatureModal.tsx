@@ -6,7 +6,7 @@ import { isPluginApiError, type PluginContext, type UserRef } from '@mosaicast/p
 import type { PluginI18n } from '../i18n';
 import { Icon } from '../icons';
 import { KEY_SHOWCASE } from '../keys';
-import { nameOf } from './EpisodeBingo';
+import { nameOf } from './common';
 
 /**
  * Choosing whose cards get the prominent tabs.

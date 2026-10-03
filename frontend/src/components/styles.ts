@@ -67,6 +67,10 @@ export const BINGO_CSS =
   .bingo__cell--hit { border-color: var(--mc-accent-text); color: var(--mc-accent-text); font-weight: 600; }
   .bingo__cell--free { color: var(--mc-text-muted); font-style: italic; }
   .bingo__cell--empty { color: var(--mc-text-muted); border-style: dashed; }
+  .bingo__cell--duplicate { border-color: var(--mc-accent-text); border-width: 2px; border-style: dashed; }
+  .bingo__cell--similar { border-style: dashed; }
+  .bingo__checks { list-style: none; margin: .5rem 0; padding: 0; display: flex; flex-direction: column; gap: .35rem; }
+  .bingo__checks .bingo__warn { margin: 0; }
   .bingo__cell-input {
     width: 100%; height: 100%; min-height: 3.4rem; resize: none; font: inherit; font-size: .8125rem;
     text-align: center; color: var(--mc-text); background: none; border: 0; padding: 0;
@@ -94,6 +98,8 @@ export const BINGO_CSS =
     font-size: .875rem;
   }
 
+  .bingo__suggestions { display: flex; flex-direction: column; gap: .4rem; margin-bottom: .6rem; }
+  .bingo__suggestions .bingo__suggest { margin-bottom: 0; }
   .bingo__suggest { display: flex; flex-wrap: wrap; gap: .35rem; align-items: center; margin-bottom: .6rem; }
   .bingo__chip {
     appearance: none; font: inherit; font-size: .8125rem; cursor: pointer;
@@ -127,6 +133,19 @@ export const BINGO_CSS =
   .bingo__tick[aria-pressed="true"] { border-color: var(--mc-accent-text); color: var(--mc-accent-text); }
   .bingo__tick:focus-visible { outline: 2px solid var(--mc-accent-text); outline-offset: 1px; }
   .bingo__tick-count { margin-left: auto; color: var(--mc-text-muted); font-size: .8125rem; }
+  .bingo__cand { display: flex; flex-direction: column; gap: .25rem; }
+  .bingo__more {
+    align-self: flex-start; font: inherit; font-size: .8125rem; color: var(--mc-text-muted);
+    background: none; border: 0; padding: .1rem .25rem; cursor: pointer; text-decoration: underline;
+  }
+  .bingo__more:focus-visible { outline: 2px solid var(--mc-accent-text); outline-offset: 1px; }
+  .bingo__variants {
+    border-left: 2px solid var(--mc-border); padding: .25rem 0 .5rem .75rem; margin-left: .5rem;
+    display: flex; flex-direction: column; gap: .5rem;
+  }
+  .bingo__variant-list { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: .3rem; }
+  .bingo__variant { display: flex; flex-wrap: wrap; align-items: center; gap: .4rem; overflow-wrap: anywhere; }
+  .bingo__btn--small { padding: .15rem .55rem; font-size: .8125rem; min-height: 0; }
 
   .bingo__modal {
     border: 1px solid var(--mc-border); border-radius: .75rem; padding: 1rem;
@@ -158,6 +177,13 @@ export const BINGO_CSS =
     border: 1px solid var(--mc-border); color: var(--mc-text-muted);
   }
   .bingo__row-score { margin-left: auto; font-variant-numeric: tabular-nums; }
+  .bingo__recap-list { margin: 0; padding-left: 1.1rem; display: flex; flex-direction: column; gap: .2rem; font-size: .875rem; }
+  .bingo__list { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: .35rem; }
+  .bingo__list li { overflow-wrap: anywhere; }
+  .bingo__link { color: var(--mc-accent-text); text-decoration: underline; }
+  .bingo__link:focus-visible { outline: 2px solid var(--mc-accent-text); outline-offset: 1px; }
+  a.bingo__btn { display: inline-flex; align-items: center; text-decoration: none; }
+  .bingo__share { display: inline-flex; align-items: center; gap: .5rem; flex-wrap: wrap; }
   .bingo__section-title { font-size: .8125rem; color: var(--mc-text-muted); margin: .75rem 0 .25rem; }
 
   .bingo__spoiler { border: 1px dashed var(--mc-border); border-radius: .5rem; padding: 1rem; text-align: center; }

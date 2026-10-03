@@ -6,7 +6,7 @@ plugins { java }
 group = "dev.mosaicast.plugin"
 // The PLUGIN's own version, not platformApi. Bump with scripts/set-version.sh, which rewrites
 // this line by pattern — so keep it bare, with nothing trailing the closing quote.
-version = "0.6.0"
+version = "0.7.0"
 
 java { toolchain { languageVersion.set(JavaLanguageVersion.of(21)) } }
 

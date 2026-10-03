@@ -15,6 +15,29 @@ Built against **`platformApi` 0.18.0**, so it needs **core 0.7.7 or newer**. Cor
 build.
 
 ### Added
+- **The bingo page, `/p/bingo/`**, from a *Bingo* menu entry. It shows the site standings (computed
+  before, but never drawn), every bingo on an episode everyone may know about, one bingo's board and
+  recap, and a player's shared result. Unknown subpaths, a quiet episode's bingo and an unpublished
+  result are real 404s (`PageRouteProvider`).
+- **Share cards and a Share button.** Every page has OpenGraph tags in the site's language
+  (`ShareMetadataProvider`). They give counts and scores only, never what was predicted or came true.
+  The button shares the player's own result once the published board carries it, and the bingo otherwise.
+- **Split and merge in the resolve dialog.** A podcaster sees the spellings grouped into each candidate,
+  can split one off or merge a candidate into another, and is warned when the merged candidates were
+  decided differently. The pins sit on a client-written `grouping` document, apply on the next pass,
+  also to frozen cards, and show as pending until they land.
+- **A recap** (`recap`, backend-owned) once a bingo is resolved: the most predicted thing, the rarest
+  hit, the biggest miss, the average card. It's behind the spoiler cover.
+- **Suggestions**: predictions at least two different people made, site-wide (`suggestions`,
+  backend-owned). They're offered as chips in the card editor, behind a *Show suggestions* switch saved
+  to the player's own `prefs`.
+- **Card checks while typing**, in the browser with no request: a repeated square blocks saving, and a
+  near-duplicate (by the published `fuzzyThreshold`) gets a hint. `shared/fuzzy-vectors.json` holds the
+  Java and TypeScript comparison rules to the same answers.
+- **A badge that speaks to the viewer**: their own score, "Your card is in" / "Fill in your card",
+  "Predict before it airs" on an upcoming episode, and "not announced yet" for a podcaster's quiet bingo.
+  One listing of the viewer's own partition serves every badge on a page.
+- `docs/ROADMAP.md`: deferred ideas and what each one is waiting on.
 - **A bingo for an episode that has not aired, end to end** (core 0.7.7's planned episodes). A podcaster
   prepares the bingo while the planned episode is quiet, players fill in cards once it is announced, and
   its release closes predictions. Bingo used to infer a release from the feed's publication date, which a
@@ -30,6 +53,8 @@ build.
   so for a quiet one it waits until the episode is announced.
 
 ### Changed
+- `BingoPlugin` is split into `BingoDocs`, `BingoLifecycle`, `BingoRecord`, `BingoPublish` and
+  `BingoPages`, and the tile into smaller components. There's no behaviour change from the split.
 - **`platformApi` 0.18.0** in all four places (`plugin.json`, `plugin-api`, `plugin-testkit`,
   `@mosaicast/plugin-sdk`), and **PF4J 3.16.0**, which `plugin-api` depends on since SDK 0.16.2 and core
   0.7.5 loads plugins with.
@@ -45,6 +70,13 @@ build.
   floors and the live filter state.
 
 ### Fixed
+- **A late spelling could orphan a decision.** A group is named after its first member in sorted order,
+  so "alex says damn" arriving after "alex says damn it" was decided renamed the group. Decided groups
+  are now seeded before matching.
+- **Text written to a card after the freeze reached the public candidate list** and featured cards.
+  Both are now built from the frozen record.
+- **Site standings counted unresolved bingos**, which leaked tick-off progress the episode's board
+  withholds. They now count resolved bingos only.
 - **A reader who never played is no longer placed on the leaderboard.** The tile works out the reader's own
   place from their card, so someone past the published cap or opted out still sees where they came. It did
   that from the card *form*, which for someone with no card is a blank grid — so a podcaster who resolved
@@ -53,6 +85,16 @@ build.
 - **Your own row carries your name.** A row the board never published — opted out, or past the cap — was
   never resolved through `ctx.users`, so it read *Former listener* next to *You*. The signed-in reader's own
   `ctx.user` now fills in whenever the directory gave no answer; nothing is stored.
+
+### Performance
+- One cross-user read of every card per tick, not one per episode. An unchanged open card and an unchanged
+  score are no longer rewritten. The site roll-up runs only when its inputs changed, or hourly.
+- Fuzzy grouping normalises each entry once and skips comparisons that can't reach the threshold. A test
+  holds the results identical to the plain definition.
+
+### Known issue
+- Core serves the schema tables under `data.readableBy` (anonymous here), so raw rows are public. A
+  separate floor is proposed in core#261 / sdk#99. The frontend never reads `ctx.schema`.
 
 ### Not adopted
 - **`ctx.docs.getMany` in place of `readEpisode`**, although every host of 0.17.0 forgets a miss after 30 s

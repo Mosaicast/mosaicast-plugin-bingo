@@ -1,0 +1,374 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
+// SPDX-FileCopyrightText: 2026 The Mosaicast Authors
+
+package dev.mosaicast.plugin.bingo;
+
+import dev.mosaicast.plugin.api.Criteria;
+import dev.mosaicast.plugin.api.PluginContext;
+import dev.mosaicast.plugin.api.SchemaStore;
+
+import java.time.Clock;
+import java.time.Instant;
+import java.util.ArrayList;
+import java.util.Comparator;
+import java.util.HashSet;
+import java.util.LinkedHashMap;
+import java.util.List;
+import java.util.Map;
+import java.util.Set;
+
+import static dev.mosaicast.plugin.bingo.BingoDocs.*;
+
+/**
+ * The schema side: copying cards into rows (which is where the freeze happens) and scoring those rows
+ * against the resolution.
+ */
+final class BingoRecord {
+
+    private final PluginContext ctx;
+    private final Clock clock;
+    /** Set by any write, cleared by {@link #takeChanged}. One pass at a time runs, under the plugin's lock. */
+    private boolean changed;
+
+    BingoRecord(PluginContext ctx, Clock clock) {
+        this.ctx = ctx;
+        this.clock = clock;
+    }
+
+    private Instant now() {
+        return clock.instant();
+    }
+
+    /**
+     * The rows one episode already has, by author. Read once per pass: both the ingest and the grouping
+     * need to know which cards are frozen, and asking per card was a query per player per tick.
+     */
+    Map<String, List<EntryRow>> rowsOf(String slug) {
+        SchemaStore schema = ctx.schema();
+        Map<String, List<EntryRow>> byAuthor = new LinkedHashMap<>();
+        if (schema == null) {
+            return byAuthor;
+        }
+        for (EntryRow row : schema.select(ENTITY_ENTRY, Criteria.where("episode", Criteria.Op.EQ, slug),
+                EntryRow.class)) {
+            byAuthor.computeIfAbsent(row.author(), a -> new ArrayList<>()).add(row);
+        }
+        return byAuthor;
+    }
+
+    /**
+     * Whether any row this helper keeps changed since the last call, which then forgets it.
+     *
+     * <p>What lets the site roll-up skip a pass in which nothing it is computed from moved.
+     */
+    boolean takeChanged() {
+        boolean was = changed;
+        changed = false;
+        return was;
+    }
+
+    /**
+     * Copies cards into the schema, which is where the freeze actually happens.
+     *
+     * <ul>
+     *   <li>{@code OPEN} - reread from the live document every tick, so editing a card before the lock is
+     *       free. A card whose rows already say what it says is left alone: rewriting it would cost a
+     *       delete and an insert per square per tick and move its {@code recordedAt} for nothing.</li>
+     *   <li>{@code LOCKED} or later - a card that already has rows is never re-read; a card arriving now is
+     *       taken once and marked {@code ranked = false}, so catch-up listeners still get to play without
+     *       reaching the board.</li>
+     * </ul>
+     *
+     * <p>{@code phase} here is the phase the cards were <em>written</em> under, not the one this pass has
+     * just derived. On the tick that closes predictions the two differ, and using the new one would demote
+     * everybody who saved inside the last interval - up to a whole {@code ingestIntervalSeconds}, which is
+     * exactly when people rush to fill a card - to a latecomer who never reaches the board.
+     *
+     * @param existing what {@link #rowsOf} returned for this episode at the start of the pass
+     */
+    void ingest(String slug, List<CardInput> cards, Map<String, List<EntryRow>> existing,
+                BingoFuzzy.Grouping grouping, Template template, Phase phase, boolean allowLate) {
+        SchemaStore schema = ctx.schema();
+        if (schema == null) {
+            return;
+        }
+        Instant now = now();
+
+        for (CardInput card : cards) {
+            List<EntryRow> rows = existing.getOrDefault(card.author(), List.of());
+
+            if (phase == Phase.OPEN) {
+                List<Map<String, Object>> wanted = rowsFor(slug, card, grouping, template, true, now);
+                if (sameEntries(rows, wanted)) {
+                    continue;
+                }
+                schema.delete(ENTITY_ENTRY, byCard(slug, card.author()));
+                wanted.forEach(values -> schema.insert(ENTITY_ENTRY, values));
+                changed = true;
+            } else if (rows.isEmpty()) {
+                if (!allowLate) {
+                    continue;
+                }
+                rowsFor(slug, card, grouping, template, false, now)
+                        .forEach(values -> schema.insert(ENTITY_ENTRY, values));
+                changed = true;
+            }
+            // else: frozen - the document may have changed, and nothing here reads it again.
+        }
+    }
+
+    /** The rows a card becomes, one per square that has something comparable written in it. */
+    private static List<Map<String, Object>> rowsFor(String slug, CardInput card, BingoFuzzy.Grouping grouping,
+                                                     Template template, boolean ranked, Instant now) {
+        List<Map<String, Object>> out = new ArrayList<>();
+        List<String> entries = card.entries();
+        for (int index = 0; index < entries.size(); index++) {
+            String text = entries.get(index);
+            String canonical = grouping.canonicalOf(text);
+            if (canonical == null) {
+                continue; // blank or uncomparable
+            }
+            // Stored, not recomputed on read: the host adds no ORDER BY unless one is asked for, so the
+            // order rows come back in guarantees nothing and a line could not be found again.
+            int position = BingoScore.gridPosition(index, template.gridSize(), template.hasFreeCentre());
+            if (position < 0) {
+                continue; // written for a bigger grid than this template has
+            }
+            Map<String, Object> values = new LinkedHashMap<>();
+            values.put("episode", slug);
+            values.put("author", card.author());
+            values.put("position", position);
+            values.put("text", text.strip());
+            values.put("canonical", canonical);
+            values.put("hit", false);
+            values.put("ranked", ranked);
+            values.put("recordedAt", now);
+            out.add(values);
+        }
+        return out;
+    }
+
+    /** Whether stored rows already say what a card says - same squares, same words, same grouping. */
+    private static boolean sameEntries(List<EntryRow> rows, List<Map<String, Object>> wanted) {
+        if (rows.size() != wanted.size()) {
+            return false;
+        }
+        Set<String> have = new HashSet<>();
+        for (EntryRow row : rows) {
+            have.add(entryKey(row.position(), row.text(), row.canonical(), row.ranked()));
+        }
+        for (Map<String, Object> values : wanted) {
+            if (!have.remove(entryKey(values.get("position"), values.get("text"), values.get("canonical"),
+                    values.get("ranked")))) {
+                return false;
+            }
+        }
+        return have.isEmpty();
+    }
+
+    private static String entryKey(Object position, Object text, Object canonical, Object ranked) {
+        return position + "\u0000" + text + "\u0000" + canonical + "\u0000" + ranked;
+    }
+
+    // ---------------------------------------------------------------- scoring
+
+    /**
+     * Rescores every frozen card against the current resolution and republishes the leaderboard.
+     *
+     * <p>Scoring runs on every tick right up to {@code ARCHIVED}, including long after the entries froze:
+     * the podcaster is still ticking answers off, and a frozen card whose score never moved would be a card
+     * that never got resolved.
+     *
+     * <p>Everyone is scored; only those who allow it are <em>published</em>. Someone who has opted out of
+     * the leaderboard still has rows, still has a score, and still sees it on their own card - the tile
+     * works that out from their own document without asking anybody.
+     */
+    Scored score(String slug, Template template, BingoFuzzy.Grouping grouping, Resolution resolution,
+                 Map<String, Prefs> prefs, Phase phase, BingoScore.RankBy rankBy) {
+        SchemaStore schema = ctx.schema();
+        if (schema == null) {
+            return new Scored(Leaderboard.empty(now().toString()), List.of(), 0);
+        }
+
+        Map<String, List<EntryRow>> byAuthor = rowsOf(slug);
+        Map<String, CardResultRow> results = new LinkedHashMap<>();
+        for (CardResultRow row : schema.select(ENTITY_CARD_RESULT,
+                Criteria.where("episode", Criteria.Op.EQ, slug), CardResultRow.class)) {
+            results.put(row.author(), row);
+        }
+
+        int size = template.gridSize();
+        boolean freeCentre = template.hasFreeCentre();
+        Instant now = now();
+        List<Row> ranked = new ArrayList<>();
+        List<Row> late = new ArrayList<>();
+        // Everyone scored, listed or not. Opting out is a choice about whether a name and a score are shown
+        // to other people; it is not a choice to stop having taken part, so it must not shrink the
+        // headcount or thin out the tally that places the very people no row is published for.
+        List<Row> everyRanked = new ArrayList<>();
+        int everyPlayer = 0;
+
+        for (Map.Entry<String, List<EntryRow>> e : byAuthor.entrySet()) {
+            List<EntryRow> cardRows = e.getValue();
+            List<int[]> marks = BingoScore.marks();
+            boolean isRanked = true;
+            for (EntryRow row : cardRows) {
+                // Which group a frozen square belongs to is a judgement the podcaster may still correct, so
+                // it follows the current grouping: what freezes is what a card says, not what it is worth.
+                String current = grouping.canonicalOf(row.text());
+                String canonical = current != null ? current : row.canonical();
+                boolean hit = resolution.isHit(canonical);
+                if (hit != row.hit() || !canonical.equals(row.canonical())) {
+                    schema.update(ENTITY_ENTRY, row.id(), Map.of("hit", hit, "canonical", canonical));
+                    changed = true;
+                }
+                marks.add(new int[] { row.position(), hit ? 1 : 0 });
+                isRanked = isRanked && row.ranked();
+            }
+
+            String author = e.getKey();
+            BingoScore.Score score = BingoScore.of(marks, size, freeCentre);
+
+            // The row is kept whatever the preference says: it is what the standings are recomputed from,
+            // and dropping it would make an aggregate that quietly disagrees with what happened. Rewritten
+            // only when the score moved, so `recordedAt` says when it last did.
+            CardResultRow stored = results.get(author);
+            if (stored == null || stored.fields() != score.fields() || stored.lines() != score.lines()
+                    || stored.cells() != score.cells() || stored.ranked() != isRanked) {
+                schema.delete(ENTITY_CARD_RESULT, byCard(slug, author));
+                Map<String, Object> values = new LinkedHashMap<>();
+                values.put("episode", slug);
+                values.put("author", author);
+                values.put("fields", score.fields());
+                values.put("lines", score.lines());
+                values.put("cells", score.cells());
+                values.put("ranked", isRanked);
+                values.put("recordedAt", now);
+                schema.insert(ENTITY_CARD_RESULT, values);
+                changed = true;
+            }
+
+            Row row = new Row(author, score.fields(), score.lines(), score.cells(), isRanked);
+            everyPlayer++;
+            if (isRanked) {
+                everyRanked.add(row);
+            }
+            if (prefsFor(prefs, author).listedOrDefault()) {
+                (isRanked ? ranked : late).add(row);
+            }
+        }
+
+        int players = everyPlayer;
+
+        // Nothing is published before the answers are known. Two reasons, and the second is the one that
+        // matters: a board of identical scores says nothing, and a board that creeps upward while a
+        // podcaster ticks answers off tells anyone watching how much has already come true - which is
+        // exactly what the spoiler cover over the grid is there to prevent.
+        if (phase != Phase.RESOLVED && phase != Phase.ARCHIVED) {
+            return new Scored(new Leaderboard(List.of(), List.of(), players, players, false, List.of(),
+                    name(rankBy), now.toString()), List.copyOf(everyRanked), players);
+        }
+
+        Comparator<Row> best = comparing(rankBy).thenComparing(Row::author);
+        ranked.sort(best);
+        late.sort(best);
+        return new Scored(new Leaderboard(cap(ranked), cap(late), players, players, true,
+                distributionOf(everyRanked), name(rankBy), now.toString()), List.copyOf(everyRanked), players);
+    }
+
+    /**
+     * One pass's scores: the board as published, and what the recap is computed from.
+     *
+     * @param everyRanked every ranked card's score, listed or not - an aggregate names nobody
+     * @param players     everyone who played, late ones included
+     */
+    record Scored(Leaderboard board, List<Row> everyRanked, int players) {}
+
+    /**
+     * What happened in one bingo, in a few lines - published only once it is resolved, like the board.
+     *
+     * <p>Built from the candidate list rather than from rows: "most predicted" means on the most cards,
+     * which is exactly what the list's card counts say, and its labels are the spellings a podcaster ticked.
+     * Before the resolution there is nothing to say that would not give away how much has come true.
+     */
+    Recap recap(Scored scored, List<BingoFuzzy.Candidate> items, Map<String, Integer> cardCounts,
+                Resolution resolution, Phase phase) {
+        if (phase != Phase.RESOLVED && phase != Phase.ARCHIVED) {
+            return Recap.unpublished(scored.players(), now().toString());
+        }
+        Highlight most = null;
+        Highlight rarestHit = null;
+        Highlight biggestMiss = null;
+        Map<String, Boolean> hits = resolution.hits() == null ? Map.of() : resolution.hits();
+        // Items arrive ordered by card count, most first, ties by canonical form - so "first" and "last"
+        // below are stable from tick to tick.
+        for (BingoFuzzy.Candidate c : items) {
+            int cards = cardCounts.getOrDefault(c.canonical(), c.count());
+            Boolean decision = hits.get(c.canonical());
+            boolean hit = Boolean.TRUE.equals(decision);
+            if (most == null) {
+                most = new Highlight(c.label(), cards, hit);
+            }
+            if (hit && (rarestHit == null || cards <= rarestHit.cards())) {
+                rarestHit = new Highlight(c.label(), cards, true);
+            }
+            if (Boolean.FALSE.equals(decision) && biggestMiss == null) {
+                biggestMiss = new Highlight(c.label(), cards, false);
+            }
+        }
+        List<Row> ranked = scored.everyRanked();
+        double avgFields = ranked.stream().mapToInt(Row::fields).average().orElse(0);
+        double withLine = ranked.isEmpty() ? 0 : (double) ranked.stream().filter(r -> r.lines() > 0).count()
+                / ranked.size();
+        return new Recap(true, scored.players(), ranked.size(), round(avgFields), round(withLine), most,
+                rarestHit, biggestMiss, now().toString());
+    }
+
+    private static double round(double value) {
+        return Math.round(value * 100) / 100.0;
+    }
+
+    /**
+     * How the operator ranks, as the browser sees it.
+     *
+     * <p>Published rather than looked up: there is no {@code ctx.config} on the frontend, so a tile that
+     * wants to lead with the quantity that actually decides places has no other way to learn which it is.
+     */
+                                   static String name(BingoScore.RankBy rankBy) {
+        return rankBy.name().toLowerCase(java.util.Locale.ROOT);
+    }
+
+    /** Best first, by whatever the operator ranks on, with the other quantity breaking the tie. */
+    static Comparator<Row> comparing(BingoScore.RankBy rankBy) {
+        Comparator<BingoScore.Score> ordering = BingoScore.ordering(rankBy);
+        return (a, b) -> ordering.compare(a.asScore(), b.asScore());
+    }
+
+    /** A published board is bounded: every visitor reads this document, however many people played. */
+    static List<Row> cap(List<Row> rows) {
+        return List.copyOf(rows.subList(0, Math.min(rows.size(), MAX_PUBLISHED_ROWS)));
+    }
+
+    /**
+     * How many people share each score.
+     *
+     * <p>This is what lets somebody in 73rd place still learn they are 73rd. The board itself is capped, so
+     * their row is not in it; counting how many scored better is enough to place them exactly, and it costs
+     * a row per <em>distinct score</em> rather than per player — bounded by the size of the grid, not by
+     * how many turned up. It also names nobody, so publishing it gives away less than the board does.
+     *
+     * <p>Counted over every ranked card, including the ones nobody else may see. A reader with no published
+     * row is precisely who this exists for, and someone who opted out has no published row by definition —
+     * leaving them out would empty the tally of the only readers who need it, and would misplace everyone
+     * else by however many of them there are.
+     */
+    static List<Tally> distributionOf(List<Row> ranked) {
+        Map<String, Tally> byScore = new LinkedHashMap<>();
+        for (Row row : ranked) {
+            byScore.merge(row.lines() + ":" + row.fields(),
+                    new Tally(row.lines(), row.fields(), 1),
+                    (a, b) -> new Tally(a.lines(), a.fields(), a.count() + b.count()));
+        }
+        return List.copyOf(byScore.values());
+    }
+            }

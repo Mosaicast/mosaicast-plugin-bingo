@@ -1,6 +1,6 @@
 {
   "id": "bingo",
-  "version": "0.6.0",
+  "version": "0.7.0",
   "platformApi": "0.18.0",
   "name": "Bingo",
   "license": "AGPL-3.0-or-later",
@@ -16,7 +16,8 @@
     "entry": "bingo.es.js",
     "elements": [
       "bingo-episode",
-      "bingo-episode-card"
+      "bingo-episode-card",
+      "bingo-page"
     ]
   },
   "slots": [
@@ -33,6 +34,20 @@
       "placement": "main",
       "visibleTo": "anonymous",
       "order": 100
+    },
+    {
+      "scope": "site",
+      "element": "bingo-page",
+      "placement": "page",
+      "visibleTo": "anonymous",
+      "order": 100
+    }
+  ],
+  "nav": [
+    {
+      "path": "",
+      "label": "Bingo",
+      "icon": "dice"
     }
   ],
   "storage": {
@@ -66,7 +81,9 @@
       "phase",
       "candidates",
       "leaderboard",
+      "recap",
       "stats",
+      "suggestions",
       "notified",
       "participants",
       "showcased"

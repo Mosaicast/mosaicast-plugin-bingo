@@ -2,10 +2,10 @@
 // SPDX-FileCopyrightText: 2026 The Mosaicast Authors
 
 import { useEffect, useMemo, useState } from 'react';
-import { isPluginApiError, type PluginContext, type UserRef } from '@mosaicast/plugin-sdk';
-import { makeI18n, type PluginI18n } from '../i18n';
+import { isPluginApiError, type PluginContext } from '@mosaicast/plugin-sdk';
+import { makeI18n } from '../i18n';
 import { Icon } from '../icons';
-import { KEY_CONTROL, KEY_PREFS, KEY_TEMPLATE, cardKey } from '../keys';
+import { KEY_CONTROL, KEY_PREFS, cardKey } from '../keys';
 import {
   countsTowardsRanking,
   fillableCells,
@@ -15,20 +15,27 @@ import {
   canEditCard,
   isFinalSubmission,
   countLines,
+  DEFAULT_FUZZY_THRESHOLD,
   lineCount,
-  placeIn,
   prefOrDefault,
   type Leaderboard,
   type Phase,
   type RankBy,
-  type Tally,
-  type Row,
 } from '../types';
-import { BINGO_CSS } from './styles';
+import { cardIssues } from '../fuzzy';
 import { BingoGrid } from './BingoGrid';
+import { CardChecks, blocksSaving } from './CardChecks';
+import { SuggestionChips } from './SuggestionChips';
+import { CreatePanel } from './CreatePanel';
+import { Shell, nameOf, toRef } from './common';
+import { PodcasterActions } from './PodcasterActions';
+import { RecapPanel } from './RecapPanel';
+import { Results } from './Results';
+import { ShareButton } from './ShareButton';
 import { FeatureModal } from './FeatureModal';
 import { ResolveModal, undecided } from './ResolveModal';
 import { useBingo, type BingoData } from './useBingo';
+
 
 const PHASE_ICON: Record<Phase, 'clock' | 'lock' | 'check' | 'board'> = {
   OPEN: 'clock',
@@ -36,9 +43,6 @@ const PHASE_ICON: Record<Phase, 'clock' | 'lock' | 'check' | 'board'> = {
   RESOLVED: 'check',
   ARCHIVED: 'board',
 };
-
-/** Grids a podcaster can pick when creating one. Odd sizes get a free centre. */
-const SIZES = [3, 4, 5];
 
 /**
  * The episode tile: the featured cards, the viewer's own, and the results.
@@ -59,6 +63,8 @@ export function EpisodeBingo({ ctx }: { ctx: PluginContext }) {
   const [draft, setDraft] = useState<string[] | null>(null);
   const [listed, setListed] = useState(true);
   const [showcasable, setShowcasable] = useState(true);
+  const [showSuggestions, setShowSuggestions] = useState(true);
+  const [focused, setFocused] = useState<number | null>(null);
   const [saving, setSaving] = useState<'idle' | 'saving' | 'saved'>('idle');
   const [revealed, setRevealed] = useState(false);
   const [unheard, setUnheard] = useState(false);
@@ -98,6 +104,7 @@ export function EpisodeBingo({ ctx }: { ctx: PluginContext }) {
     // Prefilled with whatever they decided last time, so the question is asked once and then remembered.
     setListed(prefOrDefault(data.myPrefs?.listed));
     setShowcasable(prefOrDefault(data.myPrefs?.showcasable));
+    setShowSuggestions(prefOrDefault(data.myPrefs?.suggestions));
   }, [data.loading, data.myCard, data.myPrefs, size, freeCentre]);
 
   if (data.loading) return <Shell>{i18n.t('common.loading')}</Shell>;
@@ -132,7 +139,7 @@ export function EpisodeBingo({ ctx }: { ctx: PluginContext }) {
       await ctx.docs.put(
         'self',
         KEY_PREFS,
-        { listed, showcasable, updatedAt: new Date().toISOString() },
+        { listed, showcasable, suggestions: showSuggestions, updatedAt: new Date().toISOString() },
       );
       // The card only when it may still change: after the freeze this button saves the choices alone.
       if (editable) {
@@ -145,6 +152,27 @@ export function EpisodeBingo({ ctx }: { ctx: PluginContext }) {
       ctx.log(
         'warn',
         `bingo: could not save this card (${isPluginApiError(error) ? error.status : String(error)})`,
+      );
+    }
+  };
+
+  /**
+   * Saved the moment it is flipped, on its own: it is about this person's screen, not about their card,
+   * so it should not wait for — or ride along with — a card save. Only the stored choices are written
+   * back next to it, never toggles the player has changed and not saved yet.
+   */
+  const toggleSuggestions = async (next: boolean) => {
+    setShowSuggestions(next);
+    try {
+      await ctx.docs.put('self', KEY_PREFS, {
+        ...(data.myPrefs ?? {}),
+        suggestions: next,
+        updatedAt: new Date().toISOString(),
+      });
+    } catch (error) {
+      ctx.log(
+        'warn',
+        `bingo: could not save the suggestions choice (${isPluginApiError(error) ? error.status : String(error)})`,
       );
     }
   };
@@ -186,6 +214,10 @@ export function EpisodeBingo({ ctx }: { ctx: PluginContext }) {
   const finalSubmission = editable && isFinalSubmission(phase);
   // A standing choice about how you appear, not part of the card — so it stays changeable after the freeze.
   const canChoose = active.id === 'me' && signedIn && phase !== 'ARCHIVED';
+  // Two of the player's own squares that would count as one, worked out here as they type — no request.
+  const threshold = data.phase?.fuzzyThreshold ?? DEFAULT_FUZZY_THRESHOLD;
+  const issues = editable && draft ? cardIssues(draft, threshold) : [];
+  const blocked = blocksSaving(issues);
 
   return (
     <Shell>
@@ -234,29 +266,28 @@ export function EpisodeBingo({ ctx }: { ctx: PluginContext }) {
         </div>
       ) : (
         <>
-          {editable && data.vocabulary.length > 0 && (
-            <div className="bingo__suggest">
-              <span className="bingo__note">{i18n.t('episode.suggestions')}</span>
-              {data.vocabulary.slice(0, 12).map((tag) => (
-                <button
-                  key={tag}
-                  type="button"
-                  className="bingo__chip"
-                  onClick={() =>
-                    setDraft((current) => {
-                      const next = [...(current ?? [])];
-                      const slot = next.findIndex((e) => !e.trim());
-                      if (slot === -1) return next; // every square is taken
-                      next[slot] = tag;
-                      setSaving('idle');
-                      return next;
-                    })
-                  }
-                >
-                  {tag}
-                </button>
-              ))}
-            </div>
+          {editable && draft && (
+            <SuggestionChips
+              i18n={i18n}
+              suggestions={data.suggestions}
+              vocabulary={data.vocabulary}
+              draft={draft}
+              threshold={threshold}
+              shown={showSuggestions}
+              onToggle={toggleSuggestions}
+              onPick={(text) =>
+                setDraft((current) => {
+                  const next = [...(current ?? [])];
+                  // The square the player was last in, if it is still empty; otherwise the first empty one.
+                  const slot =
+                    focused !== null && !next[focused]?.trim() ? focused : next.findIndex((e) => !e.trim());
+                  if (slot === -1) return next; // every square is taken
+                  next[slot] = text;
+                  setSaving('idle');
+                  return next;
+                })
+              }
+            />
           )}
           {editable && <p className="bingo__note">{i18n.t('episode.entryPlaceholder')}</p>}
           <BingoGrid
@@ -266,6 +297,8 @@ export function EpisodeBingo({ ctx }: { ctx: PluginContext }) {
             hits={hitsFor(active.entries)}
             i18n={i18n}
             label={active.label}
+            flags={Object.fromEntries(issues.map((issue) => [issue.index, issue.kind]))}
+            onFocusCell={setFocused}
             onChange={
               editable
                 ? (index, value) =>
@@ -278,6 +311,7 @@ export function EpisodeBingo({ ctx }: { ctx: PluginContext }) {
                 : undefined
             }
           />
+          <CardChecks issues={issues} i18n={i18n} />
         </>
       )}
 
@@ -302,7 +336,12 @@ export function EpisodeBingo({ ctx }: { ctx: PluginContext }) {
                 <p className="bingo__note">{i18n.t('prefs.hint')}</p>
               </div>
               <div className="bingo__actions">
-                <button type="button" className="bingo__btn" onClick={save} disabled={saving === 'saving'}>
+                <button
+                  type="button"
+                  className="bingo__btn"
+                  onClick={save}
+                  disabled={saving === 'saving' || blocked}
+                >
                   {saving === 'saving'
                     ? i18n.t('episode.saving')
                     : !editable
@@ -368,6 +407,8 @@ export function EpisodeBingo({ ctx }: { ctx: PluginContext }) {
           i18n={i18n}
           candidates={data.candidates}
           cardCounts={data.cardCounts}
+          assignments={data.assignments}
+          grouping={data.grouping}
           resolution={data.resolution}
           mode={modal}
           onClose={() => setModal(null)}
@@ -375,6 +416,7 @@ export function EpisodeBingo({ ctx }: { ctx: PluginContext }) {
             setModal(null);
             data.reload();
           }}
+          onRegroup={data.reload}
         />
       )}
 
@@ -403,344 +445,29 @@ export function EpisodeBingo({ ctx }: { ctx: PluginContext }) {
         }
         rankBy={rankBy}
       />
+      {/* It names what happened in the episode, so it sits behind the same cover as the grid. */}
+      {!hideForSpoilers && <RecapPanel recap={data.recap} i18n={i18n} />}
+      <div className="bingo__actions">
+        {/* A player's own result only once the published board carries it — the backend answers for that
+            page and no other; everyone else shares the bingo itself. */}
+        <ShareButton
+          ctx={ctx}
+          i18n={i18n}
+          subpath={
+            ctx.user && data.leaderboard?.published && onBoard(data.leaderboard, ctx.user.id)
+              ? `e/${ctx.scope.id}/u/${ctx.user.id}`
+              : `e/${ctx.scope.id}`
+          }
+          title={data.template.title || i18n.t('episode.title')}
+        />
+      </div>
     </Shell>
   );
 }
 
-/**
- * The way a bingo comes into existence.
- *
- * Until this existed a podcaster had no path at all: the template could only be written through the
- * doc-store API by hand, which is how every screenshot of this plugin got made.
- */
-function CreatePanel({
-  ctx,
-  i18n,
-  onCreated,
-}: {
-  ctx: PluginContext;
-  i18n: PluginI18n;
-  onCreated: () => void;
-}) {
-  const [size, setSize] = useState(3);
-  const [title, setTitle] = useState('');
-  // Absent means no: every square is the player's to write unless this bingo says otherwise.
-  const [freeCentre, setFreeCentre] = useState(false);
-  const [busy, setBusy] = useState(false);
-
-  // An even grid has no middle square, so it cannot have given one away. Disabling the control is not
-  // enough on its own: the state behind it survives the switch, and a 4x4 would be created claiming a free
-  // centre that does not exist. Derive what is true from the grid rather than trusting the leftover.
-  const hasCentre = size % 2 === 1;
-  const givesCentreAway = hasCentre && freeCentre;
-
-  const create = async () => {
-    setBusy(true);
-    try {
-      await ctx.docs.put(ctx.scope, KEY_TEMPLATE, {
-        size,
-        title: title.trim(),
-        freeCentre: givesCentreAway,
-      });
-      onCreated();
-    } catch (error) {
-      ctx.log(
-        'warn',
-        `bingo: could not create a bingo (${isPluginApiError(error) ? error.status : String(error)})`,
-      );
-    } finally {
-      setBusy(false);
-    }
-  };
-
-  return (
-    <div className="bingo__create">
-      <p className="bingo__section-title">{i18n.t('create.title')}</p>
-      <div className="bingo__actions">
-        <label className="bingo__field">
-          {i18n.t('create.size')}
-          <select
-            className="bingo__select"
-            value={size}
-            onChange={(e) => setSize(Number(e.target.value))}
-          >
-            {SIZES.map((n) => (
-              <option key={n} value={n}>
-                {n}x{n}
-              </option>
-            ))}
-          </select>
-        </label>
-        <label className="bingo__field">
-          {i18n.t('create.name')}
-          <input
-            className="bingo__input"
-            value={title}
-            placeholder={i18n.t('episode.title')}
-            onChange={(e) => setTitle(e.target.value)}
-          />
-        </label>
-        <button type="button" className="bingo__btn" onClick={create} disabled={busy}>
-          {i18n.t('create.button')}
-        </button>
-      </div>
-      <label className="bingo__check">
-        <input
-          type="checkbox"
-          checked={givesCentreAway}
-          disabled={!hasCentre}
-          onChange={(e) => setFreeCentre(e.target.checked)}
-        />
-        {i18n.t('create.freeCentre')}
-      </label>
-      <p className="bingo__note">{i18n.t('create.hint')}</p>
-    </div>
-  );
-}
-
-/** How many rows a reader sees before the list is folded away. */
-const VISIBLE_ROWS = 5;
-
-/**
- * The podcaster's one action, whatever the phase calls for.
- *
- * One button rather than a row of lifecycle controls: there is only ever one obvious next thing, and the
- * rest belongs behind it.
- */
-function PodcasterActions({
-  i18n,
-  phase,
-  awaiting,
-  pending,
-  onOpen,
-  onMove,
-}: {
-  i18n: PluginI18n;
-  phase: Phase;
-  /** A lifecycle change already asked for and not yet applied. Blocks asking again. */
-  awaiting: Phase | null;
-  pending: number;
-  onOpen: (mode: 'resolve' | 'catchup' | 'feature') => void;
-  onMove: (to: Phase) => void;
-}) {
-  return (
-    <div className="bingo__actions">
-      {phase === 'OPEN' && (
-        <button
-          type="button"
-          className="bingo__btn bingo__btn--quiet"
-          disabled={awaiting !== null}
-          onClick={() => onMove('LOCKED')}
-        >
-          {awaiting === 'LOCKED' ? i18n.t('board.locking') : i18n.t('board.lock')}
-        </button>
-      )}
-      {(phase === 'OPEN' || phase === 'LOCKED') && (
-        <button type="button" className="bingo__btn" onClick={() => onOpen('resolve')}>
-          {i18n.t('resolve.open')}
-        </button>
-      )}
-      {phase === 'LOCKED' && (
-        <button
-          type="button"
-          className="bingo__btn bingo__btn--quiet"
-          disabled={awaiting !== null}
-          onClick={() => onMove('OPEN')}
-        >
-          {awaiting === 'OPEN' ? i18n.t('board.reopening') : i18n.t('board.reopen')}
-        </button>
-      )}
-      {phase === 'RESOLVED' && pending > 0 && (
-        <button type="button" className="bingo__btn" onClick={() => onOpen('catchup')}>
-          {i18n.t('resolve.catchup', { count: String(pending) })}
-        </button>
-      )}
-      {phase !== 'ARCHIVED' && (
-        <button type="button" className="bingo__btn bingo__btn--quiet" onClick={() => onOpen('feature')}>
-          {i18n.t('showcase.open')}
-        </button>
-      )}
-      {phase === 'RESOLVED' && (
-        <button
-          type="button"
-          className="bingo__btn bingo__btn--quiet"
-          disabled={awaiting !== null}
-          onClick={() => onMove('ARCHIVED')}
-        >
-          {awaiting === 'ARCHIVED' ? i18n.t('board.archiving') : i18n.t('board.archive')}
-        </button>
-      )}
-    </div>
-  );
-}
-
-/**
- * The results.
- *
- * Nothing is shown until the bingo is resolved — the backend does not even publish rows before then, so
- * this is a second lock on the same door rather than the only one.
- */
-function Results({
-  i18n,
-  people,
-  me,
-  board,
-  size,
-  hidden,
-  mine,
-  rankBy,
-}: {
-  i18n: PluginI18n;
-  people: Record<string, UserRef>;
-  me: string | undefined;
-  board: Leaderboard | null;
-  size: number;
-  hidden: boolean;
-  /** The reader's own score, worked out here — the board may well not carry their row. */
-  mine?: { fields: number; lines: number };
-  rankBy: RankBy;
-}) {
-  const players = board?.players ?? 0;
-
-  if (!board?.published) {
-    return (
-      <p className="bingo__note">
-        {players > 0 ? i18n.t('leaderboard.playing', { count: String(players) }) : i18n.t('leaderboard.empty')}
-      </p>
-    );
-  }
-
-  const ranked = board.ranked ?? [];
-  const late = board.late ?? [];
-  if (ranked.length === 0 && late.length === 0) {
-    return <p className="bingo__note">{i18n.t('leaderboard.empty')}</p>;
-  }
-
-  return (
-    <>
-      {ranked.length > 0 && (
-        <>
-          <p className="bingo__section-title">
-            <Icon name="trophy" /> {i18n.t('leaderboard.ranked')}
-          </p>
-          <RowList
-            rows={ranked}
-            people={people}
-            me={me}
-            i18n={i18n}
-            size={size}
-            mine={mine}
-            distribution={board.distribution}
-            rankBy={rankBy}
-          />
-        </>
-      )}
-      {late.length > 0 && (
-        <>
-          <p className="bingo__section-title">{i18n.t('leaderboard.late')}</p>
-          <RowList rows={late} people={people} me={me} i18n={i18n} size={size} />
-        </>
-      )}
-      {hidden && <p className="bingo__note">{i18n.t('leaderboard.youAreHidden')}</p>}
-    </>
-  );
-}
-
-/**
- * One side of the board, folded to the first few places.
- *
- * The viewer's own row is always drawn, with its real position, however far down it is. A leaderboard that
- * hides the reader from themselves is the one thing people complain about.
- */
-function RowList({
-  rows,
-  people,
-  me,
-  i18n,
-  size,
-  mine,
-  distribution,
-  rankBy,
-}: {
-  rows: Row[];
-  people: Record<string, UserRef>;
-  me: string | undefined;
-  i18n: PluginI18n;
-  size: number;
-  mine?: { fields: number; lines: number };
-  distribution?: Tally[];
-  rankBy?: RankBy;
-}) {
-  const top = rows.slice(0, VISIBLE_ROWS);
-  const mineIndex = rows.findIndex((r) => r.author === me);
-  const mineIsBelow = mineIndex >= VISIBLE_ROWS;
-  const rest = rows.length - top.length - (mineIsBelow ? 1 : 0);
-
-  // The board is capped, so a reader past the cap is in no row at all. Their own score plus how many did
-  // better places them exactly, which is the whole reason the tally is published.
-  const myPlace =
-    mineIndex === -1 && mine && me ? placeIn(distribution, mine, rankBy ?? 'lines') : null;
-
-  const draw = (row: Row, place: number) => {
-    const person = people[row.author];
-    // A row outlives its author: an erased account resolves to nothing, and the score stays.
-    const name = nameOf(person, i18n);
-    return (
-      <li key={row.author} className="bingo__row">
-        <span className="bingo__place">{place}</span>
-        {person ? (
-          <img className="bingo__avatar" src={person.avatarUrl} alt="" width={24} height={24} loading="lazy" />
-        ) : (
-          <span className="bingo__avatar bingo__avatar--none" aria-hidden="true">
-            {name.slice(0, 1).toUpperCase()}
-          </span>
-        )}
-        <span>{name}</span>
-        {row.author === me && <span className="bingo__role">{i18n.t('leaderboard.you')}</span>}
-        <span className="bingo__row-score">
-          {i18n.t('leaderboard.score', {
-            lines: String(row.lines),
-            ofLines: String(lineCount(size)),
-            fields: String(row.fields),
-            cells: String(row.cells),
-          })}
-        </span>
-      </li>
-    );
-  };
-
-  return (
-    <>
-      <ul className="bingo__rows">
-        {top.map((row, i) => draw(row, i + 1))}
-        {mineIsBelow && draw(rows[mineIndex], mineIndex + 1)}
-        {myPlace !== null && mine && me &&
-          draw({ author: me, fields: mine.fields, lines: mine.lines, cells: size * size, ranked: true },
-            myPlace)}
-      </ul>
-      {rest > 0 && <p className="bingo__note">{i18n.t('leaderboard.more', { count: String(rest) })}</p>}
-    </>
-  );
-}
-
-/** Wraps content in the plugin's own stylesheet; the host cannot style inside a shadow root for us. */
-function Shell({ children }: { children: React.ReactNode }) {
-  return (
-    <>
-      <style>{BINGO_CSS}</style>
-      <div className="bingo bingo--tile">{children}</div>
-    </>
-  );
-}
-
-/** The signed-in reader as the directory would describe them. */
-function toRef(user: NonNullable<PluginContext['user']>): UserRef {
-  return { id: user.id, displayName: user.displayName, avatarUrl: user.avatarUrl, role: user.role };
-}
-
-/** What to call somebody the directory could not answer for. */
-export function nameOf(person: UserRef | undefined, i18n: PluginI18n): string {
-  return person?.displayName ?? i18n.t('leaderboard.formerListener');
+/** Whether the published board carries this person's row, ranked or late. */
+function onBoard(board: Leaderboard, id: string): boolean {
+  return [...(board.ranked ?? []), ...(board.late ?? [])].some((row) => row.author === id);
 }
 
 /** A card always renders `count` squares, however many entries were actually written. */
