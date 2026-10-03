@@ -434,6 +434,7 @@ class BingoPluginTest extends BingoTestSupport {
         seedCard(ctx, bob, List.of("kraken", "merch plug"));
         seedCard(ctx, alice, List.of("kraken"));
         resolve(ctx, Map.of("kraken", true));
+        control(ctx, "RESOLVED");
 
         var plugin = new BingoPlugin(clock);
         plugin.register(ctx);
@@ -448,6 +449,26 @@ class BingoPluginTest extends BingoTestSupport {
         assertEquals(score, stats(ctx).players().get(0).fields(),
                 "recomputed from the rows, so running the tick again cannot double-count");
         assertEquals(1, stats(ctx).players().get(0).cards());
+    }
+
+    @Test
+    void standingsWaitForTheResolutionLikeTheBoardDoes() {
+        // Locked and half ticked off: a card's score is the podcaster's progress so far, which the episode's
+        // own board withholds until the end. Standings that climbed meanwhile would give it away.
+        var ctx = ctx(published(false));
+        seedTemplate(ctx);
+        seedCard(ctx, alice, List.of("kraken"));
+        lock(ctx);
+        resolve(ctx, Map.of("kraken", true));
+        var plugin = new BingoPlugin(clock);
+        plugin.register(ctx);
+
+        assertTrue(stats(ctx).players().isEmpty());
+        assertEquals(0, stats(ctx).episodes());
+
+        control(ctx, "RESOLVED");
+        plugin.tick();
+        assertEquals(1, stats(ctx).players().size());
     }
 
     @Test
@@ -794,6 +815,7 @@ class BingoPluginTest extends BingoTestSupport {
         seedTemplate(ctx);
         seedCard(ctx, alice, List.of("kraken"));
         resolve(ctx, Map.of("kraken", true));
+        control(ctx, "RESOLVED");
 
         var plugin = new BingoPlugin(clock);
         plugin.register(ctx);

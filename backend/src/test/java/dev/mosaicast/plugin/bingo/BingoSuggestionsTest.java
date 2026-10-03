@@ -64,6 +64,20 @@ class BingoSuggestionsTest extends BingoTestSupport {
     }
 
     @Test
+    void doesNotCountAHitBeforeTheBingoIsResolved() {
+        var ctx = ctx(published(false));
+        seedTemplate(ctx);
+        seedCard(ctx, alice, List.of("kraken"));
+        seedCard(ctx, bob, List.of("kraken"));
+        lock(ctx);
+        resolve(ctx, Map.of("kraken", true)); // ticked off, not resolved
+
+        new BingoPlugin(clock).register(ctx);
+
+        assertEquals(0, suggestions(ctx).items().get(0).hits(), "a count that moves while ticking gives it away");
+    }
+
+    @Test
     void aPreferenceTheBackendDoesNotKnowIsIgnoredNotFatal() {
         var ctx = ctx(published(false));
         seedTemplate(ctx);

@@ -224,15 +224,21 @@ final class BingoPublish {
      * <p>Only ranked cards count, and only from players who allow being listed — and only from episodes
      * everyone can see. This document is public, so cards played on a quiet planned episode would announce
      * that it exists; and a plan that was cancelled took its documents with it but not these rows.
+     *
+     * <p>And only from bingos that are resolved. Before that a card's score is whatever the podcaster has
+     * ticked off so far, and standings that climb while they tick would leak exactly the progress the
+     * episode's own leaderboard withholds until the end.
      */
     void stats(Map<String, Prefs> prefs, BingoScore.RankBy rankBy, List<BingoSummary> bingos) {
         SchemaStore schema = ctx.schema();
         if (schema == null) {
             return;
         }
+        Set<String> resolved = resolvedOf(bingos);
         Map<String, Boolean> visible = new LinkedHashMap<>();
         List<CardResultRow> rows = schema.select(ENTITY_CARD_RESULT,
                         Criteria.where("ranked", Criteria.Op.EQ, true), CardResultRow.class).stream()
+                .filter(row -> resolved.contains(row.episode()))
                 .filter(row -> visible.computeIfAbsent(row.episode(), lifecycle::publiclyVisible))
                 .toList();
 
@@ -276,7 +282,10 @@ final class BingoPublish {
      *
      * <p>Run with the site roll-up, so only when something it is computed from changed.
      */
-    void suggestions(double threshold) {
+    void suggestions(double threshold, List<BingoSummary> bingos) {
+        // Whether a prediction came true is only settled once its bingo is resolved; counted earlier, the
+        // number would move while a podcaster ticks off and give the progress away.
+        Set<String> resolved = resolvedOf(bingos);
         SchemaStore schema = ctx.schema();
         if (schema == null) {
             return;
@@ -298,7 +307,7 @@ final class BingoPublish {
             }
             authors.computeIfAbsent(canonical, c -> new LinkedHashSet<>()).add(row.author());
             episodes.computeIfAbsent(canonical, c -> new LinkedHashSet<>()).add(row.episode());
-            if (row.hit()) {
+            if (row.hit() && resolved.contains(row.episode())) {
                 hitIn.computeIfAbsent(canonical, c -> new LinkedHashSet<>()).add(row.episode());
             }
         }
@@ -314,6 +323,17 @@ final class BingoPublish {
                 .toList();
 
         ctx.store().put(Scope.site(), KEY_SUGGESTIONS, new Suggestions(items, now().toString()));
+    }
+
+    /** The bingos whose answers are settled: resolved, or archived after being resolved. */
+    private static Set<String> resolvedOf(List<BingoSummary> bingos) {
+        Set<String> out = new LinkedHashSet<>();
+        for (BingoSummary b : bingos) {
+            if (Phase.RESOLVED.name().equals(b.phase()) || Phase.ARCHIVED.name().equals(b.phase())) {
+                out.add(b.slug());
+            }
+        }
+        return out;
     }
 
     /** How many different people must have written a prediction before it is offered to anybody else. */

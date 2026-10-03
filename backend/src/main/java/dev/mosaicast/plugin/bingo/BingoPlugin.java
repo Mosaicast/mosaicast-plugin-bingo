@@ -235,7 +235,7 @@ public class BingoPlugin implements PluginBackend, UserDataHandler, PageRoutePro
             return;
         }
         publish.stats(pass.prefs(), pass.settings().rankBy(), pass.bingos());
-        publish.suggestions(pass.settings().threshold());
+        publish.suggestions(pass.settings().threshold(), pass.bingos());
         lastRollUpInputs = fingerprint;
         lastRollUp = now;
     }
