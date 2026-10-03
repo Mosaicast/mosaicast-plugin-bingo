@@ -10,22 +10,39 @@ in the three files that carry it.
 
 ## [Unreleased]
 
-Built against **`platformApi` 0.17.0**, so it needs **core 0.7.6 or newer**. Core matches that version on
-`major.minor` exactly: core 0.7.4 and 0.7.5 reject this build at load, and core 0.7.6 rejects the 0.6.x
-build. Nothing in the plugin needed to change for it — every 0.17.0 addition is additive — but the host
-that runs it moves, so this is the release to install on 0.7.6.
+Built against **`platformApi` 0.18.0**, so it needs **core 0.7.7 or newer**. Core matches that version on
+`major.minor` exactly: core 0.7.6 and older reject this build at load, and core 0.7.7 rejects the 0.6.x
+build.
+
+### Added
+- **A bingo for an episode that has not aired, end to end** (core 0.7.7's planned episodes). A podcaster
+  prepares the bingo while the planned episode is quiet, players fill in cards once it is announced, and
+  its release closes predictions. Bingo used to infer a release from the feed's publication date, which a
+  planned episode does not have; it now reads the episode's phase (`DisplaySnapshot.phase()`), as the
+  contract asks, and listens for the release itself (`onEpisodeReleased`), so predictions close at the
+  release instead of up to one ingest interval later — while a quick listener could still rewrite a card
+  with the episode playing. The event is best effort; every tick still reconciles by phase. The release pass
+  is a full pass under the same lock as the tick, so the last cards saved before it are ranked and no card is
+  frozen twice.
+- **Nothing derived from a quiet episode is published.** Its own documents are hidden by the host; the
+  public site standings now leave its cards out, as well as the rows of a cancelled plan, whose documents
+  core deletes but whose rows it cannot know about. A resolve notification names and links the episode,
+  so for a quiet one it waits until the episode is announced.
 
 ### Changed
-- **`platformApi` 0.17.0** in all four places (`plugin.json`, `plugin-api`, `plugin-testkit`,
+- **`platformApi` 0.18.0** in all four places (`plugin.json`, `plugin-api`, `plugin-testkit`,
   `@mosaicast/plugin-sdk`), and **PF4J 3.16.0**, which `plugin-api` depends on since SDK 0.16.2 and core
   0.7.5 loads plugins with.
+- **A withdrawn episode keeps its bingo locked.** Read by phase, withdrawn still counts as released; going
+  by the publication date had the same effect only by accident.
 - The dev loop uses core's **named instances** (`dev/instance.sh --name bingo up --plugin-dir dist`, 0.7.5),
   isolated from every other session's, instead of copying into core's shared `./plugins` and the fixed
   `:8081` default instance — and `restart`, which takes a new build or core and keeps the database (0.7.6).
   README and CLAUDE.md say how.
-- `docs/ARCHITECTURE.md` synced from core 0.7.6 (`add7191`): a remembered miss lasts 30 s and never
-  survives a navigation (§7.6), `platformApi` 0.17.0, season and feed on the display snapshot, ZIP uploads
-  and private blob floors, the live filter state.
+- `docs/ARCHITECTURE.md` synced from core 0.7.7 (`baf12bc`, not tagged yet): planned, quiet and announced
+  episodes and the derived release phase (§4.3), `onEpisodeReleased`, `ctx.episode` filled; and from 0.7.6
+  a remembered miss lasting 30 s (§7.6), season and feed on the display snapshot, ZIP uploads, private blob
+  floors and the live filter state.
 
 ### Fixed
 - **A reader who never played is no longer placed on the leaderboard.** The tile works out the reader's own
@@ -42,6 +59,9 @@ that runs it moves, so this is the release to install on 0.7.6.
   and on every navigation (core 0.7.5, core#237). The re-read after a podcaster's own action lands inside
   those 30 s, where a `phase` the tick wrote meanwhile would stay hidden. The uncached batch read costs the
   same one request.
+- **`ctx.episode.phase` on the frontend (0.18.0).** It is the episode's phase; the tile shows the bingo's,
+  which the backend derives from that and the podcaster's intent. The page itself already tells a podcaster
+  that a quiet episode is invisible to everyone else. **`blobs.readableBy`**: no `blobs` block.
 - **`DisplaySnapshot.season` / `Scope.season` (0.17.0).** The only per-season candidate is the site `stats`
   document, and nothing renders it yet; splitting data nobody draws is not a feature. **`ctx.filter`** (live
   since core 0.7.6): the tile sits on one episode and the badge has nothing to filter. **ZIP uploads**: no

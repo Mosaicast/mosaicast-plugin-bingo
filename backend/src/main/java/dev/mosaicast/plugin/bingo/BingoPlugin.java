@@ -6,6 +6,7 @@ package dev.mosaicast.plugin.bingo;
 import dev.mosaicast.plugin.api.Criteria;
 import dev.mosaicast.plugin.api.CrossUserStore;
 import dev.mosaicast.plugin.api.DisplaySnapshot;
+import dev.mosaicast.plugin.api.EpisodePhase;
 import dev.mosaicast.plugin.api.NotificationException;
 import dev.mosaicast.plugin.api.NotifyMessage;
 import dev.mosaicast.plugin.api.Notifier;
@@ -60,6 +61,13 @@ import tools.jackson.databind.json.JsonMapper;
  * into the schema</em>: at {@code LOCKED} the entries are frozen, and from then on the row is the record
  * while the document is a scratchpad nothing reads. Scores keep updating past the freeze, because the
  * podcaster is still ticking answers off.
+ *
+ * <h2>When predictions close by themselves</h2>
+ * A bingo is made for an episode that has not aired: a podcaster plans the episode, prepares the bingo while
+ * it is quiet ({@link EpisodePhase#PLANNED}), and players fill in cards once it is announced
+ * ({@link EpisodePhase#UPCOMING}). Its release closes predictions. The host says when that happens, twice:
+ * {@code onEpisodeReleased} as it happens, best effort, and {@link DisplaySnapshot#phase()} on every tick,
+ * which catches what the event missed. Nothing here infers a release from a publication date.
  *
  * <h2>What bounds the work</h2>
  * An episode is in the working set only once a podcaster has created a {@code template}, and it leaves
@@ -117,6 +125,15 @@ public class BingoPlugin implements PluginBackend, UserDataHandler {
     private PluginContext ctx;
     /** Every player's partition, read-only. Present because the manifest declares {@code data.readsAllUsers}. */
     private CrossUserStore everyone;
+    /**
+     * One pass over an episode at a time. The scheduled tick and the release listener run on different host
+     * threads, and a pass rewrites a card's rows by deleting and inserting them: two at once would leave a
+     * frozen card with its entries twice. The host serialises scheduled ticks across instances (ShedLock);
+     * this lock serialises the release event with them, but only within one instance. A release bound on one
+     * instance while another runs the tick can still overlap — not a case before core runs several instances
+     * (ARCHITECTURE: v3), and the reason this lock is worth revisiting then.
+     */
+    private final Object passLock = new Object();
 
     public BingoPlugin() {
         this(Clock.systemUTC());
@@ -145,6 +162,10 @@ public class BingoPlugin implements PluginBackend, UserDataHandler {
         // the value here, once - the form reported the save and the plugin kept its old cadence until the
         // host restarted. Cheap on purpose, since it runs on a scheduler thread before each fire.
         ctx.onSchedule(this::ingestInterval, this::tick);
+        // The moment a planned episode goes out, close its predictions rather than up to one interval later,
+        // while a fast listener could still rewrite a card with the episode playing. Best effort: the tick
+        // reconciles by phase as well, so a release this instance never heard of still closes on time.
+        ctx.onEpisodeReleased(this::released);
         ctx.logger().info("bingo registered; ingest every {}s, schema={}",
                 ingestInterval().toSeconds(), ctx.schema() == null ? "absent" : ctx.schema().namespace());
     }
@@ -160,33 +181,61 @@ public class BingoPlugin implements PluginBackend, UserDataHandler {
 
     /** One scheduled pass over the working set, then the site-wide roll-up. */
     void tick() {
-        double threshold = doubleConfig("fuzzyThreshold", DEFAULT_FUZZY_THRESHOLD);
-        boolean allowLate = booleanConfig("allowLateEntries", true);
-        int archiveAfterDays = intConfig("archiveAfterDays", DEFAULT_ARCHIVE_AFTER_DAYS);
-        int defaultGridSize = intConfig("defaultGridSize", DEFAULT_GRID_SIZE);
-        BingoScore.RankBy rankBy = BingoScore.RankBy.of(ctx.config().get("rankBy", String.class, "lines"));
+        synchronized (passLock) {
+            Settings settings = settings();
+            // One read of everyone's preferences for the whole pass, rather than once per episode.
+            Map<String, Prefs> prefs = readPrefs();
 
-        // One read of everyone's preferences for the whole pass, rather than once per episode.
-        Map<String, Prefs> prefs = readPrefs();
-
-        for (String slug : ctx.feeds().episodesIn(Scope.site())) {
-            try {
-                tickEpisode(slug, threshold, allowLate, archiveAfterDays, prefs, rankBy, defaultGridSize);
-            } catch (RuntimeException e) {
-                // One broken episode must not cost every other episode its tick.
-                ctx.logger().warn("bingo tick failed for episode {}", slug, e);
+            for (String slug : ctx.feeds().episodesIn(Scope.site())) {
+                try {
+                    tickEpisode(slug, settings, prefs);
+                } catch (RuntimeException e) {
+                    // One broken episode must not cost every other episode its tick.
+                    ctx.logger().warn("bingo tick failed for episode {}", slug, e);
+                }
             }
-        }
 
-        try {
-            publishStats(prefs, rankBy);
-        } catch (RuntimeException e) {
-            ctx.logger().warn("bingo stats pass failed", e);
+            try {
+                publishStats(prefs, settings.rankBy());
+            } catch (RuntimeException e) {
+                ctx.logger().warn("bingo stats pass failed", e);
+            }
         }
     }
 
-    private void tickEpisode(String slug, double threshold, boolean allowLate, int archiveAfterDays,
-                             Map<String, Prefs> prefs, BingoScore.RankBy rankBy, int defaultGridSize) {
+    /**
+     * A planned episode was released: one pass over it now, so its predictions close at the release.
+     *
+     * <p>A full pass, not just a new phase document: the pass that applies a lock is the one that ingests the
+     * cards saved in the last moments before it as ranked (see {@link #tickEpisode}), and a phase written on
+     * its own would leave the next tick to freeze those cards as latecomers. Idempotent with the tick, which
+     * may handle the same release.
+     */
+    void released(String slug) {
+        synchronized (passLock) {
+            tickEpisode(slug, settings(), readPrefs());
+        }
+    }
+
+    /** The configuration one pass works under, read once per pass. */
+    private Settings settings() {
+        return new Settings(
+                doubleConfig("fuzzyThreshold", DEFAULT_FUZZY_THRESHOLD),
+                booleanConfig("allowLateEntries", true),
+                intConfig("archiveAfterDays", DEFAULT_ARCHIVE_AFTER_DAYS),
+                intConfig("defaultGridSize", DEFAULT_GRID_SIZE),
+                BingoScore.RankBy.of(ctx.config().get("rankBy", String.class, "lines")));
+    }
+
+    private record Settings(double threshold, boolean allowLate, int archiveAfterDays, int defaultGridSize,
+                            BingoScore.RankBy rankBy) {}
+
+    private void tickEpisode(String slug, Settings settings, Map<String, Prefs> prefs) {
+        double threshold = settings.threshold();
+        boolean allowLate = settings.allowLate();
+        int archiveAfterDays = settings.archiveAfterDays();
+        int defaultGridSize = settings.defaultGridSize();
+        BingoScore.RankBy rankBy = settings.rankBy();
         Scope scope = Scope.episode(slug);
 
         // No template, no bingo - and no reads beyond this one for the vast majority of a back catalogue.
@@ -201,7 +250,8 @@ public class BingoPlugin implements PluginBackend, UserDataHandler {
             return; // terminal: this episode has left the working set for good
         }
 
-        PhaseState state = resolvePhase(slug, previous, archiveAfterDays, allowLate);
+        EpisodePhase release = releasePhaseOf(slug);
+        PhaseState state = resolvePhase(slug, release, previous, archiveAfterDays, allowLate);
         ctx.store().put(scope, KEY_PHASE, state);
         Phase phase = Phase.valueOf(state.phase());
 
@@ -282,7 +332,10 @@ public class BingoPlugin implements PluginBackend, UserDataHandler {
 
         publishShowcase(slug, cards, prefs);
 
-        if (phase == Phase.RESOLVED) {
+        // A notification names the episode and links to it. While the episode is quiet nobody but a
+        // podcaster may know it exists, so the news waits until it is announced; who has been told is
+        // tracked per person, so the first tick after that sends it.
+        if (phase == Phase.RESOLVED && release != EpisodePhase.PLANNED) {
             notifyResolved(slug);
         }
     }
@@ -292,14 +345,14 @@ public class BingoPlugin implements PluginBackend, UserDataHandler {
     /**
      * Merges the podcaster's stated intent with what the feed implies, and applies the archive timer.
      *
-     * <p>The intent always wins: auto-locking when an episode gains a {@code publishedAt} is a default, not
-     * a wall, and reopening a locked episode is a thing a podcaster is allowed to do.
+     * <p>The intent always wins: auto-locking when the episode is released is a default, not a wall, and
+     * reopening a locked episode is a thing a podcaster is allowed to do.
      */
-    private PhaseState resolvePhase(String slug, PhaseState previous, int archiveAfterDays,
-                                    boolean allowLate) {
+    private PhaseState resolvePhase(String slug, EpisodePhase release, PhaseState previous,
+                                    int archiveAfterDays, boolean allowLate) {
         Scope scope = Scope.episode(slug);
 
-        boolean releasedNow = isReleased(slug);
+        boolean releasedNow = hasBeenReleased(release);
         // Sticky, and decided the first time this bingo is seen: a bingo that existed before the episode
         // came out is one publication can meaningfully close.
         boolean openedBeforeRelease = previous != null ? previous.openedBeforeRelease() : !releasedNow;
@@ -347,12 +400,29 @@ public class BingoPlugin implements PluginBackend, UserDataHandler {
                 archiveAt == null ? null : archiveAt.toString());
     }
 
-    /** Whether the feed says this episode is out yet. An unknown ref counts as not yet released. */
-    private boolean isReleased(String slug) {
+    /**
+     * Whether the episode has come out. Withdrawn counts: it was released before it was withdrawn, and a
+     * bingo its release locked must not reopen because the feed later dropped the item.
+     */
+    private static boolean hasBeenReleased(EpisodePhase release) {
+        return release == EpisodePhase.RELEASED || release == EpisodePhase.WITHDRAWN;
+    }
+
+    /** Whether a visitor may know this episode exists: not quiet, and not gone. */
+    private boolean publiclyVisible(String slug) {
         try {
-            return ctx.feeds().display(slug).publishedAt() != null;
+            return ctx.feeds().display(slug).phase() != EpisodePhase.PLANNED;
         } catch (RuntimeException e) {
             return false;
+        }
+    }
+
+    /** Where the host says the episode stands (platformApi 0.18.0); {@code null} for a ref it does not know. */
+    private EpisodePhase releasePhaseOf(String slug) {
+        try {
+            return ctx.feeds().display(slug).phase();
+        } catch (RuntimeException e) {
+            return null;
         }
     }
 
@@ -832,15 +902,20 @@ public class BingoPlugin implements PluginBackend, UserDataHandler {
      * Cumulative standings, recomputed from the rows rather than incremented - a tick that runs twice must
      * not count anything twice, and the cheapest way to guarantee that is to never carry a running total.
      *
-     * <p>Only ranked cards count, and only from players who allow being listed.
+     * <p>Only ranked cards count, and only from players who allow being listed — and only from episodes
+     * everyone can see. This document is public, so cards played on a quiet planned episode would announce
+     * that it exists; and a plan that was cancelled took its documents with it but not these rows.
      */
     private void publishStats(Map<String, Prefs> prefs, BingoScore.RankBy rankBy) {
         SchemaStore schema = ctx.schema();
         if (schema == null) {
             return;
         }
+        Map<String, Boolean> visible = new LinkedHashMap<>();
         List<CardResultRow> rows = schema.select(ENTITY_CARD_RESULT,
-                Criteria.where("ranked", Criteria.Op.EQ, true), CardResultRow.class);
+                        Criteria.where("ranked", Criteria.Op.EQ, true), CardResultRow.class).stream()
+                .filter(row -> visible.computeIfAbsent(row.episode(), this::publiclyVisible))
+                .toList();
 
         Map<String, StandingRow> byAuthor = new LinkedHashMap<>();
         for (CardResultRow row : rows) {

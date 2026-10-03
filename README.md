@@ -22,13 +22,26 @@ A bingo exists only once a podcaster creates a template, and it ends for good wh
 | Phase | Starts when | Who can edit a card | What is recorded |
 |---|---|---|---|
 | `OPEN` | the template is created | anyone signed in | every tick, ranked |
-| `LOCKED` | the episode publishes, or the podcaster locks | writes still land, but | cards freeze; a newcomer is taken once, unranked |
+| `LOCKED` | the episode is released, or the podcaster locks | writes still land, but | cards freeze; a newcomer is taken once, unranked |
 | `RESOLVED` | the podcaster finishes ticking off | same | final scores; host standings recomputed |
 | `ARCHIVED` | `archiveAfterDays` after resolving, or manually | nothing reads it | nothing, ever again |
 
-The podcaster's decision always beats the automatic suggestion — locking on publication is a default, not
-a wall, and a locked bingo can be reopened until it is resolved. Someone catching up after the lock can
+The podcaster's decision always beats the automatic suggestion — locking on release is a default, not a
+wall, and a locked bingo can be reopened until it is resolved. Someone catching up after the lock can
 still fill in a card and see how they did; it is shown as **played late, not ranked**.
+
+### A bingo for an episode that has not aired
+
+This is what the plugin is for, and since core 0.7.7 it is how it works end to end. A podcaster plans the
+episode in the admin area and creates its bingo while the plan is **quiet** — only podcasters and admins can
+see either. Once the episode is **announced** (by hand, or at its announcement time) everyone can fill in a
+card. When the feed item arrives and the plan is **released**, predictions close by themselves: the host
+tells the plugin at that moment, and every tick also checks the episode's phase, so a release the plugin
+did not hear about still closes on the next pass. A withdrawn episode keeps its lock.
+
+Nothing about a quiet episode leaks out. Its documents are hidden by the host like the episode itself; the
+site-wide standings leave its cards out; and if a podcaster resolves it before it is announced, the
+notifications wait until it is.
 
 ## Making one
 
@@ -140,7 +153,7 @@ re-reads when it is opened and after the viewer's own actions.
 
 ```bash
 ./build.sh                                   # -> dist/
-cd backend && ./gradlew test                 # 73 tests, no core and no database
+cd backend && ./gradlew test                 # 79 tests, no core and no database
 cd frontend && npm test && npm run typecheck # 60 tests
 ```
 
@@ -172,7 +185,7 @@ $C --name bingo down
 re-copies it and restarts only the app, keeping the database (add `--core origin/master` to move core too). Without it
 (or `--plugins`) no plugin loads and the tile is simply absent.
 
-Requires **core 0.7.6 or newer** (`platformApi` 0.17.0). Core matches that version on `major.minor` exactly,
+Requires **core 0.7.7 or newer** (`platformApi` 0.18.0). Core matches that version on `major.minor` exactly,
 so an older core rejects this build at load and a newer minor rejects it too.
 
 If the tile does not appear, the reason is in the admin log viewer at `/admin/logs` — a rejected manifest
@@ -212,8 +225,9 @@ value. Numbers carry bounds the host enforces on save; a stored value outside th
 
 Four things differ from `docs/BRIEF.md`, which predates the current plugin contract:
 
-- **The lifecycle does not come from `ctx.episode.status`.** The shell has never populated that field, so
-  the backend derives the phase and publishes it as a document.
+- **The lifecycle does not come from `ctx.episode`.** That field says where the *episode* stands (filled
+  since core 0.7.7); a bingo's state also depends on what the podcaster asked for, so the backend merges the
+  two and publishes the result as a document.
 - **There is no podcaster slot at all.** `admin` passes validation and is rendered by no region; `sidebar`
   put the one action a podcaster comes for below everything else on a phone. It is a dialog on the tile.
 - **Fan cards live in the `USER` scope**, not under a `card:fan:{userId}` key. Doc keys are client input

@@ -4,7 +4,7 @@
 import { act } from 'react';
 import { createRoot, type Root } from 'react-dom/client';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
-import { makeMockDocs, makeMockTags, makeMockUsers } from '@mosaicast/plugin-sdk/testing';
+import { makeMockDocs, makeMockEpisode, makeMockTags, makeMockUsers } from '@mosaicast/plugin-sdk/testing';
 import { EpisodeBingo } from './EpisodeBingo';
 import { flush, makeBingoCtx } from '../test-utils';
 
@@ -245,16 +245,20 @@ describe('<EpisodeBingo>', () => {
   });
 
   it('shows the resolution state from the published phase, never from ctx.episode', async () => {
-    // `ctx.episode` is not populated by the shell, so a component that branched on it would show every
-    // bingo in whichever state the fallback happened to be.
+    // `ctx.episode` says where the episode stands, not the bingo: one released episode can carry an open,
+    // locked or resolved bingo, depending on what the podcaster asked for.
     await render(
-      ctxWith({
-        [docPath('template')]: { size: 3 },
-        [docPath('phase')]: { phase: 'RESOLVED', suggested: 'LOCKED' },
-      }),
+      ctxWith(
+        {
+          [docPath('template')]: { size: 3 },
+          // Released, which suggests a lock — and the podcaster reopened it anyway.
+          [docPath('phase')]: { phase: 'OPEN', suggested: 'LOCKED' },
+        },
+        { episode: makeMockEpisode('released') },
+      ),
     );
 
-    expect(host.textContent).toContain('Resolved');
+    expect(host.textContent).toContain('Predictions open');
   });
 
   const RESOLVED_BINGO = {
