@@ -52,6 +52,7 @@ class BingoHistoryTest extends BingoTestSupport {
         assertEquals(new BingoDocs.Point(1, 3, 0, 2), ann.points().get(1));
         assertEquals(3, history.episodes().get(0).ranked(), "aggregates count everyone");
         assertEquals(2.333, history.episodes().get(0).avgLines(), 0.001);
+        assertEquals(List.of(0, 0, 2, 1), history.episodes().get(0).lineCounts(), "two cards with 2 lines, one with 3");
     }
 
     @Test

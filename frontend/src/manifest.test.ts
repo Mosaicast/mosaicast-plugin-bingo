@@ -8,6 +8,7 @@ import {
   KEY_CANDIDATES,
   KEY_CONTROL,
   KEY_GROUPING,
+  KEY_HISTORY,
   KEY_LEADERBOARD,
   KEY_PHASE,
   KEY_RECAP,
@@ -29,7 +30,7 @@ describe('plugin.json', () => {
 
   it('reserves every key the backend computes', () => {
     const owned = manifest.data.backendOwned;
-    for (const key of [KEY_PHASE, KEY_CANDIDATES, KEY_LEADERBOARD, KEY_RECAP, KEY_STATS, KEY_SUGGESTIONS,
+    for (const key of [KEY_PHASE, KEY_CANDIDATES, KEY_LEADERBOARD, KEY_RECAP, KEY_STATS, KEY_SUGGESTIONS, KEY_HISTORY,
                        KEY_PARTICIPANTS, KEY_SHOWCASED]) {
       expect(owned).toContain(key);
     }

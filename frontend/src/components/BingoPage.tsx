@@ -5,7 +5,7 @@ import { useEffect, useMemo, useState } from 'react';
 import { matchRoute, type DisplaySnapshot, type PluginContext, type UserRef } from '@mosaicast/plugin-sdk';
 import { makeI18n, type PluginI18n } from '../i18n';
 import { Icon } from '../icons';
-import { KEY_LEADERBOARD, KEY_PHASE, KEY_RECAP, KEY_STATS, KEY_TEMPLATE } from '../keys';
+import { KEY_HISTORY, KEY_LEADERBOARD, KEY_PHASE, KEY_RECAP, KEY_STATS, KEY_SUGGESTIONS, KEY_TEMPLATE } from '../keys';
 import {
   gridSize,
   lineCount,
@@ -14,10 +14,13 @@ import {
   type PhaseState,
   type RankBy,
   type Recap,
+  type History,
   type Stats,
+  type Suggestions,
   type Template,
 } from '../types';
 import { Shell, nameOf } from './common';
+import { EpisodeScores, HistoryPanel } from './HistoryPanel';
 import { RecapPanel } from './RecapPanel';
 import { Results } from './Results';
 import { ShareButton } from './ShareButton';
@@ -58,23 +61,43 @@ function SiteView({ ctx, i18n }: { ctx: PluginContext; i18n: PluginI18n }) {
   const [state, setState] = useState<{
     loading: boolean;
     stats: Stats | null;
+    history: History | null;
+    suggestions: Suggestions | null;
     titles: Record<string, DisplaySnapshot>;
     people: Record<string, UserRef>;
-  }>({ loading: true, stats: null, titles: {}, people: {} });
+  }>({ loading: true, stats: null, history: null, suggestions: null, titles: {}, people: {} });
 
   useEffect(() => {
     let live = true;
     (async () => {
-      const site = await readScope(ctx, { type: 'site', id: 'main' }, [KEY_STATS]);
+      // Every site-wide document the page draws, in one request.
+      const site = await readScope(ctx, { type: 'site', id: 'main' }, [KEY_STATS, KEY_HISTORY, KEY_SUGGESTIONS]);
       const stats = pick<Stats>(site, KEY_STATS);
-      const slugs = (stats?.bingos ?? []).map((b) => b.slug);
+      const history = pick<History>(site, KEY_HISTORY);
+      const slugs = [
+        ...new Set([...(stats?.bingos ?? []).map((b) => b.slug), ...(history?.episodes ?? []).map((e) => e.slug)]),
+      ];
+      const records = history?.records;
       const [titles, people] = await Promise.all([
         slugs.length > 0 ? ctx.feeds.displayMany(slugs).catch(() => ({})) : Promise.resolve({}),
-        resolvePeople(ctx, (stats?.players ?? []).slice(0, STANDINGS_SHOWN).map((p) => p.author)),
+        resolvePeople(ctx, [
+          ...(stats?.players ?? []).slice(0, STANDINGS_SHOWN).map((p) => p.author),
+          ...(history?.players ?? []).map((p) => p.author),
+          ...[records?.bestCard, records?.mostCards, records?.longestStreak].flatMap((r) => (r ? [r.author] : [])),
+        ]),
       ]);
-      if (live) setState({ loading: false, stats, titles, people });
+      if (live) {
+        setState({
+          loading: false,
+          stats,
+          history,
+          suggestions: pick<Suggestions>(site, KEY_SUGGESTIONS),
+          titles,
+          people,
+        });
+      }
     })().catch(() => {
-      if (live) setState({ loading: false, stats: null, titles: {}, people: {} });
+      if (live) setState({ loading: false, stats: null, history: null, suggestions: null, titles: {}, people: {} });
     });
     return () => {
       live = false;
@@ -131,6 +154,15 @@ function SiteView({ ctx, i18n }: { ctx: PluginContext; i18n: PluginI18n }) {
         </ol>
       )}
 
+      <HistoryPanel
+        ctx={ctx}
+        i18n={i18n}
+        history={state.history}
+        suggestions={state.suggestions}
+        snapshots={state.titles}
+        people={state.people}
+      />
+
       <p className="bingo__section-title">
         <Icon name="board" /> {i18n.t('page.bingos')}
       </p>
@@ -186,17 +218,22 @@ function EpisodeView({
     phase: PhaseState | null;
     board: Leaderboard | null;
     recap: Recap | null;
+    history: History | null;
     people: Record<string, UserRef>;
-  }>({ loading: true, snapshot: null, template: null, phase: null, board: null, recap: null, people: {} });
+  }>({
+    loading: true, snapshot: null, template: null, phase: null, board: null, recap: null, history: null, people: {},
+  });
   const [unheard, setUnheard] = useState(false);
   const [revealed, setRevealed] = useState(false);
 
   useEffect(() => {
     let live = true;
     (async () => {
-      const [docs, snapshot] = await Promise.all([
+      const [docs, snapshot, site] = await Promise.all([
         readScope(ctx, { type: 'episode', id: slug }, EPISODE_PAGE_KEYS),
         ctx.feeds.display(slug).catch(() => null),
+        // Only for comparing this episode with the rest; the page draws fine without it.
+        readScope(ctx, { type: 'site', id: 'main' }, [KEY_HISTORY]).catch(() => ({})),
       ]);
       const board = pick<Leaderboard>(docs, KEY_LEADERBOARD);
       const people = await resolvePeople(ctx, [
@@ -211,6 +248,7 @@ function EpisodeView({
           phase: pick<PhaseState>(docs, KEY_PHASE),
           board,
           recap: pick<Recap>(docs, KEY_RECAP),
+          history: pick<History>(site, KEY_HISTORY),
           people,
         });
       }
@@ -291,6 +329,8 @@ function EpisodeView({
         hidden={false}
         rankBy={rankBy}
       />
+
+      <EpisodeScores i18n={i18n} board={state.board} history={state.history} slug={slug} />
 
       {state.recap?.published &&
         (hideRecap ? (

@@ -193,6 +193,59 @@ export const BINGO_CSS =
   .bingo-icon { width: 1em; height: 1em; flex: 0 0 auto; }
 
   /* The narrowest column this tile ever gets is a phone-width feed card. */
+  /* history: the site page's stats and charts, in the visual language of mosaicast-plugin-stats */
+  .bingo__history { display: flex; flex-direction: column; gap: .5rem; margin-top: .5rem; }
+  .bingo__pills { display: flex; flex-wrap: wrap; gap: 6px; }
+  .bingo__pill {
+    font: inherit; font-size: .875rem; color: var(--mc-text); background: none; cursor: pointer;
+    border: 1px solid var(--mc-border); border-radius: 999px; padding: 3px 12px; min-height: 32px;
+  }
+  .bingo__pill--small { font-size: .8125rem; min-height: 28px; padding: 2px 10px; }
+  .bingo__pill[aria-pressed="true"] { background: var(--mc-accent); color: var(--mc-accent-contrast); border-color: var(--mc-accent); }
+  .bingo__pill:focus-visible { outline: 2px solid var(--mc-accent-text); outline-offset: 1px; }
+  .bingo__tiles { display: grid; grid-template-columns: repeat(auto-fit, minmax(120px, 1fr)); gap: 10px; }
+  .bingo__tile, .bingo__record { border: 1px solid var(--mc-border); border-radius: 10px; padding: 10px 12px; min-width: 0; }
+  .bingo__record { border-width: 0 0 0 3px; border-radius: 0; padding: 2px 0 2px 10px; }
+  .bingo__tile-label { font-size: .8rem; color: var(--mc-text-muted); }
+  .bingo__tile-value { font-size: 1.3rem; font-weight: 600; margin-top: 2px; overflow-wrap: anywhere; }
+  .bingo__tile-sub { font-size: .78rem; color: var(--mc-text-muted); margin-top: 2px; overflow-wrap: anywhere; }
+  .bingo__records { display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 12px; }
+  .bingo__record-value { font-weight: 600; overflow-wrap: anywhere; }
+  .bingo__record-who { font-weight: 400; color: var(--mc-text-muted); }
+  .bingo__chart-head { display: flex; align-items: center; justify-content: space-between; gap: 8px; flex-wrap: wrap; margin-top: .75rem; }
+  .bingo__chart-title { font-size: 1rem; margin: .75rem 0 .25rem; }
+  .bingo__chart-head .bingo__chart-title { margin: 0; }
+  .bingo__chart { position: relative; }
+  .bingo__chart svg { display: block; width: 100%; height: auto; overflow: visible; }
+  .bingo__grid-line { stroke: var(--mc-border); stroke-width: 1; }
+  .bingo__axis { fill: var(--mc-text-muted); font-size: 11px; font-variant-numeric: tabular-nums; }
+  .bingo__end-label { fill: var(--mc-text); font-size: 12px; }
+  .bingo__crosshair { stroke: var(--mc-text-muted); stroke-width: 1; }
+  .bingo__reference { stroke: var(--mc-text-muted); stroke-width: 1; stroke-dasharray: 3 3; }
+  .bingo__hit { fill: transparent; cursor: pointer; }
+  .bingo__hit:hover, .bingo__hit:focus { fill: color-mix(in srgb, var(--mc-text) 6%, transparent); outline: none; }
+  .bingo__tip {
+    position: absolute; pointer-events: none; z-index: 2; background: var(--mc-surface); color: var(--mc-text);
+    border: 1px solid var(--mc-border); border-radius: 8px; padding: 8px 10px; font-size: .82rem; line-height: 1.4;
+    box-shadow: 0 4px 16px rgb(0 0 0 / .12); min-width: 150px; max-width: 260px;
+  }
+  .bingo__tip-title { font-weight: 600; margin-bottom: 4px; }
+  .bingo__tip-row { display: flex; align-items: center; gap: 6px; justify-content: space-between; }
+  .bingo__tip-row span:first-child { display: inline-flex; align-items: center; gap: 6px; }
+  .bingo__legend { display: flex; flex-wrap: wrap; gap: 4px 16px; margin-top: 6px; font-size: .875rem; }
+  .bingo__legend-item { display: inline-flex; align-items: center; gap: 6px; }
+  .bingo__swatch { width: 10px; height: 10px; border-radius: 3px; flex: none; display: inline-block; }
+  .bingo__swatch--line { width: 14px; height: 3px; border-radius: 2px; }
+  .bingo__players { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 6px; }
+  .bingo__chip--player { display: inline-flex; align-items: center; gap: 6px; }
+  .bingo__chip--player[aria-pressed="true"] { border-color: var(--mc-accent-text); }
+  .bingo__chip--player:disabled { opacity: .5; cursor: default; }
+  .bingo__table-wrap { overflow-x: auto; }
+  .bingo__table { border-collapse: collapse; font-size: .85rem; width: 100%; }
+  .bingo__table th, .bingo__table td { padding: 4px 8px; border-bottom: 1px solid var(--mc-border); text-align: right; white-space: nowrap; }
+  .bingo__table th[scope="row"], .bingo__table thead th:first-child { text-align: left; font-weight: 400; }
+  .bingo__table td { font-variant-numeric: tabular-nums; }
+
   @container (max-width: 22rem) {
     .bingo__cell { min-height: 3.25rem; font-size: .75rem; }
     .bingo__grid { gap: .25rem; }

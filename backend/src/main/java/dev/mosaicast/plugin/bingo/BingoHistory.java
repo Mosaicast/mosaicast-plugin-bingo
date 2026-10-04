@@ -114,7 +114,7 @@ final class BingoHistory {
                     round(ranked.isEmpty() ? 0 : (double) ranked.stream().filter(r -> r.lines() > 0).count()
                             / ranked.size()),
                     round(groups.isEmpty() ? 0 : (double) hits / groups.size()),
-                    groups.size()));
+                    groups.size(), lineCountsOf(ranked)));
         }
 
         // The series published are the best cumulative scores, like the standings; ties by id for stability.
@@ -186,6 +186,15 @@ final class BingoHistory {
             previous = p.e();
         }
         return longest;
+    }
+
+    /** How many cards ended with 0, 1, 2… lines, by index, up to the highest seen. */
+    private static List<Integer> lineCountsOf(List<CardResultRow> ranked) {
+        int top = ranked.stream().mapToInt(CardResultRow::lines).max().orElse(-1);
+        Integer[] counts = new Integer[top + 1];
+        java.util.Arrays.fill(counts, 0);
+        ranked.forEach(r -> counts[r.lines()]++);
+        return List.of(counts);
     }
 
     private static BingoScore.Score scoreOf(CardResultRow row) {

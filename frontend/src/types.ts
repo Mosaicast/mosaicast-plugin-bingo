@@ -382,3 +382,61 @@ export interface Stats {
   computedAt?: string;
 }
 
+
+/** One card on a player's series: episode index, squares, lines, place among every ranked card (1 best). */
+export interface HistoryPoint {
+  e: number;
+  f: number;
+  l: number;
+  p: number;
+}
+
+/** One resolved bingo in the history, oldest first. Aggregates count every card and name nobody. */
+export interface HistoryEpisode {
+  slug: string;
+  /** The bingo's own name, if it has one; the episode's title is read live. */
+  title?: string | null;
+  feed?: string | null;
+  season?: number | null;
+  episodeNo?: number | null;
+  publishedAt?: string | null;
+  players: number;
+  ranked: number;
+  late: number;
+  avgFields: number;
+  avgLines: number;
+  /** Share, 0 to 1, of ranked cards with at least one line. */
+  withLine: number;
+  /** Share, 0 to 1, of distinct predictions that came true. */
+  hitRate: number;
+  candidates: number;
+  /** How many ranked cards ended with 0, 1, 2… lines, by index. */
+  lineCounts?: number[];
+}
+
+/** One listed player's ranked cards, oldest first. */
+export interface PlayerSeries {
+  author: string;
+  cards: number;
+  points: HistoryPoint[];
+}
+
+/** Records over the whole history; each names a listed player or an episode, or is absent. */
+export interface HistoryRecords {
+  bestCard?: { author: string; slug: string; fields: number; lines: number; cells: number } | null;
+  mostCards?: { author: string; count: number } | null;
+  longestStreak?: { author: string; count: number } | null;
+  mostPredictable?: { slug: string; hitRate: number } | null;
+  leastPredictable?: { slug: string; hitRate: number } | null;
+}
+
+/** Backend-owned, site scope: how past bingos went, for the site page's charts. Resolved, public bingos only. */
+export interface History {
+  episodes?: HistoryEpisode[];
+  /** At most fifty, best cumulative score first — which is also each player's colour slot. */
+  players?: PlayerSeries[];
+  distribution?: { lines: number; cards: number }[];
+  records?: HistoryRecords;
+  rankBy?: RankBy;
+  computedAt?: string;
+}

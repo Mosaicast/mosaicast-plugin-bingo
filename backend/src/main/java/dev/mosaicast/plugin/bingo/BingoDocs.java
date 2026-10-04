@@ -385,10 +385,12 @@ final class BingoDocs {
      * @param ranked     the cards that were in the running; the averages are over these
      * @param hitRate    the share, 0 to 1, of distinct predictions that came true
      * @param candidates how many distinct predictions there were
+     * @param lineCounts how many ranked cards ended with 0, 1, 2… lines, by index - so a filtered view can
+     *                   add up its own distribution
      */
     record HistoryEpisode(String slug, String title, String feed, Integer season, Integer episodeNo,
                           String publishedAt, int players, int ranked, int late, double avgFields, double avgLines,
-                          double withLine, double hitRate, int candidates) {}
+                          double withLine, double hitRate, int candidates, List<Integer> lineCounts) {}
 
     /** One listed player's ranked cards, oldest first. */
     record PlayerSeries(String author, int cards, List<Point> points) {}

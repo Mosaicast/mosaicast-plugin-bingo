@@ -63,6 +63,9 @@ export const KEY_SHOWCASED = 'showcased';
  */
 export const KEY_SUGGESTIONS = 'suggestions';
 
+/** Backend-owned, in the site scope: how past bingos went, episode after episode — the page's charts. */
+export const KEY_HISTORY = 'history';
+
 /** Backend-owned, in the site scope: cumulative standings. */
 export const KEY_STATS = 'stats';
 
