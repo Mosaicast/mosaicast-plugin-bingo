@@ -37,6 +37,11 @@ build.
 - **A badge that speaks to the viewer**: their own score, "Your card is in" / "Fill in your card",
   "Predict before it airs" on an upcoming episode, and "not announced yet" for a podcaster's quiet bingo.
   One listing of the viewer's own partition serves every badge on a page.
+- **Charts and records for past bingos** on `/p/bingo/`, in the stats plugin's design. There is a line
+  per player across the season (per episode, running total or place; season pills; table view), plus
+  cards per bingo, how predictable each episode was, how cards score, and records. They come from a new
+  backend-owned site document, `history`: resolved and public bingos only, and named series only for
+  listed players. A bingo's own page shows how its cards scored.
 - `docs/ROADMAP.md`: deferred ideas and what each one is waiting on.
 - **A bingo for an episode that has not aired, end to end** (core 0.7.7's planned episodes). A podcaster
   prepares the bingo while the planned episode is quiet, players fill in cards once it is announced, and

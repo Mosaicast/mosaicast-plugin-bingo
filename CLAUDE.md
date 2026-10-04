@@ -16,8 +16,8 @@ Java 21 (Gradle, PF4J extension) · React 18 + Vite (Web Component) · **platfor
 ## Commands
 ```
 ./build.sh                                    # -> dist/{plugin.json,bingo.jar,assets/bingo.es.js}
-cd backend  && ./gradlew test                 # 116 tests
-cd frontend && npm test && npm run typecheck  # 121 tests
+cd backend  && ./gradlew test                 # 124 tests
+cd frontend && npm test && npm run typecheck  # 135 tests
 scripts/set-version.sh <x.y.z>                # bumps the plugin version in all three files
 ```
 
@@ -31,6 +31,7 @@ backend/src/main/java/dev/mosaicast/plugin/bingo/
   BingoRecord.java                      ingest into schema rows (the freeze) + scoring
   BingoPublish.java                     showcase, notifications, site stats, suggestions
   BingoPages.java                       PageRouteProvider + ShareMetadataProvider logic for /p/bingo/
+  BingoHistory.java                     pure: the `history` doc the page charts (resolved + public only)
   BingoFuzzy.java / BingoScore.java     pure grouping and scoring (no ctx, no clock, no I/O)
 backend/src/test/.../BingoSchemaFixture.java   builds FakeSchemaStore FROM plugin.json
 backend/src/test/.../BingoTestSupport.java     shared fixtures; new test classes extend it
@@ -38,6 +39,8 @@ shared/fuzzy-vectors.json               one answer key for BingoFuzzy.java and f
 frontend/src/bingo-element.tsx          defines the custom elements
 frontend/src/{keys,types}.ts            doc keys and document shapes — mirror BingoDocs' records
 frontend/src/{fuzzy,regroup}.ts         advisory card checks; split/merge pins
+frontend/src/{history,palette}.ts       chart transforms; validated player palette (shared with stats)
+frontend/src/components/charts/         hand-drawn SVG LineChart/BarChart — no chart library
 frontend/src/components/                EpisodeBingo (+ CreatePanel, PodcasterActions, Results, RecapPanel,
                                         SuggestionChips, CardChecks), EpisodeCardBadge, BingoPage, ResolveModal
 docs/ROADMAP.md                         deferred ideas + what each waits on — keep it current
@@ -134,7 +137,9 @@ frontend/locales/{en,de}.json           UI strings
   late spelling cannot rename them; a row's `canonical` follows the current grouping, so pins re-score.
 - **Nothing public reflects an unresolved bingo's score**: not the board, not site standings, not a
   suggestion's hit count. And no share card (OG) ever names a prediction — previews are read unspoilered.
-- **The site roll-up (stats + suggestions) is dirty-gated** in `BingoPlugin.rollUp`: add any new input to
+- **Charts colour by player, never by rank in the current view**: slot = place in `history.players`. A
+  named series exists only for listed players; place/aggregates count everyone.
+- **The site roll-up (stats + suggestions + history) is dirty-gated** in `BingoPlugin.rollUp`: add any new input to
   its fingerprint, or the document silently goes stale for up to `ROLL_UP_REFRESH`.
 
 ## Architecture guardrails (do not violate)
@@ -142,7 +147,7 @@ frontend/locales/{en,de}.json           UI strings
   non-authoritative and live only in the plugin UI.
 - The host resolves scopes and decides access/filters — plugins only consume.
 - Per-user data goes in the `USER` scope, **never** in a key. A key naming a user is an IDOR.
-- Keys the backend computes (`phase`, `candidates`, `leaderboard`, `recap`, `stats`, `suggestions`, `notified`,
+- Keys the backend computes (`phase`, `candidates`, `leaderboard`, `recap`, `stats`, `suggestions`, `history`, `notified`,
   `participants`, `showcased`) are in `data.backendOwned` and written in `register()` as well as on the schedule.
   Client-written keys (`template`, `resolution`, `control`, `showcase`, `grouping`) must **never** be listed there.
 - A person's visibility choice lives in their own partition (`prefs`) and is enforced backend-side on every

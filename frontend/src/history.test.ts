@@ -80,7 +80,9 @@ describe('history transforms', () => {
     expect(niceTicks(8)).toEqual([0, 2, 4, 6, 8]);
     expect(niceTicks(7)).toEqual([0, 2, 4, 6, 8]);
     expect(niceTicks(0)).toEqual([0, 1]);
-    expect(niceTicks(1)).toEqual([0, 0.25, 0.5, 0.75, 1]);
+    expect(niceTicks(1)).toEqual([0, 1]);
+    expect(niceTicks(2)).toEqual([0, 1, 2]);
+    expect(niceTicks(1, { fractional: true })).toEqual([0, 0.25, 0.5, 0.75, 1]);
   });
 });
 

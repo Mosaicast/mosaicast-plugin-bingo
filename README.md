@@ -124,6 +124,25 @@ result of a player who opted out or is past the board's cap. Each page has an Op
 scored, **never what was predicted or came true**, because a link preview is read in chats by people who
 may not have listened.
 
+### How past bingos went
+
+Below the standings, the page charts every **resolved** bingo on an episode everyone may see. It follows
+the stats plugin's design: hand-drawn SVG, season pills, tiles, records, and the same validated player
+palette.
+
+- **Tiles:** bingos, cards, the average card, cards with a line, and predictions that came true.
+- **Form over the season:** a line per player, in *per episode*, *running total* or *place* mode
+  (standing after each bingo). The viewer's own line is emphasised. Up to eight players can be picked,
+  and each keeps their colour under any filter. A crosshair tooltip and a table view are included.
+- **Cards per bingo**, **how predictable each episode was** (against the average) and **how cards score**.
+- **Records:** best single card, most bingos played, longest run with a line, the most and least
+  predictable episode, and the safest prediction.
+
+All of it comes from one backend-owned site document, `history` (`BingoHistory`, recomputed with the
+dirty-gated roll-up). Only players who allow being listed get a line, capped at the best 50 like the
+standings. Everything that names nobody counts every card, so places stay true. A bingo's own page
+adds how its cards scored and how predictable it was compared with the rest.
+
 The tile and the page have a *Share* button. It shares the player's own result once the published board
 carries it, and the bingo itself otherwise.
 
@@ -237,8 +256,8 @@ re-reads when it is opened and after the viewer's own actions.
 
 ```bash
 ./build.sh                                   # -> dist/
-cd backend && ./gradlew test                 # 116 tests, no core and no database
-cd frontend && npm test && npm run typecheck # 121 tests
+cd backend && ./gradlew test                 # 124 tests, no core and no database
+cd frontend && npm test && npm run typecheck # 135 tests
 ```
 
 `build.sh` writes only `dist/` — `plugin.json`, `bingo.jar`, `assets/bingo.es.js`.
@@ -287,11 +306,14 @@ backend/                 Java 21, PF4J extension, depends only on the SDK
     BingoRecord.java     cards into schema rows (the freeze), scoring
     BingoPublish.java    featured cards, notifications, site standings, suggestions
     BingoPages.java      which /p/bingo/ subpaths exist, and their share cards
+    BingoHistory.java    pure: the history the site page charts
     BingoFuzzy.java      pure entry grouping — no ctx, no clock, no I/O
 frontend/                React 18 + Vite, bundled as one ES module
   src/bingo-element.tsx  defines the custom elements (tile, feed badge, page)
   src/fuzzy.ts           the browser's advisory copy of the comparison rules
   src/regroup.ts         pins for the podcaster's split/merge corrections
+  src/history.ts         pure transforms for the history charts; src/palette.ts the player colours
+  src/components/charts/ hand-drawn SVG line and bar charts
   src/components/        the tile, the feed badge, the page, the resolve dialog
 shared/fuzzy-vectors.json  one answer key for the Java and TypeScript comparison rules
 docs/ROADMAP.md          ideas recorded but not built, and what each is waiting on

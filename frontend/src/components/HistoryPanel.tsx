@@ -97,6 +97,12 @@ export function HistoryPanel({
       now.includes(author) ? now.filter((a) => a !== author) : now.length >= MAX_SHOWN ? now : [...now, author],
     );
 
+  // ---- cards per bingo: the late layer only when somebody played late, or its legend names nothing
+  const cardStacks = [
+    { key: 'ranked', label: i18n.t('history.ranked'), color: seriesColor(0, dark), values: shown.map((e) => e.ranked) },
+    { key: 'late', label: i18n.t('leaderboard.late'), color: seriesColor(3, dark), values: shown.map((e) => e.late) },
+  ].filter((x) => x.key === 'ranked' || x.values.some((v) => v > 0));
+
   // ---- distribution over the kept episodes
   const counts: number[] = [];
   for (const e of shown) (e.lineCounts ?? []).forEach((c, l) => (counts[l] = (counts[l] ?? 0) + c));
@@ -197,18 +203,12 @@ export function HistoryPanel({
           <BarChart
             xLabels={xLabels}
             xTitles={xTitles}
-            stacks={[
-              { key: 'ranked', label: i18n.t('history.ranked'), color: seriesColor(0, dark), values: shown.map((e) => e.ranked) },
-              { key: 'late', label: i18n.t('leaderboard.late'), color: seriesColor(3, dark), values: shown.map((e) => e.late) },
-            ]}
+            stacks={cardStacks}
             ticks={niceTicks(Math.max(1, ...shown.map((e) => e.players)))}
             format={(v) => num(v, 0)}
             label={i18n.t('history.cardsPer')}
           />
-          <Legend items={[
-            { key: 'ranked', label: i18n.t('history.ranked'), color: seriesColor(0, dark) },
-            { key: 'late', label: i18n.t('leaderboard.late'), color: seriesColor(3, dark) },
-          ]} />
+          <Legend items={cardStacks.map((x) => ({ key: x.key, label: x.label, color: x.color }))} />
 
           <h3 className="bingo__chart-title">{i18n.t('history.predictable')}</h3>
           <BarChart

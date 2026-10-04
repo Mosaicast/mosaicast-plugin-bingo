@@ -50,7 +50,9 @@ export function LineChart({
   const n = xLabels.length;
   if (n === 0) return null;
 
-  const right = PAD.right + (directLabels ? 64 : 0);
+  // A phone has no room for names beside the plot; the legend below carries them there.
+  const wantLabels = directLabels && width >= 480;
+  const right = PAD.right + (wantLabels ? 96 : 0);
   const plotW = Math.max(80, width - PAD.left - right);
   const plotH = HEIGHT - PAD.top - PAD.bottom;
   const band = plotW / n;
@@ -81,6 +83,15 @@ export function LineChart({
     for (let i = s.values.length - 1; i >= 0; i--) if (s.values[i] !== null) return i;
     return -1;
   };
+  // End labels only while they stay apart. Nudging colliding ones detaches them from their lines, so when
+  // two would overlap they all go, and the legend and tooltip carry identity instead.
+  const ends = series
+    .map((s) => lastOf(s))
+    .map((i, k) => (i < 0 ? null : { x: x(i), y: y(series[k].values[i]!) }));
+  const apart = ends.every((a, j) =>
+    ends.every((b, k) => k <= j || !a || !b || Math.abs(a.x - b.x) > 60 || Math.abs(a.y - b.y) >= 14),
+  );
+  const labelled = wantLabels && apart;
 
   return (
     <div className="bingo__chart" ref={ref}>
@@ -113,7 +124,7 @@ export function LineChart({
                   fill={s.color} stroke="var(--mc-surface)" strokeWidth={2} />
               ),
             )}
-            {directLabels && lastOf(s) >= 0 && (
+            {labelled && lastOf(s) >= 0 && (
               <text className="bingo__end-label" x={x(lastOf(s)) + 8} y={y(s.values[lastOf(s)]!) + 4}>
                 {s.label}
               </text>

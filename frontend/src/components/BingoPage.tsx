@@ -294,7 +294,7 @@ function EpisodeView({
         <h2 className="bingo__title">{state.template.title || state.snapshot.title}</h2>
         <span className="bingo__phase">{i18n.t(`phase.${phase.toLowerCase()}`)}</span>
       </div>
-      <p className="bingo__hint">{state.snapshot.title}</p>
+      {state.template.title && <p className="bingo__hint">{state.snapshot.title}</p>}
 
       {featuredRow && (
         <p className="bingo__warn">

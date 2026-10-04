@@ -112,12 +112,16 @@ export function slotOf(players: PlayerSeries[], author: string): number {
   return players.findIndex((p) => p.author === author);
 }
 
-/** Round tick values from 0 up to at least `max`, about four steps. */
-export function niceTicks(max: number): number[] {
+/**
+ * Round tick values from 0 up to at least `max`, about four steps. Counts and scores are whole numbers, so
+ * by default no step is smaller than 1 — a "0.5 lines" tick would name a value nothing can take.
+ */
+export function niceTicks(max: number, opts: { fractional?: boolean } = {}): number[] {
   if (!(max > 0)) return [0, 1];
   const raw = max / 4;
   const magnitude = 10 ** Math.floor(Math.log10(raw));
-  const step = [1, 2, 2.5, 5, 10].map((m) => m * magnitude).find((s) => s >= raw) ?? 10 * magnitude;
+  let step = [1, 2, 2.5, 5, 10].map((m) => m * magnitude).find((s) => s >= raw) ?? 10 * magnitude;
+  if (!opts.fractional) step = Math.max(1, Math.ceil(step));
   const ticks: number[] = [];
   for (let v = 0; v < max + step / 2; v += step) ticks.push(Number(v.toFixed(6)));
   if (ticks[ticks.length - 1] < max) ticks.push(Number((ticks[ticks.length - 1] + step).toFixed(6)));
