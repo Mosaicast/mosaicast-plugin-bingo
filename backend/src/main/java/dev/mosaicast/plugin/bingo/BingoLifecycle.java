@@ -3,6 +3,7 @@
 
 package dev.mosaicast.plugin.bingo;
 
+import dev.mosaicast.plugin.api.DisplaySnapshot;
 import dev.mosaicast.plugin.api.EpisodePhase;
 import dev.mosaicast.plugin.api.PluginContext;
 import dev.mosaicast.plugin.api.Scope;
@@ -104,6 +105,15 @@ final class BingoLifecycle {
             return ctx.feeds().display(slug).phase() != EpisodePhase.PLANNED;
         } catch (RuntimeException e) {
             return false;
+        }
+    }
+
+    /** The episode's snapshot, or {@code null} for a ref the host does not know. */
+    DisplaySnapshot snapshotOf(String slug) {
+        try {
+            return ctx.feeds().display(slug);
+        } catch (RuntimeException e) {
+            return null;
         }
     }
 

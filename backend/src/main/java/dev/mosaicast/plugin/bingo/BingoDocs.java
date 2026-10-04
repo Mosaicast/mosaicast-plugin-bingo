@@ -52,6 +52,8 @@ final class BingoDocs {
     static final String KEY_SHOWCASED = "showcased";
     /** Predictions people keep making, in the site scope, for the card editor to offer. Backend-owned. */
     static final String KEY_SUGGESTIONS = "suggestions";
+    /** How past bingos went, episode after episode, in the site scope. Backend-owned. */
+    static final String KEY_HISTORY = "history";
     /** Cumulative standings, in the site scope. Backend-owned. */
     static final String KEY_STATS = "stats";
     /** Who has already been told this bingo resolved, so nobody is told twice. Backend-owned. */
@@ -360,4 +362,60 @@ final class BingoDocs {
 
     /** A card as collected for one tick, before it becomes rows. */
                     record CardInput(String author, List<String> entries) {}
+
+    // ---------------------------------------------------------------- history (see BingoHistory)
+
+    /**
+     * How past bingos went, for the site page's charts. Site scope, backend-owned, resolved and public
+     * bingos only. A series, a place on it and a record name a player, so only listed players get one;
+     * everything that names nobody counts every ranked card.
+     *
+     * @param episodes     oldest first
+     * @param players      at most {@code MAX_PUBLISHED_ROWS}, best cumulative score first
+     * @param distribution how many ranked cards ended with each number of lines
+     */
+    record History(List<HistoryEpisode> episodes, List<PlayerSeries> players, List<LineCount> distribution,
+                   HistoryRecords records, String rankBy, String computedAt) {}
+
+    /**
+     * One resolved bingo in the history.
+     *
+     * @param title      the bingo's own name, if it has one; the episode's title is read live
+     * @param players    every card, late ones included
+     * @param ranked     the cards that were in the running; the averages are over these
+     * @param hitRate    the share, 0 to 1, of distinct predictions that came true
+     * @param candidates how many distinct predictions there were
+     */
+    record HistoryEpisode(String slug, String title, String feed, Integer season, Integer episodeNo,
+                          String publishedAt, int players, int ranked, int late, double avgFields, double avgLines,
+                          double withLine, double hitRate, int candidates) {}
+
+    /** One listed player's ranked cards, oldest first. */
+    record PlayerSeries(String author, int cards, List<Point> points) {}
+
+    /**
+     * One card on a series.
+     *
+     * @param e the episode's index in {@link History#episodes()}
+     * @param f squares that came true
+     * @param l lines
+     * @param p place among every ranked card of that episode, 1 the best, ties sharing a place
+     */
+    record Point(int e, int f, int l, int p) {}
+
+    /** How many ranked cards ended with this many lines. */
+    record LineCount(int lines, int cards) {}
+
+    /** The history's records. Each names a listed player or an episode, or is {@code null}. */
+    record HistoryRecords(CardRecord bestCard, PlayerCount mostCards, PlayerCount longestStreak,
+                          EpisodeRate mostPredictable, EpisodeRate leastPredictable) {}
+
+    /** One player's single best card. */
+    record CardRecord(String author, String slug, int fields, int lines, int cells) {}
+
+    /** A player and how many of something they have. */
+    record PlayerCount(String author, int count) {}
+
+    /** An episode and the share of its predictions that came true. */
+    record EpisodeRate(String slug, double hitRate) {}
 }

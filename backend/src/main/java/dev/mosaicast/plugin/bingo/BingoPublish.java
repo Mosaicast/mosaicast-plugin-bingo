@@ -229,17 +229,11 @@ final class BingoPublish {
      * ticked off so far, and standings that climb while they tick would leak exactly the progress the
      * episode's own leaderboard withholds until the end.
      */
-    void stats(Map<String, Prefs> prefs, BingoScore.RankBy rankBy, List<BingoSummary> bingos) {
-        SchemaStore schema = ctx.schema();
-        if (schema == null) {
-            return;
-        }
-        Set<String> resolved = resolvedOf(bingos);
-        Map<String, Boolean> visible = new LinkedHashMap<>();
-        List<CardResultRow> rows = schema.select(ENTITY_CARD_RESULT,
-                        Criteria.where("ranked", Criteria.Op.EQ, true), CardResultRow.class).stream()
-                .filter(row -> resolved.contains(row.episode()))
-                .filter(row -> visible.computeIfAbsent(row.episode(), lifecycle::publiclyVisible))
+    void stats(Corpus corpus, Map<String, Prefs> prefs, BingoScore.RankBy rankBy, List<BingoSummary> bingos) {
+        List<CardResultRow> rows = corpus.results().stream()
+                .filter(CardResultRow::ranked)
+                .filter(row -> corpus.resolved().contains(row.episode()))
+                .filter(row -> corpus.isPublic(row.episode()))
                 .toList();
 
         Map<String, StandingRow> byAuthor = new LinkedHashMap<>();
@@ -263,8 +257,7 @@ final class BingoPublish {
 
         // An archived bingo was never checked against the feed on this pass; a quiet one was left out already.
         List<BingoSummary> listed = bingos.stream()
-                .filter(b -> !Phase.ARCHIVED.name().equals(b.phase())
-                        || visible.computeIfAbsent(b.slug(), lifecycle::publiclyVisible))
+                .filter(b -> !Phase.ARCHIVED.name().equals(b.phase()) || corpus.isPublic(b.slug()))
                 .toList();
         ctx.store().put(Scope.site(), KEY_STATS,
                 new Stats(standings, (int) episodes, listed, now().toString()));
@@ -282,18 +275,13 @@ final class BingoPublish {
      *
      * <p>Run with the site roll-up, so only when something it is computed from changed.
      */
-    void suggestions(double threshold, List<BingoSummary> bingos) {
+    void suggestions(Corpus corpus, double threshold) {
         // Whether a prediction came true is only settled once its bingo is resolved; counted earlier, the
         // number would move while a podcaster ticks off and give the progress away.
-        Set<String> resolved = resolvedOf(bingos);
-        SchemaStore schema = ctx.schema();
-        if (schema == null) {
-            return;
-        }
-        Map<String, Boolean> visible = new LinkedHashMap<>();
-        List<EntryRow> rows = schema.select(ENTITY_ENTRY, Criteria.where("ranked", Criteria.Op.EQ, true),
-                        EntryRow.class).stream()
-                .filter(row -> visible.computeIfAbsent(row.episode(), lifecycle::publiclyVisible))
+        Set<String> resolved = corpus.resolved();
+        List<EntryRow> rows = corpus.entries().stream()
+                .filter(EntryRow::ranked)
+                .filter(row -> corpus.isPublic(row.episode()))
                 .toList();
 
         BingoFuzzy.Grouping grouping = BingoFuzzy.group(rows.stream().map(EntryRow::text).toList(), threshold);
@@ -340,4 +328,65 @@ final class BingoPublish {
     static final int MIN_AUTHORS = 2;
     /** How many suggestions the document carries; every card editor on the site reads it. */
     static final int MAX_SUGGESTIONS = 30;
+
+    // ---------------------------------------------------------------- the roll-up's rows
+
+    /**
+     * Everything the site roll-up is computed from, read once per roll-up and shared by the standings, the
+     * suggestions and the history - each used to select the same tables on its own.
+     *
+     * @param results  every {@code card_result} row, ranked and late
+     * @param entries  every {@code entry} row
+     * @param visible  each episode in the rows or the bingo list that everyone may see, with its snapshot
+     * @param resolved the bingos whose answers are settled
+     */
+    record Corpus(List<CardResultRow> results, List<EntryRow> entries, Map<String, DisplaySnapshot> visible,
+                  Set<String> resolved) {
+
+        boolean isPublic(String slug) {
+            return visible.containsKey(slug);
+        }
+    }
+
+    /** Reads the rows and checks each episode against the feed once. {@code null} without a schema. */
+    Corpus corpus(List<BingoSummary> bingos) {
+        SchemaStore schema = ctx.schema();
+        if (schema == null) {
+            return null;
+        }
+        List<CardResultRow> results = schema.select(ENTITY_CARD_RESULT, Criteria.all(), CardResultRow.class);
+        List<EntryRow> entries = schema.select(ENTITY_ENTRY, Criteria.all(), EntryRow.class);
+        Set<String> slugs = new LinkedHashSet<>();
+        results.forEach(r -> slugs.add(r.episode()));
+        bingos.forEach(b -> slugs.add(b.slug()));
+        Map<String, DisplaySnapshot> visible = new LinkedHashMap<>();
+        for (String slug : slugs) {
+            DisplaySnapshot snapshot = lifecycle.snapshotOf(slug);
+            if (snapshot != null && snapshot.phase() != dev.mosaicast.plugin.api.EpisodePhase.PLANNED) {
+                visible.put(slug, snapshot);
+            }
+        }
+        return new Corpus(results, entries, visible, resolvedOf(bingos));
+    }
+
+    // ---------------------------------------------------------------- history
+
+    /**
+     * How past bingos went, episode after episode, for the site page's charts (see {@link BingoHistory}).
+     * Resolved bingos on episodes everyone may see; series only for players who allow being listed.
+     */
+    void history(Corpus corpus, Map<String, Prefs> prefs, BingoScore.RankBy rankBy, List<BingoSummary> bingos) {
+        List<BingoHistory.Input> episodes = new ArrayList<>();
+        for (BingoSummary b : bingos) {
+            DisplaySnapshot snapshot = corpus.visible().get(b.slug());
+            if (snapshot == null || !corpus.resolved().contains(b.slug())) {
+                continue;
+            }
+            episodes.add(new BingoHistory.Input(b.slug(), b.title(), snapshot.feed(), snapshot.season(),
+                    snapshot.episodeNo(), snapshot.publishedAt()));
+        }
+        History history = BingoHistory.compute(episodes, corpus.results(), corpus.entries(),
+                author -> prefsFor(prefs, author).listedOrDefault(), rankBy, MAX_PUBLISHED_ROWS, now());
+        ctx.store().put(Scope.site(), KEY_HISTORY, history);
+    }
 }
