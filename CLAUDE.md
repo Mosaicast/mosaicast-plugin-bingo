@@ -26,27 +26,17 @@ scripts/set-version.sh <x.y.z>                # bumps the plugin version in all 
 ```
 plugin.json                             manifest: slots, storage.schema, data floors, config
 backend/src/main/java/dev/mosaicast/plugin/bingo/
-  BingoPlugin.java                      register + the scheduled tick + every extension point (PF4J singleton)
-  BingoDocs.java                        doc keys, document records, schema row shapes
-  BingoLifecycle.java                   phase derivation (intent + release + archive timer)
-  BingoRecord.java                      ingest into schema rows (the freeze) + scoring
-  BingoPublish.java                     showcase, notifications, site stats, suggestions
-  BingoPages.java                       PageRouteProvider + ShareMetadataProvider logic for /p/bingo/
-  BingoHistory.java                     pure: the `history` doc the page charts (resolved + public only)
-  BingoImport.java / BingoExport.java   import:* docs → resolved bingos; claims; own cards as mosaicast-bingo/1
-scripts/bingo-import.mjs                importer (no deps) — format in docs/import-format.md
-  BingoFuzzy.java / BingoScore.java     pure grouping and scoring (no ctx, no clock, no I/O)
-backend/src/test/.../BingoSchemaFixture.java   builds FakeSchemaStore FROM plugin.json
-backend/src/test/.../BingoTestSupport.java     shared fixtures; new test classes extend it
-shared/fuzzy-vectors.json               one answer key for BingoFuzzy.java and frontend/src/fuzzy.ts
-frontend/src/bingo-element.tsx          defines the custom elements
-frontend/src/{keys,types}.ts            doc keys and document shapes — mirror BingoDocs' records
-frontend/src/{fuzzy,regroup}.ts         advisory card checks; split/merge pins
-frontend/src/{history,palette}.ts       chart transforms; validated player palette (shared with stats)
-frontend/src/components/charts/         hand-drawn SVG LineChart/BarChart — no chart library
-frontend/src/components/                EpisodeBingo (+ CreatePanel, PodcasterActions, Results, RecapPanel,
-                                        SuggestionChips, CardChecks), EpisodeCardBadge, BingoPage, ResolveModal
-docs/ROADMAP.md                         deferred ideas + what each waits on — keep it current
+  BingoPlugin.java                      register + tick + every extension point (PF4J singleton)
+  BingoDocs / BingoLifecycle / BingoRecord   keys+records / phase derivation / rows (the freeze) + scoring
+  BingoPublish / BingoPages / BingoImport    showcase, notify, stats, suggestions, history / /p/bingo routes+OG /
+                                             import:* docs → resolved bingos, claims (BingoExport: own cards)
+  BingoFuzzy / BingoScore / BingoHistory     pure (no ctx, clock, I/O): grouping, scoring, the history doc
+backend/src/test/.../BingoSchemaFixture + BingoTestSupport   schema FROM plugin.json; shared fixtures
+shared/fuzzy-vectors.json · scripts/bingo-import.mjs (no deps; docs/import-format.md) · docs/ROADMAP.md (keep current)
+frontend/src/{keys,types}.ts            doc keys and shapes — mirror BingoDocs' records
+frontend/src/{fuzzy,regroup,history,palette}.ts   card checks, split/merge pins, chart transforms, player palette
+frontend/src/components/                EpisodeBingo (+ parts), EpisodeCardBadge, BingoPage, HistoryPanel, ClaimBox,
+                                        ResolveModal, charts/ (hand-drawn SVG, no chart library)
 frontend/locales/{en,de}.json           UI strings
 ```
 
