@@ -85,6 +85,7 @@
       "stats",
       "suggestions",
       "history",
+      "imports",
       "notified",
       "participants",
       "showcased"

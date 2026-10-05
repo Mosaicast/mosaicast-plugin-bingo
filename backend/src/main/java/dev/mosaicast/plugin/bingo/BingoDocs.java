@@ -52,6 +52,17 @@ final class BingoDocs {
     static final String KEY_SHOWCASED = "showcased";
     /** Predictions people keep making, in the site scope, for the card editor to offer. Backend-owned. */
     static final String KEY_SUGGESTIONS = "suggestions";
+    /**
+     * A bingo played before this site existed, waiting to be taken in: {@code import:<batch>-<n>}, site scope.
+     * Client-written by the import script with a podcaster's token, and deleted by the backend once applied.
+     */
+    static final String IMPORT_PREFIX = "import:";
+    /** A request to take a claim back and rotate its code: {@code unclaim:<hash>}, site scope. Client-written. */
+    static final String UNCLAIM_PREFIX = "unclaim:";
+    /** What became of each import and claim, in the site scope. Backend-owned. */
+    static final String KEY_IMPORTS = "imports";
+    /** A player's claim codes for imported cards, in their own partition. */
+    static final String KEY_CLAIM = "claim";
     /** How past bingos went, episode after episode, in the site scope. Backend-owned. */
     static final String KEY_HISTORY = "history";
     /** Cumulative standings, in the site scope. Backend-owned. */
@@ -420,4 +431,59 @@ final class BingoDocs {
 
     /** An episode and the share of its predictions that came true. */
     record EpisodeRate(String slug, double hitRate) {}
+
+    // ---------------------------------------------------------------- imports and claims (see BingoImport)
+
+    /**
+     * One past bingo as the import script hands it over. Cards carry pseudonymous authors only
+     * ({@code import:<uuid>}); nobody is attached to an account except by their own claim.
+     *
+     * @param onExisting {@code "merge"} to add these cards to a resolved bingo already on the episode;
+     *                   anything else refuses such an episode
+     * @param claims     claim-code hash (SHA-256, hex) to the pseudonym it unlocks
+     */
+    record ImportDoc(String slug, String title, Integer size, Boolean freeCentre, String onExisting,
+                     List<ImportCard> cards, Map<String, String> claims) {}
+
+    /** One imported card: its pseudonymous author, whether it was in the running, its squares in order. */
+    record ImportCard(String author, Boolean ranked, List<ImportSquare> squares) {}
+
+    /** One square of an imported card, as written and as judged back then. */
+    record ImportSquare(String text, Boolean hit) {}
+
+    /** A request to take a claim back: the code's hash, and the hash of the code that replaces it. */
+    record UnclaimDoc(String hash, String newHash) {}
+
+    /** A player's claim codes, in their own partition. */
+    record ClaimDoc(List<String> codes) {}
+
+    /**
+     * What became of every import and claim. Backend-owned and public, so it holds hashes only: a claim
+     * code is the secret, and only its holder can find their own result here.
+     *
+     * @param claims  unused code hash to the pseudonym it unlocks
+     * @param claimed used code hash to what claiming it did
+     */
+    record Imports(List<ImportApplied> applied, List<ImportRejected> rejected, Map<String, String> claims,
+                   Map<String, ClaimResult> claimed, String updatedAt) {
+
+        static Imports empty() {
+            return new Imports(List.of(), List.of(), Map.of(), Map.of(), null);
+        }
+    }
+
+    /** An import that became (or joined) a bingo. */
+    record ImportApplied(String id, String slug, int cards, boolean merged, String at) {}
+
+    /** An import that was refused, and why. */
+    record ImportRejected(String id, String reason, String at) {}
+
+    /**
+     * What one claim did.
+     *
+     * @param linked   bingos whose imported card moved to the claimant
+     * @param skipped  bingos left anonymous because the claimant already had their own card there
+     * @param episodes the episodes that moved, so the claim can be taken back
+     */
+    record ClaimResult(String pseudonym, int linked, int skipped, List<String> episodes, String at) {}
 }

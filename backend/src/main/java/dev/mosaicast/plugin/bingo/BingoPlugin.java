@@ -101,6 +101,7 @@ public class BingoPlugin implements PluginBackend, UserDataHandler, PageRoutePro
     private BingoLifecycle lifecycle;
     private BingoRecord record;
     private BingoPublish publish;
+    private BingoImport importer;
     /** Set once {@link #register} has run; the host may ask about pages before that. */
     private volatile BingoPages pages;
     /** What the last site roll-up was computed from, and when; see {@link #rollUp}. */
@@ -128,6 +129,7 @@ public class BingoPlugin implements PluginBackend, UserDataHandler, PageRoutePro
         this.pages = new BingoPages(ctx, lifecycle);
         this.everyone = Objects.requireNonNull(ctx.allUsers(),
                 "bingo needs data.readsAllUsers in plugin.json: it reads every player's card");
+        this.importer = new BingoImport(ctx, clock, everyone, lifecycle);
 
         // Publish once at boot as well as on the schedule: `backendOwned` closes a key only from the moment
         // the manifest declares it and does not remove a value a client forged before that.
@@ -158,6 +160,14 @@ public class BingoPlugin implements PluginBackend, UserDataHandler, PageRoutePro
     /** One scheduled pass over the working set, then the site-wide roll-up. */
     void tick() {
         synchronized (passLock) {
+            // Past bingos and claims first, so the pass below already scores and publishes what they changed.
+            try {
+                if (importer.run(settings().threshold())) {
+                    record.markChanged();
+                }
+            } catch (RuntimeException e) {
+                ctx.logger().warn("bingo import pass failed", e);
+            }
             Pass pass = pass();
             List<String> slugs = ctx.feeds().episodesIn(Scope.site());
 
@@ -369,7 +379,12 @@ public class BingoPlugin implements PluginBackend, UserDataHandler, PageRoutePro
             return;
         }
 
-        record.ingest(slug, cards, rows, grouping, template.get(), writtenUnder, allowLate);
+        // Only cards that still have a document of their own are read again. A card that exists only as rows -
+        // imported, or whose document is gone - is the record already, and rewriting it would re-rank it.
+        Set<String> withDocument = new java.util.HashSet<>();
+        pass.cards().getOrDefault(slug, List.of()).forEach(c -> withDocument.add(c.author()));
+        record.ingest(slug, cards.stream().filter(c -> withDocument.contains(c.author())).toList(), rows, grouping,
+                template.get(), writtenUnder, allowLate);
         BingoRecord.Scored scored = record.score(slug, template.get(), grouping, resolution, prefs, phase, rankBy);
         ctx.store().put(scope, KEY_LEADERBOARD, scored.board());
         ctx.store().put(scope, KEY_RECAP, record.recap(scored, items, cardCounts, resolution, phase));
@@ -549,6 +564,13 @@ public class BingoPlugin implements PluginBackend, UserDataHandler, PageRoutePro
         ctx.logger().info("bingo erased the identity link on a user's rows");
     }
 
+    /**
+     * {@inheritDoc}
+     *
+     * <p>The person's own cards, in {@code mosaicast-bingo/1} - the format the import script reads - so the
+     * part core bundles into a data export is a file they can take elsewhere and bring back. Only their own
+     * cards: nobody else's card is personal data of theirs. Core does not call this yet (core#263).
+     */
     @Override
     public Optional<Map<String, Object>> exportUser(String userId) {
         SchemaStore schema = ctx.schema();
@@ -556,11 +578,11 @@ public class BingoPlugin implements PluginBackend, UserDataHandler, PageRoutePro
             return Optional.empty();
         }
         List<EntryRow> entries = schema.select(ENTITY_ENTRY, byAuthor(userId), EntryRow.class);
-        List<CardResultRow> results = schema.select(ENTITY_CARD_RESULT, byAuthor(userId), CardResultRow.class);
-        if (entries.isEmpty() && results.isEmpty()) {
+        if (entries.isEmpty()) {
             return Optional.empty();
         }
-        return Optional.of(Map.of("entries", entries, "results", results));
+        return Optional.of(BingoExport.ownBingos(entries, slug ->
+                ctx.store().get(Scope.episode(slug), KEY_TEMPLATE, Template.class).orElse(null)));
     }
 
     // ---------------------------------------------------------------- pages

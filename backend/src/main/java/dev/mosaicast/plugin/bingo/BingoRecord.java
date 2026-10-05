@@ -61,6 +61,11 @@ final class BingoRecord {
      *
      * <p>What lets the site roll-up skip a pass in which nothing it is computed from moved.
      */
+    /** Something outside this helper rewrote rows (an import, a claim); the roll-up must run. */
+    void markChanged() {
+        changed = true;
+    }
+
     boolean takeChanged() {
         boolean was = changed;
         changed = false;
