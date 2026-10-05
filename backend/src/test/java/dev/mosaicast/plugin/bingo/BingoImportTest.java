@@ -46,8 +46,8 @@ class BingoImportTest extends BingoTestSupport {
         new BingoPlugin(clock).register(ctx);
 
         assertEquals("RESOLVED", phase(ctx).orElseThrow().phase());
-        assertEquals(new BingoDocs.Row(max, 2, 0, 9, true), rowFor(ctx, max), "Tyrion + Arya, as marked");
-        assertEquals(new BingoDocs.Row(alex, 2, 0, 9, true), rowFor(ctx, alex), "Tyrion + Snow; Arya kill was a miss");
+        assertEquals(new BingoDocs.Row(max, 2, 0, 9, true), resultFor(ctx, max), "Tyrion + Arya, as marked");
+        assertEquals(new BingoDocs.Row(alex, 2, 0, 9, true), resultFor(ctx, alex), "Tyrion + Snow; Arya kill was a miss");
         assertTrue(ctx.store().get(Scope.site(), "import:b1-1", Object.class).isEmpty(), "taken in, then removed");
         var report = imports(ctx);
         assertEquals(1, report.applied().size());
@@ -69,8 +69,8 @@ class BingoImportTest extends BingoTestSupport {
         config.with("fuzzyThreshold", 0.5);
         plugin.tick();
 
-        assertEquals(1, rowFor(ctx, max).fields());
-        assertEquals(0, rowFor(ctx, alex).fields());
+        assertEquals(1, resultFor(ctx, max).fields());
+        assertEquals(0, resultFor(ctx, alex).fields());
     }
 
     @Test
@@ -82,7 +82,7 @@ class BingoImportTest extends BingoTestSupport {
 
         new BingoPlugin(clock).register(ctx);
 
-        assertEquals(2, rowFor(ctx, max).fields(), "a plus the free middle");
+        assertEquals(2, resultFor(ctx, max).fields(), "a plus the free middle");
         assertTrue(ctx.store().get(Scope.episode(EPISODE), BingoDocs.KEY_TEMPLATE, BingoDocs.Template.class)
                 .orElseThrow().hasFreeCentre());
     }
@@ -144,8 +144,8 @@ class BingoImportTest extends BingoTestSupport {
         plugin.tick();
 
         assertTrue(imports(ctx).applied().get(0).merged());
-        assertEquals(1, rowFor(ctx, max).fields(), "his prediction came true back then, whatever was decided here");
-        assertEquals(0, rowFor(ctx, alice.toString()).fields(), "and hers still did not");
+        assertEquals(1, resultFor(ctx, max).fields(), "his prediction came true back then, whatever was decided here");
+        assertEquals(0, resultFor(ctx, alice.toString()).fields(), "and hers still did not");
     }
 
     @Test
@@ -159,8 +159,9 @@ class BingoImportTest extends BingoTestSupport {
 
         var history = ctx.store().get(Scope.site(), BingoDocs.KEY_HISTORY, BingoDocs.History.class).orElseThrow();
         assertEquals(2, history.episodes().get(0).ranked(), "counted");
-        assertTrue(history.players().isEmpty() || history.players().stream().allMatch(p -> p.author().startsWith("import:")),
-                "a pseudonym is the only name it has");
+        assertTrue(history.players().isEmpty(), "nobody chose to be shown, so nobody is");
+        assertTrue(leaderboard(ctx).ranked().isEmpty(), "not on the board either");
+        assertEquals(2, leaderboard(ctx).players(), "but counted");
         assertTrue(notifier.delivered().isEmpty());
     }
 
@@ -171,8 +172,8 @@ class BingoImportTest extends BingoTestSupport {
 
         new BingoPlugin(clock).register(ctx);
 
-        assertFalse(rowFor(ctx, alex).ranked());
-        assertTrue(rowFor(ctx, max).ranked());
+        assertFalse(resultFor(ctx, alex).ranked());
+        assertTrue(resultFor(ctx, max).ranked());
     }
 
     // ---------------------------------------------------------------- claims
@@ -189,7 +190,7 @@ class BingoImportTest extends BingoTestSupport {
         claim(ctx, alice, "gop7 k2mq 9xd4 htfa"); // spacing and case do not matter
         plugin.tick();
 
-        assertEquals(1, rowFor(ctx, alice.toString()).fields());
+        assertEquals(1, resultFor(ctx, alice.toString()).fields());
         assertEquals(0, ctx.schema().count(BingoDocs.ENTITY_ENTRY, Criteria.where("author", Criteria.Op.EQ, max)));
         var result = imports(ctx).claimed().get(BingoImport.hashOf(MAX_CODE));
         assertEquals(1, result.linked());
@@ -228,7 +229,7 @@ class BingoImportTest extends BingoTestSupport {
         var result = imports(ctx).claimed().get(BingoImport.hashOf(MAX_CODE));
         assertEquals(1, result.linked());
         assertEquals(1, result.skipped(), "her own card there is the record");
-        assertEquals(1, rowFor(ctx, alice.toString()).fields(), "still her live card");
+        assertEquals(1, resultFor(ctx, alice.toString()).fields(), "still her live card");
         assertEquals(9, ctx.schema().count(BingoDocs.ENTITY_ENTRY, Criteria.where("author", Criteria.Op.EQ, max)),
                 "the clashing imported card - nine squares - stays anonymous");
     }
@@ -242,7 +243,7 @@ class BingoImportTest extends BingoTestSupport {
         plugin.register(ctx);
         claim(ctx, bob, MAX_CODE); // a leaked code, used by the wrong person
         plugin.tick();
-        assertEquals(1, rowFor(ctx, bob.toString()).fields());
+        assertEquals(1, resultFor(ctx, bob.toString()).fields());
 
         ctx.store().put(Scope.site(), BingoDocs.UNCLAIM_PREFIX + "x",
                 Map.of("hash", BingoImport.hashOf(MAX_CODE), "newHash", BingoImport.hashOf(newCode)));
@@ -253,7 +254,7 @@ class BingoImportTest extends BingoTestSupport {
                 Criteria.where("author", Criteria.Op.EQ, bob.toString())), "back to the pseudonym, and not re-claimed");
         claim(ctx, alice, newCode);
         plugin.tick();
-        assertEquals(1, rowFor(ctx, alice.toString()).fields());
+        assertEquals(1, resultFor(ctx, alice.toString()).fields());
     }
 
     @Test
@@ -373,6 +374,13 @@ class BingoImportTest extends BingoTestSupport {
     private void claim(FakePluginContext ctx, UUID user, String code) {
         ctx.store().asUser(user).put(Scope.user(), BingoDocs.KEY_CLAIM, Map.of("codes", List.of(code)));
         clock.advance(Duration.ofMinutes(1));
+    }
+
+    /** A card's score as recorded, whether or not the public board names its author. */
+    private static BingoDocs.Row resultFor(FakePluginContext ctx, String author) {
+        var row = ctx.schema().select(BingoDocs.ENTITY_CARD_RESULT, Criteria.where("author", Criteria.Op.EQ, author),
+                BingoDocs.CardResultRow.class).get(0);
+        return new BingoDocs.Row(row.author(), row.fields(), row.lines(), row.cells(), row.ranked());
     }
 
     private static BingoDocs.Imports imports(FakePluginContext ctx) {

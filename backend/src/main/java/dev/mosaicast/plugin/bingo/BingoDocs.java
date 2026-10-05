@@ -113,6 +113,11 @@ final class BingoDocs {
     }
 
     static Prefs prefsFor(Map<String, Prefs> prefs, String author) {
+        if (author.startsWith(IMPORT_PREFIX)) {
+            // An imported player nobody has claimed yet chose nothing, so nothing is shown: counted like
+            // somebody who opted out, never named, never featured. Claiming makes their own choice apply.
+            return Prefs.UNCLAIMED;
+        }
         Prefs p = prefs.get(author);
         return p == null ? Prefs.DEFAULT : p;
     }
@@ -162,6 +167,7 @@ final class BingoDocs {
      */
     record Prefs(Boolean listed, Boolean showcasable) {
         static final Prefs DEFAULT = new Prefs(null, null);
+        static final Prefs UNCLAIMED = new Prefs(false, false);
 
         boolean listedOrDefault() {
             return !Boolean.FALSE.equals(listed);
