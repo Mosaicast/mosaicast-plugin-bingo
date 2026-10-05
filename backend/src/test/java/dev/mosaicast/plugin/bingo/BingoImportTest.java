@@ -257,6 +257,27 @@ class BingoImportTest extends BingoTestSupport {
     }
 
     @Test
+    void bingosImportedAfterTheClaimFollowTheClaimant() {
+        var ctx = ctx(published(true));
+        String later = "the-sample-cast-s01e05";
+        feeds.withDisplay(later, published(true));
+        putImport(ctx, "import:b1-1", bingo(3, false, Map.of(BingoImport.hashOf(MAX_CODE), max), nine(max, "a", true)));
+        var plugin = new BingoPlugin(clock);
+        plugin.register(ctx);
+        claim(ctx, alice, MAX_CODE);
+        plugin.tick();
+
+        Map<String, Object> next = new LinkedHashMap<>(bingo(3, false, Map.of(BingoImport.hashOf(MAX_CODE), max),
+                nine(max, "b", true)));
+        next.put("slug", later);
+        putImport(ctx, "import:b2-1", next);
+        plugin.tick();
+
+        assertEquals(0, ctx.schema().count(BingoDocs.ENTITY_ENTRY, Criteria.where("author", Criteria.Op.EQ, max)));
+        assertEquals(2, imports(ctx).claimed().get(BingoImport.hashOf(MAX_CODE)).linked());
+    }
+
+    @Test
     void anUnknownCodeChangesNothing() {
         var ctx = ctx(published(true));
         putImport(ctx, "import:b1-1", bingo(3, false, Map.of(BingoImport.hashOf(MAX_CODE), max), nine(max, "a", true)));

@@ -357,9 +357,13 @@ final class BingoImport {
 
     /** Moves a pseudonym's cards onto the claimant, except where they already have a card of their own. */
     private boolean claim(String hash, String user, State state) {
-        String pseudonym = state.claims.get(hash);
-        if (pseudonym == null || state.claimed.containsKey(hash)) {
+        ClaimResult earlier = state.claimed.get(hash);
+        String pseudonym = earlier != null ? earlier.pseudonym() : state.claims.get(hash);
+        if (pseudonym == null) {
             return false;
+        }
+        if (earlier != null) {
+            return collect(hash, user, earlier, state);
         }
         SchemaStore schema = ctx.schema();
         Map<String, List<EntryRow>> byEpisode = new LinkedHashMap<>();
@@ -382,6 +386,32 @@ final class BingoImport {
         state.claimed.put(hash, new ClaimResult(pseudonym, moved.size(), skipped, moved, now()));
         state.changed = true;
         return !moved.isEmpty();
+    }
+
+    /**
+     * A code already used keeps working for its claimant: bingos imported after the claim move to them too,
+     * on the next pass. Clashes with their own cards are left anonymous, as on the first claim.
+     */
+    private boolean collect(String hash, String user, ClaimResult earlier, State state) {
+        SchemaStore schema = ctx.schema();
+        Set<String> waiting = new LinkedHashSet<>();
+        for (EntryRow row : schema.select(ENTITY_ENTRY, byAuthor(earlier.pseudonym()), EntryRow.class)) {
+            if (!earlier.episodes().contains(row.episode()) && schema.count(ENTITY_ENTRY, byCard(row.episode(), user)) == 0) {
+                waiting.add(row.episode());
+            }
+        }
+        if (waiting.isEmpty()) {
+            return false;
+        }
+        List<String> episodes = new ArrayList<>(earlier.episodes());
+        for (String slug : waiting) {
+            move(slug, earlier.pseudonym(), user);
+            quiet(slug, user);
+            episodes.add(slug);
+        }
+        state.claimed.put(hash, new ClaimResult(earlier.pseudonym(), episodes.size(), earlier.skipped(), episodes, now()));
+        state.changed = true;
+        return true;
     }
 
     /**
