@@ -64,6 +64,10 @@ jobs:
         working-directory: frontend
         run: npm test
 
+      # The import script has no dependencies; its pure parts are tested with Node's own runner.
+      - name: Test scripts
+        run: node --test scripts/*.test.mjs
+
   package:
     name: Package (build.sh -> dist/)
     runs-on: ubuntu-latest

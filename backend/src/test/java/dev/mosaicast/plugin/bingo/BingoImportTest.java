@@ -289,6 +289,8 @@ class BingoImportTest extends BingoTestSupport {
 
         assertTrue(imports(ctx).claimed().isEmpty());
         assertNull(BingoImport.hashOf("short"), "too short to be a code");
+        // scripts/bingo-import.test.mjs asserts the same value: the script and the backend must agree.
+        assertEquals("b80087d0460bafadda33996223a80e9e44e963829286bdeb4701ce8d3cb845c0", BingoImport.hashOf("gop7-k2mq 9xd4-htfa"));
     }
 
     // ---------------------------------------------------------------- export
