@@ -42,6 +42,15 @@ build.
   cards per bingo, how predictable each episode was, how cards score, and records. They come from a new
   backend-owned site document, `history`: resolved and public bingos only, and named series only for
   listed players. A bingo's own page shows how its cards scored.
+- **Importing past bingos** with `scripts/bingo-import.mjs` from a `mosaicast-bingo/1` file
+  (`docs/import-format.md`). It does a dry run first, reports every problem with its location, and skips
+  episodes that already have a bingo unless asked to merge. The backend takes each bingo in whole, and
+  every card scores exactly as the file marks it. Players get **claim codes** instead of being attached
+  to accounts: until claimed they count without a name, and the person enters their code on `/p/bingo/`
+  to take the cards over. A code can be revoked and reissued.
+- `exportUser` hands over a person's own cards as `mosaicast-bingo/1`, ready for core's data export
+  (core#263).
+- Season pills name the feed when the history spans more than one.
 - `docs/ROADMAP.md`: deferred ideas and what each one is waiting on.
 - **A bingo for an episode that has not aired, end to end** (core 0.7.7's planned episodes). A podcaster
   prepares the bingo while the planned episode is quiet, players fill in cards once it is announced, and

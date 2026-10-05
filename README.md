@@ -51,6 +51,17 @@ the middle square away, create. Everyone can fill in a card from the moment it e
 The middle square is **yours to write by default**. Giving it away is a deliberate choice per bingo, and it
 only means anything under line scoring — on a 3x3 the middle sits on four of the eight lines.
 
+## Importing past bingos
+
+Bingos played before a site ran Mosaicast can be imported with `scripts/bingo-import.mjs` and a
+podcaster's personal access token. It does a dry run first and imports only with `--apply`. Imported
+bingos are resolved bingos like any other: scored exactly as the file marks them, ranked, and part of the
+history and charts.
+
+Players are never attached to an account by the importer. Each one gets a **claim code** and counts
+without a name until the person enters that code on `/p/bingo/`. The full format, the rules, and what is
+refused and why are in [`docs/import-format.md`](docs/import-format.md).
+
 ## Filling in a card
 
 The editor checks a card's own squares as you type, in the browser and without asking the backend. A
@@ -256,8 +267,9 @@ re-reads when it is opened and after the viewer's own actions.
 
 ```bash
 ./build.sh                                   # -> dist/
-cd backend && ./gradlew test                 # 124 tests, no core and no database
-cd frontend && npm test && npm run typecheck # 135 tests
+cd backend && ./gradlew test                 # 138 tests, no core and no database
+cd frontend && npm test && npm run typecheck # 141 tests
+node --test scripts/*.test.mjs               # the import script
 ```
 
 `build.sh` writes only `dist/` — `plugin.json`, `bingo.jar`, `assets/bingo.es.js`.
@@ -307,6 +319,9 @@ backend/                 Java 21, PF4J extension, depends only on the SDK
     BingoPublish.java    featured cards, notifications, site standings, suggestions
     BingoPages.java      which /p/bingo/ subpaths exist, and their share cards
     BingoHistory.java    pure: the history the site page charts
+    BingoImport.java     past bingos taken in from import documents, and claims
+    BingoExport.java     a person's own cards as mosaicast-bingo/1
+scripts/bingo-import.mjs the importer (dry run, --apply, unclaim); docs/import-format.md
     BingoFuzzy.java      pure entry grouping — no ctx, no clock, no I/O
 frontend/                React 18 + Vite, bundled as one ES module
   src/bingo-element.tsx  defines the custom elements (tile, feed badge, page)

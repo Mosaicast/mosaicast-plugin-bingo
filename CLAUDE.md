@@ -16,8 +16,9 @@ Java 21 (Gradle, PF4J extension) · React 18 + Vite (Web Component) · **platfor
 ## Commands
 ```
 ./build.sh                                    # -> dist/{plugin.json,bingo.jar,assets/bingo.es.js}
-cd backend  && ./gradlew test                 # 124 tests
-cd frontend && npm test && npm run typecheck  # 135 tests
+cd backend  && ./gradlew test                 # 138 tests
+cd frontend && npm test && npm run typecheck  # 141 tests
+node --test scripts/*.test.mjs                # import script (also in CI)
 scripts/set-version.sh <x.y.z>                # bumps the plugin version in all three files
 ```
 
@@ -32,6 +33,8 @@ backend/src/main/java/dev/mosaicast/plugin/bingo/
   BingoPublish.java                     showcase, notifications, site stats, suggestions
   BingoPages.java                       PageRouteProvider + ShareMetadataProvider logic for /p/bingo/
   BingoHistory.java                     pure: the `history` doc the page charts (resolved + public only)
+  BingoImport.java / BingoExport.java   import:* docs → resolved bingos; claims; own cards as mosaicast-bingo/1
+scripts/bingo-import.mjs                importer (no deps) — format in docs/import-format.md
   BingoFuzzy.java / BingoScore.java     pure grouping and scoring (no ctx, no clock, no I/O)
 backend/src/test/.../BingoSchemaFixture.java   builds FakeSchemaStore FROM plugin.json
 backend/src/test/.../BingoTestSupport.java     shared fixtures; new test classes extend it
@@ -137,6 +140,8 @@ frontend/locales/{en,de}.json           UI strings
   late spelling cannot rename them; a row's `canonical` follows the current grouping, so pins re-score.
 - **Nothing public reflects an unresolved bingo's score**: not the board, not site standings, not a
   suggestion's hit count. And no share card (OG) ever names a prediction — previews are read unspoilered.
+- **Imports never attach an account**: authors are `import:<uuid>` (real ids refused), unlisted until the
+  person claims them with a code (hash-only on the server). Imported scores must equal the file's hit flags.
 - **Charts colour by player, never by rank in the current view**: slot = place in `history.players`. A
   named series exists only for listed players; place/aggregates count everyone.
 - **The site roll-up (stats + suggestions + history) is dirty-gated** in `BingoPlugin.rollUp`: add any new input to
@@ -147,9 +152,10 @@ frontend/locales/{en,de}.json           UI strings
   non-authoritative and live only in the plugin UI.
 - The host resolves scopes and decides access/filters — plugins only consume.
 - Per-user data goes in the `USER` scope, **never** in a key. A key naming a user is an IDOR.
-- Keys the backend computes (`phase`, `candidates`, `leaderboard`, `recap`, `stats`, `suggestions`, `history`, `notified`,
+- Keys the backend computes (`phase`, `candidates`, `leaderboard`, `recap`, `stats`, `suggestions`, `history`, `imports`, `notified`,
   `participants`, `showcased`) are in `data.backendOwned` and written in `register()` as well as on the schedule.
-  Client-written keys (`template`, `resolution`, `control`, `showcase`, `grouping`) must **never** be listed there.
+  Client-written keys (`template`, `resolution`, `control`, `showcase`, `grouping`, `import:*`, `unclaim:*`)
+  must **never** be listed there.
 - A person's visibility choice lives in their own partition (`prefs`) and is enforced backend-side on every
   tick — never trusted from a podcaster's stale pick.
 

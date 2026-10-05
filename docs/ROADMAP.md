@@ -56,6 +56,19 @@ The `history` document carries series for the best 50 listed players, the same c
 a listed player further down has no line of their own. The fix belongs with personal history (above): a
 per-user readable document would carry the viewer's own series however far down they are.
 
+### A podcaster upload dialog for past bingos
+Importing is a script for now (`scripts/bingo-import.mjs`). The backend path is the import document, which
+a dialog on the page could write just as well: file picker, the same dry-run report, then apply. It's worth
+building once a second podcast wants to import.
+
+### The plugin's part of the GDPR data export
+`exportUser` already returns a person's own cards as `mosaicast-bingo/1`. Core doesn't ask yet:
+[core#263](https://github.com/Mosaicast/mosaicast-core/issues/263) and
+[sdk#102](https://github.com/Mosaicast/mosaicast-plugin-sdk/issues/102) propose one ZIP built from every
+plugin's part. Once the file form lands, hand the same document over as `bingos.json`. An admin full
+export, with everyone's cards, stays an ops script after core#261. It is never offered to players: being
+listed covers a name and a score, not a card.
+
 ### Anonymous suggestions
 Suggestions are for signed-in players only, because only they can fill in a card. If anonymous visitors
 get a read-only "popular predictions" panel, its on/off switch belongs in `localStorage` behind a
