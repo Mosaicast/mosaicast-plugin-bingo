@@ -8,6 +8,7 @@ import {
   MAX_SHOWN,
   defaultSelection,
   episodesIn,
+  feedName,
   niceTicks,
   seasonsOf,
   slotOf,
@@ -129,7 +130,9 @@ export function HistoryPanel({
           {seasons.map((x) => (
             <button key={x.key} type="button" className="bingo__pill" aria-pressed={season === x.key}
               onClick={() => setSeason(x.key)}>
-              {i18n.t('history.seasonN', { season: String(x.season) })}
+              {x.feed
+                ? i18n.t('history.seasonNFeed', { season: String(x.season), feed: feedName(x.feed) })
+                : i18n.t('history.seasonN', { season: String(x.season) })}
             </button>
           ))}
         </div>

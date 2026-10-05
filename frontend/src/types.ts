@@ -440,3 +440,25 @@ export interface History {
   rankBy?: RankBy;
   computedAt?: string;
 }
+
+/** What one claim did. */
+export interface ClaimResult {
+  linked: number;
+  skipped: number;
+  at?: string;
+}
+
+/** Backend-owned, site scope: imports and claims, by code hash only. */
+export interface Imports {
+  /** Unused code hash → the pseudonym it unlocks. Present means this site has imported bingos. */
+  claims?: Record<string, string>;
+  /** Used code hash → what claiming it did. */
+  claimed?: Record<string, ClaimResult>;
+  updatedAt?: string;
+}
+
+/** A player's claim codes, in their own partition. `savedAt` lets the box tell "waiting" from "unknown". */
+export interface ClaimDoc {
+  codes?: string[];
+  savedAt?: Record<string, string>;
+}

@@ -9,6 +9,7 @@ import {
   KEY_CONTROL,
   KEY_GROUPING,
   KEY_HISTORY,
+  KEY_IMPORTS,
   KEY_LEADERBOARD,
   KEY_PHASE,
   KEY_RECAP,
@@ -30,7 +31,7 @@ describe('plugin.json', () => {
 
   it('reserves every key the backend computes', () => {
     const owned = manifest.data.backendOwned;
-    for (const key of [KEY_PHASE, KEY_CANDIDATES, KEY_LEADERBOARD, KEY_RECAP, KEY_STATS, KEY_SUGGESTIONS, KEY_HISTORY,
+    for (const key of [KEY_PHASE, KEY_CANDIDATES, KEY_LEADERBOARD, KEY_RECAP, KEY_STATS, KEY_SUGGESTIONS, KEY_HISTORY, KEY_IMPORTS,
                        KEY_PARTICIPANTS, KEY_SHOWCASED]) {
       expect(owned).toContain(key);
     }
@@ -39,7 +40,8 @@ describe('plugin.json', () => {
   it('reserves none of the keys the browser has to write', () => {
     // Reserving a client-written key does not protect anything — it 403s the plugin against its own UI.
     const owned = manifest.data.backendOwned;
-    for (const key of [KEY_TEMPLATE, KEY_RESOLUTION, KEY_CONTROL, KEY_SHOWCASE, KEY_GROUPING]) {
+    // `import:*` and `unclaim:*` are written by the import script with a podcaster's token.
+    for (const key of [KEY_TEMPLATE, KEY_RESOLUTION, KEY_CONTROL, KEY_SHOWCASE, KEY_GROUPING, 'import:x-1', 'unclaim:x']) {
       expect(owned).not.toContain(key);
     }
   });

@@ -89,3 +89,12 @@ export const CARD_PREFIX = 'card:';
  * how a preference becomes noise people stop reading.
  */
 export const KEY_PREFS = 'prefs';
+
+/**
+ * Backend-owned, site scope: what became of every import of past bingos and every claim. Holds claim-code
+ * hashes only, so a player finds their own result by hashing their code (see `ClaimBox`).
+ */
+export const KEY_IMPORTS = 'imports';
+
+/** A player's claim codes for imported bingos, in their own partition. */
+export const KEY_CLAIM = 'claim';

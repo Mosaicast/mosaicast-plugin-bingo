@@ -15,6 +15,8 @@ export type FormMode = 'episode' | 'total' | 'place';
 export interface SeasonKey {
   key: string;
   season: number;
+  /** The feed's slug, set only when the history spans more than one feed — "Season 1" alone would be two pills. */
+  feed?: string;
 }
 
 /** The seasons present in the history, in the order they were first played. Unnumbered episodes have none. */
@@ -26,10 +28,17 @@ export function seasonsOf(history: History | null): SeasonKey[] {
     const key = seasonKey(e);
     if (!seen.has(key)) {
       seen.add(key);
-      out.push({ key, season: e.season });
+      out.push({ key, season: e.season, feed: e.feed ?? undefined });
     }
   }
-  return out;
+  const feeds = new Set(out.map((s) => s.feed));
+  return feeds.size > 1 ? out : out.map(({ key, season }) => ({ key, season }));
+}
+
+/** A feed slug, readable: "game-of-pods" → "Game of pods". The SDK hands a plugin no feed titles. */
+export function feedName(slug: string): string {
+  const words = slug.replace(/[-_]+/g, ' ').trim();
+  return words.charAt(0).toUpperCase() + words.slice(1);
 }
 
 export function seasonKey(e: HistoryEpisode): string {

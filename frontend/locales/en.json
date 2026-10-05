@@ -165,5 +165,14 @@
   "history.reliable": "Safest prediction",
   "history.reliableValue": "came true in {{hits}} of {{episodes}} episode(s)",
   "history.here": "{{here}} of the predictions on this bingo came true.",
-  "history.hereVsAverage": "{{here}} of the predictions on this bingo came true; across all bingos it is {{average}}."
+  "history.hereVsAverage": "{{here}} of the predictions on this bingo came true; across all bingos it is {{average}}.",
+  "history.seasonNFeed": "Season {{season}} · {{feed}}",
+  "claim.title": "Played before this site existed?",
+  "claim.hint": "If you were given a code for bingos played before, enter it here. Those cards become yours, and your leaderboard choice applies to them too.",
+  "claim.code": "Your code",
+  "claim.save": "Link my bingos",
+  "claim.waiting": "saved, linked on the next update",
+  "claim.unknown": "not recognised, or already used by someone else",
+  "claim.linked": "linked {{linked}} bingo(s)",
+  "claim.linkedSkipped": "linked {{linked}} bingo(s); {{skipped}} skipped because you already have a card there"
 }

@@ -165,5 +165,14 @@
   "history.reliable": "Sicherster Tipp",
   "history.reliableValue": "in {{hits}} von {{episodes}} Folge(n) eingetreten",
   "history.here": "{{here}} der Tipps in diesem Bingo sind eingetreten.",
-  "history.hereVsAverage": "{{here}} der Tipps in diesem Bingo sind eingetreten; über alle Bingos sind es {{average}}."
+  "history.hereVsAverage": "{{here}} der Tipps in diesem Bingo sind eingetreten; über alle Bingos sind es {{average}}.",
+  "history.seasonNFeed": "Staffel {{season}} · {{feed}}",
+  "claim.title": "Schon vor dieser Seite mitgespielt?",
+  "claim.hint": "Wenn du einen Code für früher gespielte Bingos bekommen hast, gib ihn hier ein. Die Karten werden dann deine, und deine Ranglisten-Einstellung gilt auch für sie.",
+  "claim.code": "Dein Code",
+  "claim.save": "Bingos verknüpfen",
+  "claim.waiting": "gespeichert, wird bei der nächsten Aktualisierung verknüpft",
+  "claim.unknown": "nicht erkannt oder bereits von jemand anderem verwendet",
+  "claim.linked": "{{linked}} Bingo(s) verknüpft",
+  "claim.linkedSkipped": "{{linked}} Bingo(s) verknüpft; {{skipped}} übersprungen, weil du dort schon eine Karte hast"
 }

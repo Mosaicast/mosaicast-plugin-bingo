@@ -5,6 +5,7 @@ import { describe, expect, it } from 'vitest';
 import {
   defaultSelection,
   episodesIn,
+  feedName,
   niceTicks,
   seasonsOf,
   slotOf,
@@ -37,6 +38,15 @@ describe('history transforms', () => {
     expect(seasonsOf(HISTORY)).toEqual([{ key: 'cast:1', season: 1 }, { key: 'cast:2', season: 2 }]);
     expect(episodesIn(HISTORY, 'cast:2')).toEqual([2, 3]);
     expect(episodesIn(HISTORY, null)).toEqual(ALL);
+  });
+
+  it('names the feed on a season pill only when two feeds would share a label', () => {
+    const two: History = { episodes: [ep('e1', 1), { ...ep('x1', 1), feed: 'game-of-pods' }] };
+    expect(seasonsOf(two)).toEqual([
+      { key: 'cast:1', season: 1, feed: 'cast' },
+      { key: 'game-of-pods:1', season: 1, feed: 'game-of-pods' },
+    ]);
+    expect(feedName('game-of-pods')).toBe('Game of pods');
   });
 
   it('leaves a gap per episode and carries the running total across one sat out', () => {

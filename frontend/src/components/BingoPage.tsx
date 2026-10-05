@@ -5,7 +5,16 @@ import { useEffect, useMemo, useState } from 'react';
 import { matchRoute, type DisplaySnapshot, type PluginContext, type UserRef } from '@mosaicast/plugin-sdk';
 import { makeI18n, type PluginI18n } from '../i18n';
 import { Icon } from '../icons';
-import { KEY_HISTORY, KEY_LEADERBOARD, KEY_PHASE, KEY_RECAP, KEY_STATS, KEY_SUGGESTIONS, KEY_TEMPLATE } from '../keys';
+import {
+  KEY_HISTORY,
+  KEY_IMPORTS,
+  KEY_LEADERBOARD,
+  KEY_PHASE,
+  KEY_RECAP,
+  KEY_STATS,
+  KEY_SUGGESTIONS,
+  KEY_TEMPLATE,
+} from '../keys';
 import {
   gridSize,
   lineCount,
@@ -15,11 +24,13 @@ import {
   type RankBy,
   type Recap,
   type History,
+  type Imports,
   type Stats,
   type Suggestions,
   type Template,
 } from '../types';
 import { Shell, nameOf } from './common';
+import { ClaimBox } from './ClaimBox';
 import { EpisodeScores, HistoryPanel } from './HistoryPanel';
 import { RecapPanel } from './RecapPanel';
 import { Results } from './Results';
@@ -63,15 +74,16 @@ function SiteView({ ctx, i18n }: { ctx: PluginContext; i18n: PluginI18n }) {
     stats: Stats | null;
     history: History | null;
     suggestions: Suggestions | null;
+    imports: Imports | null;
     titles: Record<string, DisplaySnapshot>;
     people: Record<string, UserRef>;
-  }>({ loading: true, stats: null, history: null, suggestions: null, titles: {}, people: {} });
+  }>({ loading: true, stats: null, history: null, suggestions: null, imports: null, titles: {}, people: {} });
 
   useEffect(() => {
     let live = true;
     (async () => {
       // Every site-wide document the page draws, in one request.
-      const site = await readScope(ctx, { type: 'site', id: 'main' }, [KEY_STATS, KEY_HISTORY, KEY_SUGGESTIONS]);
+      const site = await readScope(ctx, { type: 'site', id: 'main' }, [KEY_STATS, KEY_HISTORY, KEY_SUGGESTIONS, KEY_IMPORTS]);
       const stats = pick<Stats>(site, KEY_STATS);
       const history = pick<History>(site, KEY_HISTORY);
       const slugs = [
@@ -92,12 +104,15 @@ function SiteView({ ctx, i18n }: { ctx: PluginContext; i18n: PluginI18n }) {
           stats,
           history,
           suggestions: pick<Suggestions>(site, KEY_SUGGESTIONS),
+          imports: pick<Imports>(site, KEY_IMPORTS),
           titles,
           people,
         });
       }
     })().catch(() => {
-      if (live) setState({ loading: false, stats: null, history: null, suggestions: null, titles: {}, people: {} });
+      if (live) {
+        setState({ loading: false, stats: null, history: null, suggestions: null, imports: null, titles: {}, people: {} });
+      }
     });
     return () => {
       live = false;
@@ -153,6 +168,8 @@ function SiteView({ ctx, i18n }: { ctx: PluginContext; i18n: PluginI18n }) {
           })}
         </ol>
       )}
+
+      <ClaimBox ctx={ctx} i18n={i18n} imports={state.imports} />
 
       <HistoryPanel
         ctx={ctx}
