@@ -4,6 +4,7 @@
 package dev.mosaicast.plugin.bingo;
 
 import dev.mosaicast.plugin.api.CrossUserStore;
+import dev.mosaicast.plugin.api.DisplaySnapshot;
 import dev.mosaicast.plugin.api.EpisodePhase;
 import dev.mosaicast.plugin.api.OgMeta;
 import dev.mosaicast.plugin.api.OwnedDocEntry;
@@ -212,15 +213,17 @@ public class BingoPlugin implements PluginBackend, UserDataHandler, PageRoutePro
      * episode with a bingo.
      */
     private Pass pass() {
-        return new Pass(settings(), readPrefs(), collectCards(), new LinkedHashSet<>(), new ArrayList<>());
+        return new Pass(settings(), readPrefs(), collectCards(), new LinkedHashSet<>(), new ArrayList<>(),
+                new ArrayList<>());
     }
 
     /**
      * @param quiet   filled during the pass: working-set episodes nobody but a podcaster may know exist
      * @param bingos  filled during the pass: every bingo there is, for the site page's list
+     * @param numbers filled during the pass: each working-set episode's season and number
      */
     private record Pass(Settings settings, Map<String, Prefs> prefs, Map<String, List<CardInput>> cards,
-                        Set<String> quiet, List<BingoSummary> bingos) {}
+                        Set<String> quiet, List<BingoSummary> bingos, List<String> numbers) {}
 
     /**
      * The site-wide roll-up, recomputed only when something it is computed from moved.
@@ -241,7 +244,7 @@ public class BingoPlugin implements PluginBackend, UserDataHandler, PageRoutePro
                 Double.toString(pass.settings().threshold()), Integer.toString(pass.settings().minCards()),
                 String.join(",", unlisted),
                 Integer.toHexString(slugs.hashCode()), String.join(",", new TreeSet<>(pass.quiet())),
-                Integer.toHexString(pass.bingos().hashCode()));
+                Integer.toHexString(pass.bingos().hashCode()), Integer.toHexString(pass.numbers().hashCode()));
         Instant now = now();
         boolean stale = lastRollUp == null || !now.isBefore(lastRollUp.plus(ROLL_UP_REFRESH));
         if (!rowsChanged && !stale && fingerprint.equals(lastRollUpInputs)) {
@@ -297,7 +300,12 @@ public class BingoPlugin implements PluginBackend, UserDataHandler, PageRoutePro
             return;
         }
 
-        EpisodePhase release = lifecycle.releasePhaseOf(slug);
+        DisplaySnapshot snapshot = lifecycle.snapshotOf(slug);
+        EpisodePhase release = snapshot == null ? null : snapshot.phase();
+        if (snapshot != null) {
+            // A podcaster can renumber an episode (core 0.7.7), which moves it between seasons in the history.
+            pass.numbers().add(slug + "=" + snapshot.season() + "/" + snapshot.episodeNo());
+        }
         if (release == EpisodePhase.PLANNED) {
             pass.quiet().add(slug);
         }

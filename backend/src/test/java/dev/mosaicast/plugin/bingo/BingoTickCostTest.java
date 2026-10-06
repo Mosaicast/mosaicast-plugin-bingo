@@ -110,6 +110,27 @@ class BingoTickCostTest extends BingoTestSupport {
     }
 
     @Test
+    void aRenumberedEpisodeRefreshesTheRollUp() {
+        var ctx = ctx(published(true));
+        seedTemplate(ctx);
+        seedCard(ctx, alice, List.of("kraken"));
+        resolve(ctx, Map.of("kraken", true));
+        control(ctx, "RESOLVED");
+        var plugin = new BingoPlugin(clock);
+        plugin.register(ctx);
+        String before = stats(ctx).computedAt();
+
+        // A podcaster moves the episode to another season (core 0.7.7).
+        var renumbered = snapshot(EpisodePhase.RELEASED);
+        feeds.withDisplay(EPISODE, new dev.mosaicast.plugin.api.DisplaySnapshot(renumbered.title(), "", null, null,
+                null, null, null, null, null, "", "feed", 2, 0, EpisodePhase.RELEASED, null));
+        clock.advance(Duration.ofMinutes(1));
+        plugin.tick();
+
+        assertNotEquals(before, stats(ctx).computedAt(), "the history's seasons must follow at once, not in an hour");
+    }
+
+    @Test
     void oneReadOfEveryCardServesEveryEpisode() {
         String other = "the-sample-cast-s01e05";
         var schema = BingoSchemaFixture.schema();
