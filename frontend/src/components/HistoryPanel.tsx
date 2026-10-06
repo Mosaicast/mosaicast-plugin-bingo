@@ -9,6 +9,7 @@ import {
   defaultSelection,
   episodesIn,
   feedName,
+  scopeKey,
   niceTicks,
   seasonsOf,
   slotOf,
@@ -24,6 +25,7 @@ import { BarChart } from './charts/BarChart';
 import { Legend } from './charts/kit';
 import { LineChart, type LineSeries } from './charts/LineChart';
 import { nameOf } from './common';
+import { RankingPanel } from './RankingPanel';
 
 /**
  * The site page's history: tiles, form over the season, cards per bingo, how predictable each episode was,
@@ -110,7 +112,9 @@ export function HistoryPanel({
   for (let l = 0; l < counts.length; l++) counts[l] = counts[l] ?? 0;
 
   // ---- records
-  const records = history?.records;
+  const scope = history?.scopes?.[scopeKey(season)];
+  const records = scope?.records;
+  const seasonLabel = seasons.find((x) => x.key === season);
   const bySlug = (slug: string) => episodes.find((e) => e.slug === slug);
   const reliable = [...(suggestions?.items ?? [])]
     .filter((x) => x.hits > 0)
@@ -146,6 +150,21 @@ export function HistoryPanel({
         <Tile label={i18n.t('history.tileWithLine')} value={pct(s.withLine)} />
         <Tile label={i18n.t('history.tileHitRate')} value={pct(s.hitRate)} sub={i18n.t('history.tileHitRateSub')} />
       </div>
+
+      <p className="bingo__section-title">
+        {seasonLabel
+          ? i18n.t('ranking.season', { season: String(seasonLabel.season) })
+          : i18n.t('ranking.allSeasons')}
+      </p>
+      <RankingPanel
+        key={scopeKey(season)}
+        i18n={i18n}
+        stats={scope}
+        people={people}
+        me={viewer}
+        rankBy={rankBy}
+        label={seasonLabel ? i18n.t('ranking.season', { season: String(seasonLabel.season) }) : i18n.t('ranking.allSeasons')}
+      />
 
       {kept.length < 2 ? (
         <p className="bingo__note">{i18n.t('history.needTwo')}</p>
@@ -268,7 +287,8 @@ export function HistoryPanel({
           <Record label={i18n.t('history.leastPredictable')} value={pct(records.leastPredictable.hitRate)}
             where={titleIfKnown(bySlug(records.leastPredictable.slug), titleOf)} />
         )}
-        {reliable && (
+        {/* Suggestions carry no season, so this one is all-time and shown only there. */}
+        {reliable && season === null && (
           <Record label={i18n.t('history.reliable')} value={`“${reliable.label}”`}
             where={i18n.t('history.reliableValue', { hits: String(reliable.hits), episodes: String(reliable.episodes) })} />
         )}

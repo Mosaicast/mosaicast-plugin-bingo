@@ -62,8 +62,13 @@ describe('<BingoPage>', () => {
     return ctx;
   }
 
+  /** The all-time standings come from the history's "all" scope, like every other ranking on the page. */
+  const HISTORY = {
+    scopes: { all: { bar: 3, belowBar: 0, bingos: 2, byTotal: [{ author: 'u1', fields: 9, lines: 3, cards: 2, cells: 18 }] } },
+  };
+
   it('lists the standings and every bingo the visitor may see', async () => {
-    const ctx = await render('', { 'data/site/main/stats': STATS });
+    const ctx = await render('', { 'data/site/main/stats': STATS, 'data/site/main/history': HISTORY });
 
     expect(host.textContent).toContain('Ned');
     expect(host.textContent).toContain('3 line(s), 9 square(s) over 2 card(s)');

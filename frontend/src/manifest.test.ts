@@ -122,4 +122,18 @@ describe('plugin.json', () => {
       }
     }
   });
+
+  it('describes every setting in both languages, and bounds every number', () => {
+    // The generic admin form shows label and description instead of the raw key (core 0.7.2), and refuses a
+    // number outside min/max (0.16.0) — a field missing either is a form nobody can read or trust.
+    const config = (manifest as unknown as { config: Record<string, Record<string, unknown>> }).config;
+    for (const [key, field] of Object.entries(config)) {
+      expect(field.label, key).toMatchObject({ en: expect.any(String), de: expect.any(String) });
+      expect(field.description, key).toMatchObject({ en: expect.any(String), de: expect.any(String) });
+      if (field.type === 'number' && !field.options) {
+        expect([field.min, field.max, field.step], key).toEqual([expect.any(Number), expect.any(Number), expect.any(Number)]);
+      }
+    }
+    expect(config.minCardsPerCard).toMatchObject({ default: 3, min: 1, editableBy: 'podcaster' });
+  });
 });

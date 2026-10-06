@@ -430,13 +430,33 @@ export interface HistoryRecords {
   leastPredictable?: { slug: string; hitRate: number } | null;
 }
 
+/** One player's score per card within a scope. */
+export interface AverageRow {
+  author: string;
+  cards: number;
+  fields: number;
+  lines: number;
+}
+
+/** Rankings and records within one scope. Listed players only; those below the card bar are counted, never named. */
+export interface ScopeStats {
+  byTotal?: StandingRow[];
+  byAverage?: AverageRow[];
+  /** How many cards the per-card ranking asks for in this scope. */
+  bar: number;
+  belowBar: number;
+  records?: HistoryRecords;
+  bingos: number;
+}
+
 /** Backend-owned, site scope: how past bingos went, for the site page's charts. Resolved, public bingos only. */
 export interface History {
   episodes?: HistoryEpisode[];
   /** At most fifty, best cumulative score first — which is also each player's colour slot. */
   players?: PlayerSeries[];
   distribution?: { lines: number; cards: number }[];
-  records?: HistoryRecords;
+  /** Rankings and records per scope: `"all"`, or one season as `<feed>:<season>` (see `scopeKey`). */
+  scopes?: Record<string, ScopeStats>;
   rankBy?: RankBy;
   computedAt?: string;
 }

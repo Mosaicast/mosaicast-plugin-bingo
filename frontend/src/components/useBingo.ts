@@ -365,7 +365,10 @@ export async function resolvePeople(
   if (!directory || ids.length === 0) return {}; // no `identity` block in the manifest
 
   try {
-    const found = await directory.resolve([...new Set(ids)]);
+    // The host answers at most 500 ids a call; a page of rankings per season can ask for more.
+    const unique = [...new Set(ids)];
+    const found: UserRef[] = [];
+    for (let i = 0; i < unique.length; i += 500) found.push(...(await directory.resolve(unique.slice(i, i + 500))));
     return Object.fromEntries(found.map((u) => [u.id, u]));
   } catch (error) {
     // A board that renders without names beats one that does not render.

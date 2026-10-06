@@ -22,11 +22,27 @@ const HISTORY: History = {
     { author: 'u2', cards: 3, points: [0, 1, 3].map((e) => ({ e, f: 4, l: 1, p: 2 })) },
     { author: 'u3', cards: 1, points: [{ e: 2, f: 2, l: 0, p: 3 }] },
   ],
-  records: {
-    bestCard: { author: 'u1', slug: 'e1', fields: 5, lines: 2, cells: 9 },
-    longestStreak: { author: 'u1', count: 4 },
-    mostPredictable: { slug: 'e2', hitRate: 0.8 },
-    leastPredictable: { slug: 'e1', hitRate: 0.4 },
+  scopes: {
+    all: {
+      bar: 3, belowBar: 1, bingos: 4,
+      byTotal: [
+        { author: 'u1', fields: 20, lines: 8, cards: 4, cells: 36 },
+        { author: 'u2', fields: 12, lines: 3, cards: 3, cells: 27 },
+      ],
+      byAverage: [{ author: 'u1', cards: 4, fields: 5, lines: 2 }, { author: 'u2', cards: 3, fields: 4, lines: 1 }],
+      records: {
+        bestCard: { author: 'u1', slug: 'e1', fields: 5, lines: 2, cells: 9 },
+        longestStreak: { author: 'u1', count: 4 },
+        mostPredictable: { slug: 'e2', hitRate: 0.8 },
+        leastPredictable: { slug: 'e1', hitRate: 0.4 },
+      },
+    },
+    'cast:2': {
+      bar: 2, belowBar: 0, bingos: 2,
+      byTotal: [{ author: 'u3', fields: 2, lines: 0, cards: 1, cells: 9 }],
+      byAverage: [],
+      records: { bestCard: { author: 'u3', slug: 'e3', fields: 2, lines: 0, cells: 9 } },
+    },
   },
 };
 
@@ -112,6 +128,35 @@ describe('<HistoryPanel>', () => {
     )!;
     await act(async () => chip.click());
     expect(lines()).toHaveLength(2);
+  });
+
+  it('ranks by total or per card, and counts who is below the bar without naming them', async () => {
+    await render();
+    const ranking = () => host.querySelector('.bingo__ranking')!.textContent!;
+    expect(ranking()).toContain('Ned');
+    await act(async () => button('Per card').click());
+    expect(ranking()).toContain('2 lines per card · 4 card(s)');
+    expect(ranking()).toContain('1 more player(s) need at least 3 card(s)');
+  });
+
+  it('makes the ranking and the records follow the season pill', async () => {
+    await render();
+    expect(host.textContent).toContain('Ranking · all seasons');
+    expect(host.textContent).toContain('Safest prediction');
+
+    await act(async () => button('Season 2').click());
+
+    expect(host.textContent).toContain('Ranking · Season 2');
+    const ranking = host.querySelector('.bingo__ranking')!.textContent!;
+    expect(ranking).toContain('Bob');
+    expect(ranking).not.toContain('Ned');
+    expect(host.querySelector('.bingo__records')!.textContent).toContain('· Bob');
+    expect(host.textContent).not.toContain('Safest prediction');
+  });
+
+  it('labels an episode 0 as such, not as unnumbered', async () => {
+    await render({ ...HISTORY, episodes: [ep('e0', 5, 0), ep('e1', 5, 1)], players: [], scopes: {} });
+    expect([...host.querySelectorAll('.bingo__axis')].map((a) => a.textContent)).toContain('S5E0');
   });
 
   it('shows a tooltip for an episode on keyboard focus', async () => {

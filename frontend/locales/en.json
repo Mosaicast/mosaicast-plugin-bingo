@@ -81,7 +81,7 @@
   "showcase.save": "Save selection",
   "showcase.title": "Featured cards",
   "stats.cards": "{{count}} card(s)",
-  "stats.title": "Standings",
+  "stats.title": "Standings · all bingos",
   "stats.empty": "No resolved bingo yet.",
   "stats.score": "{{lines}} line(s), {{fields}} square(s) over {{cards}} card(s)",
   "regroup.toggle": "Spellings ({{count}})",
@@ -174,5 +174,13 @@
   "claim.waiting": "saved, linked on the next update",
   "claim.unknown": "not recognised, or already used by someone else",
   "claim.linked": "linked {{linked}} bingo(s)",
-  "claim.linkedSkipped": "linked {{linked}} bingo(s); {{skipped}} skipped because you already have a card there"
+  "claim.linkedSkipped": "linked {{linked}} bingo(s); {{skipped}} skipped because you already have a card there",
+  "ranking.total": "Total",
+  "ranking.average": "Per card",
+  "ranking.perCardLines": "{{value}} lines per card · {{cards}} card(s)",
+  "ranking.perCardFields": "{{value}} squares per card · {{cards}} card(s)",
+  "ranking.belowBar": "{{count}} more player(s) need at least {{bar}} card(s) to be ranked per card.",
+  "ranking.nobodyYet": "Nobody has played {{bar}} card(s) yet.",
+  "ranking.season": "Ranking · Season {{season}}",
+  "ranking.allSeasons": "Ranking · all seasons"
 }

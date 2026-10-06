@@ -81,7 +81,7 @@
   "showcase.save": "Auswahl speichern",
   "showcase.title": "Hervorgehobene Karten",
   "stats.cards": "{{count}} Karte(n)",
-  "stats.title": "Gesamtwertung",
+  "stats.title": "Gesamtwertung · alle Bingos",
   "stats.empty": "Noch kein aufgelöstes Bingo.",
   "stats.score": "{{lines}} Reihe(n), {{fields}} Feld(er) aus {{cards}} Karte(n)",
   "regroup.toggle": "Schreibweisen ({{count}})",
@@ -174,5 +174,13 @@
   "claim.waiting": "gespeichert, wird bei der nächsten Aktualisierung verknüpft",
   "claim.unknown": "nicht erkannt oder bereits von jemand anderem verwendet",
   "claim.linked": "{{linked}} Bingo(s) verknüpft",
-  "claim.linkedSkipped": "{{linked}} Bingo(s) verknüpft; {{skipped}} übersprungen, weil du dort schon eine Karte hast"
+  "claim.linkedSkipped": "{{linked}} Bingo(s) verknüpft; {{skipped}} übersprungen, weil du dort schon eine Karte hast",
+  "ranking.total": "Gesamt",
+  "ranking.average": "Pro Karte",
+  "ranking.perCardLines": "{{value}} Reihen pro Karte · {{cards}} Karte(n)",
+  "ranking.perCardFields": "{{value}} Felder pro Karte · {{cards}} Karte(n)",
+  "ranking.belowBar": "{{count}} weitere Spieler brauchen mindestens {{bar}} Karte(n) für die Wertung pro Karte.",
+  "ranking.nobodyYet": "Noch niemand hat {{bar}} Karte(n) gespielt.",
+  "ranking.season": "Wertung · Staffel {{season}}",
+  "ranking.allSeasons": "Wertung · alle Staffeln"
 }

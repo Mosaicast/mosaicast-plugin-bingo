@@ -55,6 +55,9 @@ test('episodes are matched by slug or by numbers, and ambiguity says so', () => 
   assert.deepEqual(matchEpisode({ season: 1, episode: 3 }, episodes), { slug: 'gop-s1e3' });
   assert.match(matchEpisode({ season: 1, episode: 2 }, episodes).problem, /2 feeds; give its slug/);
   assert.match(matchEpisode({ season: 9, episode: 9 }, episodes).problem, /no episode S9E9/);
+  // A season prologue a podcaster numbered 0 (core 0.7.7) is a number like any other.
+  assert.deepEqual(matchEpisode({ season: 5, episode: 0 }, [{ slug: 'prolog', season: 5, episodeNo: 0 }]), { slug: 'prolog' });
+  assert.deepEqual(validate(file([bingo({ episode: { season: 5, episode: 0 } })])), []);
 });
 
 test('codes are long, readable, and hashed the way the backend hashes them', () => {

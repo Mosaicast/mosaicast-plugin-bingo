@@ -45,6 +45,11 @@ export function seasonKey(e: HistoryEpisode): string {
   return `${e.feed ?? ''}:${e.season ?? ''}`;
 }
 
+/** The `history.scopes` key for a season pill's selection: `"all"` for no season. */
+export function scopeKey(season: string | null): string {
+  return season ?? 'all';
+}
+
 /** Indices into `history.episodes` the current filter keeps — all of them for `null`. */
 export function episodesIn(history: History | null, season: string | null): number[] {
   const episodes = history?.episodes ?? [];

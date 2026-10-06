@@ -31,6 +31,7 @@ import {
 } from '../types';
 import { Shell, nameOf } from './common';
 import { ClaimBox } from './ClaimBox';
+import { RankingPanel } from './RankingPanel';
 import { EpisodeScores, HistoryPanel } from './HistoryPanel';
 import { RecapPanel } from './RecapPanel';
 import { Results } from './Results';
@@ -39,8 +40,6 @@ import { readScope, pick, resolvePeople } from './useBingo';
 
 const ROUTES = ['', 'e/:slug', 'e/:slug/u/:user'] as const;
 
-/** How many places of the site standings the page draws. The document carries up to fifty. */
-const STANDINGS_SHOWN = 10;
 
 /**
  * The plugin's own page, `/p/bingo/…`: the site's standings and every bingo there is, one bingo's
@@ -89,14 +88,9 @@ function SiteView({ ctx, i18n }: { ctx: PluginContext; i18n: PluginI18n }) {
       const slugs = [
         ...new Set([...(stats?.bingos ?? []).map((b) => b.slug), ...(history?.episodes ?? []).map((e) => e.slug)]),
       ];
-      const records = history?.records;
       const [titles, people] = await Promise.all([
         slugs.length > 0 ? ctx.feeds.displayMany(slugs).catch(() => ({})) : Promise.resolve({}),
-        resolvePeople(ctx, [
-          ...(stats?.players ?? []).slice(0, STANDINGS_SHOWN).map((p) => p.author),
-          ...(history?.players ?? []).map((p) => p.author),
-          ...[records?.bestCard, records?.mostCards, records?.longestStreak].flatMap((r) => (r ? [r.author] : [])),
-        ]),
+        resolvePeople(ctx, [...(history?.players ?? []).map((p) => p.author), ...namedIn(history)]),
       ]);
       if (live) {
         setState({
@@ -122,7 +116,6 @@ function SiteView({ ctx, i18n }: { ctx: PluginContext; i18n: PluginI18n }) {
 
   if (state.loading) return <p className="bingo__note">{i18n.t('common.loading')}</p>;
 
-  const standings = (state.stats?.players ?? []).slice(0, STANDINGS_SHOWN);
   // A bingo whose episode the visitor may not see has no snapshot, and is not drawn at all.
   const bingos = (state.stats?.bingos ?? []).filter((b) => state.titles[b.slug]);
 
@@ -138,36 +131,15 @@ function SiteView({ ctx, i18n }: { ctx: PluginContext; i18n: PluginI18n }) {
       <p className="bingo__section-title">
         <Icon name="trophy" /> {i18n.t('stats.title')}
       </p>
-      {standings.length === 0 ? (
-        <p className="bingo__note">{i18n.t('stats.empty')}</p>
-      ) : (
-        <ol className="bingo__rows">
-          {standings.map((row, i) => {
-            const person = state.people[row.author];
-            return (
-              <li key={row.author} className="bingo__row">
-                <span className="bingo__place">{i + 1}</span>
-                {person ? (
-                  <img className="bingo__avatar" src={person.avatarUrl} alt="" width={24} height={24} loading="lazy" />
-                ) : (
-                  <span className="bingo__avatar bingo__avatar--none" aria-hidden="true">
-                    {nameOf(person, i18n).slice(0, 1).toUpperCase()}
-                  </span>
-                )}
-                <span>{nameOf(person, i18n)}</span>
-                {row.author === ctx.user?.id && <span className="bingo__role">{i18n.t('leaderboard.you')}</span>}
-                <span className="bingo__row-score">
-                  {i18n.t('stats.score', {
-                    lines: String(row.lines),
-                    fields: String(row.fields),
-                    cards: String(row.cards),
-                  })}
-                </span>
-              </li>
-            );
-          })}
-        </ol>
-      )}
+      {/* All-time, whatever the season pills below show. */}
+      <RankingPanel
+        i18n={i18n}
+        stats={state.history?.scopes?.all}
+        people={state.people}
+        me={ctx.user?.id}
+        rankBy={state.history?.rankBy === 'fields' ? 'fields' : 'lines'}
+        label={i18n.t('stats.title')}
+      />
 
       <ClaimBox ctx={ctx} i18n={i18n} imports={state.imports} />
 
@@ -362,4 +334,15 @@ function EpisodeView({
         ))}
     </>
   );
+}
+
+/** Every player a ranking or a record names, in any scope: the ids worth resolving to people. */
+function namedIn(history: History | null): string[] {
+  const out = new Set<string>();
+  for (const scope of Object.values(history?.scopes ?? {})) {
+    for (const r of [...(scope.byTotal ?? []), ...(scope.byAverage ?? [])].slice(0, 100)) out.add(r.author);
+    const rec = scope.records;
+    for (const r of [rec?.bestCard, rec?.mostCards, rec?.longestStreak]) if (r) out.add(r.author);
+  }
+  return [...out];
 }
