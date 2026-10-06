@@ -6,6 +6,7 @@ package dev.mosaicast.plugin.bingo;
 import dev.mosaicast.plugin.api.CrossUserStore;
 import dev.mosaicast.plugin.api.DisplaySnapshot;
 import dev.mosaicast.plugin.api.EpisodePhase;
+import dev.mosaicast.plugin.api.ExportFile;
 import dev.mosaicast.plugin.api.OgMeta;
 import dev.mosaicast.plugin.api.OwnedDocEntry;
 import dev.mosaicast.plugin.api.PageRouteProvider;
@@ -15,6 +16,7 @@ import dev.mosaicast.plugin.api.SchemaStore;
 import dev.mosaicast.plugin.api.Scope;
 import dev.mosaicast.plugin.api.ShareMetadataProvider;
 import dev.mosaicast.plugin.api.UserDataHandler;
+import dev.mosaicast.plugin.api.UserExport;
 import org.pf4j.Extension;
 
 import java.time.Clock;
@@ -147,6 +149,9 @@ public class BingoPlugin implements PluginBackend, UserDataHandler, PageRoutePro
         // while a fast listener could still rewrite a card with the episode playing. Best effort: the tick
         // reconciles by phase as well, so a release this instance never heard of still closes on time.
         ctx.onEpisodeReleased(this::released);
+        // The other direction leaks (platformApi 0.19.0): an episode going quiet again or cancelled is hidden at
+        // once, while the site documents this plugin published keep naming it until the next tick.
+        ctx.onEpisodePhaseChanged(this::phaseChanged);
         ctx.logger().info("bingo registered; ingest every {}s, schema={}",
                 ingestInterval().toSeconds(), ctx.schema() == null ? "absent" : ctx.schema().namespace());
     }
@@ -202,6 +207,22 @@ public class BingoPlugin implements PluginBackend, UserDataHandler, PageRoutePro
     void released(String slug) {
         synchronized (passLock) {
             tickEpisode(slug, pass());
+        }
+    }
+
+    /**
+     * A podcaster's write moved an episode's phase: a whole pass now, rather than up to one interval later.
+     *
+     * <p>Going back to {@code PLANNED} or being cancelled ({@code phase == null}) hides the episode at once,
+     * but the site's {@code stats}, {@code history} and {@code suggestions} still name it until the roll-up
+     * runs again. The pass sees the new quiet set (or the vanished slug), which moves the roll-up's
+     * fingerprint, so those documents drop it now. A whole pass because the roll-up reads what every episode's
+     * pass collected. A withdrawal closes predictions like a release, and an announcement opens them. A release
+     * is left to {@link #released}, which the host has just called. Idempotent with the tick.
+     */
+    void phaseChanged(String slug, EpisodePhase phase) {
+        if (phase != EpisodePhase.RELEASED) {
+            tick();
         }
     }
 
@@ -563,15 +584,19 @@ public class BingoPlugin implements PluginBackend, UserDataHandler, PageRoutePro
         ctx.logger().info("bingo erased the identity link on a user's rows");
     }
 
+    /** Where the person's cards land in their data export: {@code plugins/bingo/bingo.json} in core's ZIP. */
+    static final String EXPORT_FILE = "bingo.json";
+
     /**
      * {@inheritDoc}
      *
-     * <p>The person's own cards, in {@code mosaicast-bingo/1} - the format the import script reads - so the
-     * part core bundles into a data export is a file they can take elsewhere and bring back. Only their own
-     * cards: nobody else's card is personal data of theirs. Core does not call this yet (core#263).
+     * <p>The person's own cards, as one {@code mosaicast-bingo/1} file - the format the import script reads -
+     * so what core bundles into a data export (core 0.8.0) is a file they can take elsewhere and bring back.
+     * Only their own cards: nobody else's card is personal data of theirs. {@code exportUser} stays at its
+     * default; the host asks this first.
      */
     @Override
-    public Optional<Map<String, Object>> exportUser(String userId) {
+    public Optional<UserExport> exportFiles(String userId) {
         SchemaStore schema = ctx.schema();
         if (schema == null) {
             return Optional.empty();
@@ -580,8 +605,10 @@ public class BingoPlugin implements PluginBackend, UserDataHandler, PageRoutePro
         if (entries.isEmpty()) {
             return Optional.empty();
         }
-        return Optional.of(BingoExport.ownBingos(entries, slug ->
-                ctx.store().get(Scope.episode(slug), KEY_TEMPLATE, Template.class).orElse(null)));
+        Map<String, Object> bingos = BingoExport.ownBingos(entries, slug ->
+                ctx.store().get(Scope.episode(slug), KEY_TEMPLATE, Template.class).orElse(null));
+        return Optional.of(UserExport.of(ExportFile.text(EXPORT_FILE, "application/json",
+                MAPPER.writerWithDefaultPrettyPrinter().writeValueAsString(bingos))));
     }
 
     // ---------------------------------------------------------------- pages

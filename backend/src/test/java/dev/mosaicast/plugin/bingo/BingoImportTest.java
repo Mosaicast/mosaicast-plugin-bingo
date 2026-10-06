@@ -370,7 +370,7 @@ class BingoImportTest extends BingoTestSupport {
     // ---------------------------------------------------------------- export
 
     @Test
-    void anExportIsThePersonsOwnCardsInTheImportFormat() {
+    void anExportIsOneFileOfThePersonsOwnCardsInTheImportFormat() {
         var ctx = ctx(published(true));
         ctx.store().put(Scope.episode(EPISODE), BingoDocs.KEY_TEMPLATE, Map.of("size", 3, "freeCentre", true));
         seedCard(ctx, alice, List.of("kraken", "", "merch"));
@@ -380,7 +380,14 @@ class BingoImportTest extends BingoTestSupport {
         var plugin = new BingoPlugin(clock);
         plugin.register(ctx);
 
-        var export = new UserDataHandlerHarness(plugin).export(alice.toString()).orElseThrow();
+        var files = new UserDataHandlerHarness(plugin).exportFiles(alice.toString()).orElseThrow().files();
+        assertEquals(1, files.size());
+        assertEquals("bingo.json", files.get(0).path(), "lands as plugins/bingo/bingo.json in the person's ZIP");
+        assertEquals("application/json", files.get(0).mediaType());
+        Map<?, ?> export = tools.jackson.databind.json.JsonMapper.builder().build()
+                .readValue(files.get(0).bytes(), Map.class);
+        assertTrue(new UserDataHandlerHarness(plugin).exportFiles(UUID.randomUUID().toString()).isEmpty(),
+                "nothing to hand over for someone who never played");
 
         assertEquals("mosaicast-bingo/1", export.get("format"));
         @SuppressWarnings("unchecked")

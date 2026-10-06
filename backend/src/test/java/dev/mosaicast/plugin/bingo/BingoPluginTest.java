@@ -756,6 +756,26 @@ class BingoPluginTest extends BingoTestSupport {
     }
 
     @Test
+    void anEpisodeGoingQuietAgainLeavesTheSiteDocumentsAtOnce() {
+        var ctx = ctx(snapshot(EpisodePhase.UPCOMING));
+        seedTemplate(ctx);
+        seedCard(ctx, alice, List.of("kraken"));
+        resolve(ctx, Map.of("kraken", true));
+        control(ctx, "RESOLVED");
+        new BingoPlugin(clock).register(ctx);
+        assertEquals(1, ctx.episodePhaseListenerCount());
+        assertEquals(1, stats(ctx).episodes(), "announced: its bingo counts");
+
+        // A podcaster moves announceAt back into the future (platformApi 0.19.0). No tick runs in between.
+        feeds.withPhase(EPISODE, EpisodePhase.PLANNED);
+        clock.advance(java.time.Duration.ofSeconds(1));
+        ctx.fireEpisodePhaseChanged(EPISODE, EpisodePhase.PLANNED);
+
+        assertEquals(0, stats(ctx).episodes(), "hidden from visitors, so gone from what they can read, now");
+        assertTrue(ctx.logger().events(org.slf4j.event.Level.ERROR).isEmpty());
+    }
+
+    @Test
     void aReleaseClosesPredictionsWithoutWaitingForTheNextTick() {
         var ctx = ctx(published(false));
         seedTemplate(ctx);
@@ -1029,7 +1049,7 @@ class BingoPluginTest extends BingoTestSupport {
         plugin.register(ctx);
 
         var harness = new UserDataHandlerHarness(plugin);
-        assertTrue(harness.export(alice.toString()).isPresent(), "an export is a request in its own right");
+        assertTrue(harness.exportFiles(alice.toString()).isPresent(), "an export is a request in its own right");
 
         harness.eraseTwice(alice.toString()); // fails loudly if the second call is not a no-op
 
