@@ -33,6 +33,8 @@ import java.util.Optional;
 import java.util.Set;
 import java.util.TreeSet;
 import java.util.UUID;
+import java.util.concurrent.atomic.AtomicBoolean;
+import java.util.concurrent.locks.ReentrantLock;
 
 import tools.jackson.databind.JsonNode;
 
@@ -89,15 +91,13 @@ public class BingoPlugin implements PluginBackend, UserDataHandler, PageRoutePro
     static final int DEFAULT_MIN_CARDS = 3;
     /** How stale the site roll-up may get while none of its inputs visibly moved. */
     static final Duration ROLL_UP_REFRESH = Duration.ofHours(1);
-    /**
-     * Phase events this close together run one pass: a deleted feed fires one per episode (core 0.8.1), each
-     * after the delete committed, so the first pass already sees all of them gone.
-     */
-    static final Duration PHASE_BURST = Duration.ofSeconds(2);
 
     private final Clock clock;
-    /** When the last phase-triggered pass finished; guarded by {@code passLock}. */
-    private Instant lastPhasePass;
+    /**
+     * A phase-triggered pass is waiting for the lock and has not started yet. Every phase event arriving
+     * meanwhile joins it instead of queueing a pass of its own (see {@link #phaseChanged}).
+     */
+    private final AtomicBoolean phasePassQueued = new AtomicBoolean();
     private PluginContext ctx;
     /** Every player's partition, read-only. Present because the manifest declares {@code data.readsAllUsers}. */
     private CrossUserStore everyone;
@@ -108,8 +108,12 @@ public class BingoPlugin implements PluginBackend, UserDataHandler, PageRoutePro
      * this lock serialises the release event with them, but only within one instance. A release bound on one
      * instance while another runs the tick can still overlap — not a case before core runs several instances
      * (ARCHITECTURE: v3), and the reason this lock is worth revisiting then.
+     *
+     * <p>A {@link ReentrantLock}, not a monitor: the host calls each listener on a virtual thread of its own,
+     * and on Java 21 (core's runtime) a virtual thread waiting to enter a {@code synchronized} block pins its
+     * carrier thread, which the host needs for everything else. Package-private for the concurrency test.
      */
-    private final Object passLock = new Object();
+    final ReentrantLock passLock = new ReentrantLock();
     private BingoLifecycle lifecycle;
     private BingoRecord record;
     private BingoPublish publish;
@@ -174,7 +178,8 @@ public class BingoPlugin implements PluginBackend, UserDataHandler, PageRoutePro
 
     /** One scheduled pass over the working set, then the site-wide roll-up. */
     void tick() {
-        synchronized (passLock) {
+        passLock.lock();
+        try {
             // Past bingos and claims first, so the pass below already scores and publishes what they changed.
             try {
                 if (importer.run(settings().threshold())) {
@@ -200,6 +205,8 @@ public class BingoPlugin implements PluginBackend, UserDataHandler, PageRoutePro
             } catch (RuntimeException e) {
                 ctx.logger().warn("bingo stats pass failed", e);
             }
+        } finally {
+            passLock.unlock();
         }
     }
 
@@ -212,8 +219,11 @@ public class BingoPlugin implements PluginBackend, UserDataHandler, PageRoutePro
      * may handle the same release.
      */
     void released(String slug) {
-        synchronized (passLock) {
+        passLock.lock();
+        try {
             tickEpisode(slug, pass());
+        } finally {
+            passLock.unlock();
         }
     }
 
@@ -225,22 +235,26 @@ public class BingoPlugin implements PluginBackend, UserDataHandler, PageRoutePro
      * runs again. The pass sees the new quiet set (or the vanished slug), which moves the roll-up's
      * fingerprint, so those documents drop it now. A whole pass because the roll-up reads what every episode's
      * pass collected. A withdrawal closes predictions like a release, and an announcement opens them. A release
-     * is left to {@link #released}, which the host has just called. Idempotent with the tick, and a burst of
-     * events (see {@link #PHASE_BURST}) runs one pass.
+     * is left to {@link #released}, which the host has just called. Idempotent with the tick.
+     *
+     * <p><strong>Single flight.</strong> A deleted feed fires one event per episode (core 0.8.1), all after the
+     * one delete committed, each on its own virtual thread and at once. One caller queues a pass; everyone
+     * arriving before it starts joins it and returns at once, so only that caller ever waits for the lock.
+     * The flag clears as the pass starts, which is when it reads the state: an event arriving after that may
+     * describe a change the pass has not seen, so it queues exactly one more. A burst costs at most two passes,
+     * and nothing is missed.
      */
     void phaseChanged(String slug, EpisodePhase phase) {
-        if (phase == EpisodePhase.RELEASED) {
+        if (phase == EpisodePhase.RELEASED || !phasePassQueued.compareAndSet(false, true)) {
             return;
         }
-        synchronized (passLock) {
-            // Measured from the end of the last pass, so an event that waited for the lock while it ran is
-            // covered by it. A distinct change caught inside the window is left to the tick, as any missed
-            // event is.
-            if (lastPhasePass != null && now().isBefore(lastPhasePass.plus(PHASE_BURST))) {
-                return;
-            }
+        passLock.lock();
+        try {
+            phasePassQueued.set(false);
+            ctx.logger().info("bingo pass after a phase change: {} is now {}", slug, phase == null ? "gone" : phase);
             tick();
-            lastPhasePass = now();
+        } finally {
+            passLock.unlock();
         }
     }
 

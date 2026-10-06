@@ -59,7 +59,8 @@ frontend/locales/{en,de}.json           UI strings
   0.18.0/core 0.7.7) is the *episode's* phase; the bingo's also carries the podcaster's intent.
 - **Release closes predictions, by phase, never by date (0.18.0).** `snapshot.phase()` `RELEASED` *or*
   `WITHDRAWN` counts as released. `onEpisodeReleased` runs one full episode pass at once (best effort);
-  the tick reconciles by phase. Both take `passLock`: a pass rewrites rows delete-then-insert, so two at
+  the tick reconciles by phase. Both take `passLock` (a `ReentrantLock`: listeners run on virtual threads, and
+  `synchronized` pins a carrier on Java 21): a pass rewrites rows delete-then-insert, so two at
   once would duplicate a frozen card. A full pass, never just a phase write — the pass applying the lock
   ingests the last cards as ranked.
 - **A quiet (`PLANNED`) episode is visible to the backend only.** The host hides its scope from visitors;
@@ -124,7 +125,7 @@ frontend/locales/{en,de}.json           UI strings
 - **`--mc-accent` is for fills; `--mc-accent-text` for text, focus rings and state borders (0.16.0).**
 - **Schema rows are `schemaReadableBy: admin`; bookkeeping has `keyFloors` (0.19.0).** So the frontend must
   **never** read `ctx.schema` (publish a backend-owned document), and never floor a key a fan's tile reads:
-  a floored key silently drops out of the batch read. `onEpisodePhaseChanged`: one full tick per burst, not on release.
+  a floored key silently drops out of the batch read. `onEpisodePhaseChanged`: single-flight full tick, not on release.
 - **After the freeze, derive from the record.** Candidates, counts and featured cards come from frozen rows
   (`whatCardsSay`), never from partition docs their owners can still write. Decided groups are seeded so a
   late spelling cannot rename them; a row's `canonical` follows the current grouping, so pins re-score.
