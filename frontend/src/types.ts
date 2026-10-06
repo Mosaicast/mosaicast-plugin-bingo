@@ -291,28 +291,39 @@ export function countsTowardsRanking(phase: Phase): boolean {
  * having one here is what lets a reader place themselves without the server publishing everybody.
  */
 export function countLines(hits: boolean[], size: number): number {
-  if (hits.length !== size * size) return 0;
-  let lines = 0;
+  return completedLines(hits, size).length;
+}
+
+/** One completed line: the grid squares it runs between, first to last. */
+export interface CompletedLine {
+  from: number;
+  to: number;
+}
+
+/**
+ * Every complete row, column and diagonal on a grid of hits, by its two end squares. What the card draws a
+ * stroke through, and — counted — the score in lines, so the two cannot disagree.
+ */
+export function completedLines(hits: boolean[], size: number): CompletedLine[] {
+  if (hits.length !== size * size) return [];
+  const lines: CompletedLine[] = [];
+  const whole = (cells: number[]) => cells.every((c) => hits[c]);
+  const range = (f: (i: number) => number) => Array.from({ length: size }, (_, i) => f(i));
   for (let r = 0; r < size; r++) {
-    if (hits.slice(r * size, r * size + size).every(Boolean)) lines++;
+    const cells = range((c) => r * size + c);
+    if (whole(cells)) lines.push({ from: cells[0], to: cells[size - 1] });
   }
   for (let c = 0; c < size; c++) {
-    let whole = true;
-    for (let r = 0; r < size; r++) whole = whole && hits[r * size + c];
-    if (whole) lines++;
+    const cells = range((r) => r * size + c);
+    if (whole(cells)) lines.push({ from: cells[0], to: cells[size - 1] });
   }
-  let down = true;
-  let up = true;
-  for (let i = 0; i < size; i++) {
-    down = down && hits[i * size + i];
-    up = up && hits[i * size + (size - 1 - i)];
-  }
-  if (down) lines++;
-  if (up) lines++;
+  const down = range((i) => i * size + i);
+  if (whole(down)) lines.push({ from: down[0], to: down[size - 1] });
+  const up = range((i) => i * size + (size - 1 - i));
+  if (whole(up)) lines.push({ from: up[0], to: up[size - 1] });
   return lines;
 }
 
-/** Lays a card's hits out over the grid, giving the middle square away when this bingo does. */
 export function hitGrid(hits: boolean[], size: number, freeCentre: boolean): boolean[] {
   const centre = freeCentre && size % 2 === 1 ? Math.floor((size * size) / 2) : -1;
   const grid = new Array<boolean>(size * size).fill(false);

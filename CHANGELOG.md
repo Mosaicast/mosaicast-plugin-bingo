@@ -26,6 +26,10 @@ build.
   can split one off or merge a candidate into another, and is warned when the merged candidates were
   decided differently. The pins sit on a client-written `grouping` document, apply on the next pass,
   also to frozen cards, and show as pending until they land.
+- **Completed lines are marked on a scored card.** A soft band in the accent colour runs behind each
+  finished row, column and diagonal, under the text. It is measured from the squares themselves, so it
+  fits any width and grid size, and it draws in once (not with reduced motion). A card being written
+  has none.
 - **A recap** (`recap`, backend-owned) once a bingo is resolved: the most predicted thing, the rarest
   hit, the biggest miss, the average card. It's behind the spoiler cover.
 - **Suggestions**: predictions at least two different people made, site-wide (`suggestions`,

@@ -275,6 +275,29 @@ describe('<EpisodeBingo>', () => {
   /** Someone who has listened; the default mock reports no stored position at all. */
   const heardIt = { progress: { get: async () => 3600 } };
 
+  it('strikes a completed line through the card, and none through one being written', async () => {
+    await render(
+      ctxWith(
+        {
+          [docPath('template')]: { size: 3, freeCentre: true },
+          [docPath('phase')]: { phase: 'RESOLVED', suggested: 'LOCKED' },
+          [docPath('candidates')]: { assignments: { a: 'a', b: 'b', c: 'c', d: 'd' } },
+          [docPath('resolution')]: { hits: { a: true, b: true, c: true, d: true } },
+          [`data/user/me/card:${EPISODE}`]: { entries: ['a', 'b', 'c', 'x', 'y', 'z', 'w', 'd'] },
+        },
+        { user: fan, progress: { get: async () => 3600 } },
+      ),
+    );
+    // The top row (a b c), and the diagonal a · free middle · d.
+    expect(host.querySelectorAll('.bingo__strike')).toHaveLength(2);
+    expect(host.querySelector('.bingo__strikes')?.getAttribute('aria-hidden')).toBe('true');
+  });
+
+  it('draws no strokes on a card that is still being filled in', async () => {
+    await render(ctxWith({ [docPath('template')]: { size: 3 } }, { user: fan }));
+    expect(host.querySelector('.bingo__strikes')).toBeNull();
+  });
+
   it('marks entries the resolution says came true', async () => {
     await render(ctxWith(RESOLVED_BINGO, heardIt));
 

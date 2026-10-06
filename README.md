@@ -86,7 +86,8 @@ the moment it's flipped, and the backend never reads it.
 Two quantities, both always counted:
 
 - **Fields** — squares that came true.
-- **Lines** — completed rows, columns and diagonals; `2n+2` of them on an n-by-n grid.
+- **Lines** — completed rows, columns and diagonals; `2n+2` of them on an n-by-n grid. A scored card
+  marks each one with a soft band behind its squares.
 
 The site's `rankBy` setting decides which one orders the leaderboard, and the other always breaks the tie.
 The card tabs and the feed badge lead with whichever one that is.

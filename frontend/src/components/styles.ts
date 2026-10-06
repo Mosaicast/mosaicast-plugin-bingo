@@ -57,7 +57,21 @@ export const BINGO_CSS =
   .bingo__tab:focus-visible { outline: 2px solid var(--mc-accent-text); outline-offset: 1px; }
   .bingo__tab-score { color: var(--mc-text-muted); font-variant-numeric: tabular-nums; }
 
+  .bingo__grid-wrap { position: relative; }
   .bingo__grid { display: grid; gap: .375rem; }
+  /* Completed lines: a soft band behind each complete row, column or diagonal, like a highlighter swipe.
+     The SVG is positioned (z-index 1) while the squares are not, so their backgrounds paint beneath it;
+     the words sit in their own positioned layer above it, so the band never covers a letter. A wash, not a
+     line through the text: translucent, in the accent fill colour, with rounded ends. */
+  .bingo__strikes { position: absolute; inset: 0; z-index: 1; pointer-events: none; overflow: visible; }
+  .bingo__strike {
+    stroke: var(--mc-accent); stroke-linecap: round; opacity: .2; fill: none;
+    stroke-dasharray: 1; stroke-dashoffset: 0;
+    animation: bingo-strike .7s cubic-bezier(.2, .7, .2, 1) both;
+  }
+  @keyframes bingo-strike { from { stroke-dashoffset: 1; } to { stroke-dashoffset: 0; } }
+  @media (prefers-reduced-motion: reduce) { .bingo__strike { animation: none; } }
+  .bingo__cell-text { position: relative; z-index: 2; }
   .bingo__cell {
     display: flex; align-items: center; justify-content: center; text-align: center;
     min-height: 4.25rem; padding: .4rem; border-radius: .5rem; overflow-wrap: anywhere;
