@@ -88,6 +88,12 @@ build.
   floors and the live filter state.
 
 ### Fixed
+- **A claimed card showed empty on its episode**, and the tile offered a late card that would have been
+  ignored. The tile draws your card from your own partition, which only your browser can write. The
+  backend now hands the claimed cards over sealed with the claim code, and your browser copies them in
+  (from the bingo page, or from the episode itself).
+- **Your own card is no longer behind the spoiler cover.** Featured cards and the recap still are, on an
+  episode this device hasn't heard.
 - **A late spelling could orphan a decision.** A group is named after its first member in sorted order,
   so "alex says damn" arriving after "alex says damn it" was decided renamed the group. Decided groups
   are now seeded before matching.
