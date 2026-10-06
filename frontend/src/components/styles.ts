@@ -63,9 +63,10 @@ export const BINGO_CSS =
      The SVG is positioned (z-index 1) while the squares are not, so their backgrounds paint beneath it;
      the words sit in their own positioned layer above it, so the band never covers a letter. A wash, not a
      line through the text: translucent, in the accent fill colour, with rounded ends. */
-  .bingo__strikes { position: absolute; inset: 0; z-index: 1; pointer-events: none; overflow: visible; }
+  /* Opaque strokes faded as one layer: where two bands cross they merge into one even tint, never a darker knot. */
+  .bingo__strikes { position: absolute; inset: 0; z-index: 1; pointer-events: none; overflow: visible; opacity: .2; }
   .bingo__strike {
-    stroke: var(--mc-accent); stroke-linecap: round; opacity: .2; fill: none;
+    stroke: var(--mc-accent); stroke-linecap: round; fill: none;
     stroke-dasharray: 1; stroke-dashoffset: 0;
     animation: bingo-strike .7s cubic-bezier(.2, .7, .2, 1) both;
   }
