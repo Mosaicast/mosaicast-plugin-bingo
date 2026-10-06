@@ -51,6 +51,10 @@ build.
 - `exportUser` hands over a person's own cards as `mosaicast-bingo/1`, ready for core's data export
   (core#263).
 - Season pills name the feed when the history spans more than one.
+- **Rankings per season, and per card.** The all-time standings at the top gain a Total / Per card
+  switch. The history section adds a second ranking that follows the season pill, and the records follow
+  it too. Per card needs `minCardsPerCard` cards (a new setting, 3 by default); players below it are
+  counted, never named.
 - `docs/ROADMAP.md`: deferred ideas and what each one is waiting on.
 - **A bingo for an episode that has not aired, end to end** (core 0.7.7's planned episodes). A podcaster
   prepares the bingo while the planned episode is quiet, players fill in cards once it is announced, and

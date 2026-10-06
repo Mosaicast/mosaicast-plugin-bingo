@@ -16,8 +16,8 @@ Java 21 (Gradle, PF4J extension) · React 18 + Vite (Web Component) · **platfor
 ## Commands
 ```
 ./build.sh                                    # -> dist/{plugin.json,bingo.jar,assets/bingo.es.js}
-cd backend  && ./gradlew test                 # 138 tests
-cd frontend && npm test && npm run typecheck  # 141 tests
+cd backend  && ./gradlew test                 # 141 tests
+cd frontend && npm test && npm run typecheck  # 145 tests
 node --test scripts/*.test.mjs                # import script (also in CI)
 scripts/set-version.sh <x.y.z>                # bumps the plugin version in all three files
 ```
@@ -132,6 +132,8 @@ frontend/locales/{en,de}.json           UI strings
   suggestion's hit count. And no share card (OG) ever names a prediction — previews are read unspoilered.
 - **Imports never attach an account**: authors are `import:<uuid>` (real ids refused), unlisted until the
   person claims them with a code (hash-only on the server). Imported scores must equal the file's hit flags.
+- **Rankings and records per scope come from the backend** (`history.scopes`: `all` + `<feed>:<season>`),
+  never recomputed from `history.players` (capped, would miss late joiners). Per card needs `minCardsPerCard`.
 - **Charts colour by player, never by rank in the current view**: slot = place in `history.players`. A
   named series exists only for listed players; place/aggregates count everyone.
 - **The site roll-up (stats + suggestions + history) is dirty-gated** in `BingoPlugin.rollUp`: add any new input to

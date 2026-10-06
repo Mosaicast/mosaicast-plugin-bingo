@@ -113,11 +113,24 @@ whether it came true, the rarest hit, the biggest miss, the average card, and ho
 It's empty until the resolution, like the board, and the tile keeps it behind the spoiler cover because it
 names what happened.
 
-### Site standings
+### Site standings and rankings
 
-Cumulative standings across every **resolved** bingo, for players who allow being listed, on episodes
-everyone can see. An unresolved bingo is left out: its scores move with every tick-off, and counting them
-would leak the progress the episode's own board withholds.
+Standings count **resolved** bingos only, for players who allow being listed, on episodes everyone can see.
+An unresolved bingo is left out: its scores move with every tick-off, and counting them would leak the
+progress the episode's own board withholds.
+
+There are two rankings, each with its own **Total / Per card** switch:
+- **The standings at the top** of `/p/bingo/` are all-time.
+- **The ranking inside the history section** follows the season pill.
+
+*Per card* divides a player's score by the cards they played, so someone who joined later can lead. They
+are only placed once they have played `minCardsPerCard` cards (3 by default; a season with fewer bingos
+asks for all of them), so one lucky card can't lead for good. Players below that bar are counted in a
+sentence, never named. The records follow the season pill too.
+
+All of these are computed on the backend for each scope (all, and each season of each feed). The browser
+only has the top 50 all-time series, which would miss exactly the late joiner the per-card ranking is
+for.
 
 ## The bingo page and sharing
 
@@ -267,8 +280,8 @@ re-reads when it is opened and after the viewer's own actions.
 
 ```bash
 ./build.sh                                   # -> dist/
-cd backend && ./gradlew test                 # 138 tests, no core and no database
-cd frontend && npm test && npm run typecheck # 141 tests
+cd backend && ./gradlew test                 # 141 tests, no core and no database
+cd frontend && npm test && npm run typecheck # 145 tests
 node --test scripts/*.test.mjs               # the import script
 ```
 
@@ -350,6 +363,7 @@ value. Numbers carry bounds the host enforces on save; a stored value outside th
 | `rankBy` | `lines` | whether lines or fields order the leaderboard; the other breaks the tie. A dropdown, not free text — the manifest declares the two values it accepts |
 | `allowLateEntries` | true | whether someone can still play after the lock |
 | `archiveAfterDays` | 30 | days after resolving before a bingo closes for good, 1–3650 |
+| `minCardsPerCard` | 3 | how many cards someone needs before the per-card ranking places them, 1–100; a season with fewer bingos asks for all of them |
 
 ## Design notes
 
