@@ -1,7 +1,7 @@
 {
   "id": "bingo",
   "version": "0.6.0",
-  "platformApi": "0.17.0",
+  "platformApi": "0.18.0",
   "name": "Bingo",
   "license": "AGPL-3.0-or-later",
   "author": "The Mosaicast Authors",

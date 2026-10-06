@@ -11,12 +11,12 @@ lifecycle, and schema-backed history.
 Work in plan mode first.
 
 ## Tech stack
-Java 21 (Gradle, PF4J extension) · React 18 + Vite (Web Component) · **platformApi 0.17.0** (core 0.7.6+)
+Java 21 (Gradle, PF4J extension) · React 18 + Vite (Web Component) · **platformApi 0.18.0** (core 0.7.7+)
 
 ## Commands
 ```
 ./build.sh                                    # -> dist/{plugin.json,bingo.jar,assets/bingo.es.js}
-cd backend  && ./gradlew test                 # 73 tests
+cd backend  && ./gradlew test                 # 79 tests
 cd frontend && npm test && npm run typecheck  # 60 tests
 scripts/set-version.sh <x.y.z>                # bumps the plugin version in all three files
 ```
@@ -49,7 +49,16 @@ frontend/locales/{en,de}.json           UI strings
   Fixed holder — never from git config. CI blocks PRs without it.
 
 ## Contract facts this plugin depends on (verified, not assumed)
-- **`ctx.episode` is never populated** by core. The lifecycle is a backend-published `phase` document.
+- **The bingo lifecycle is a backend-published `phase` document**, not `ctx.episode` — that one (filled since
+  0.18.0/core 0.7.7) is the *episode's* phase; the bingo's also carries the podcaster's intent.
+- **Release closes predictions, by phase, never by date (0.18.0).** `snapshot.phase()` `RELEASED` *or*
+  `WITHDRAWN` counts as released. `onEpisodeReleased` runs one full episode pass at once (best effort);
+  the tick reconciles by phase. Both take `passLock`: a pass rewrites rows delete-then-insert, so two at
+  once would duplicate a frozen card. A full pass, never just a phase write — the pass applying the lock
+  ingests the last cards as ranked.
+- **A quiet (`PLANNED`) episode is visible to the backend only.** The host hides its scope from visitors;
+  the plugin must keep it out of anything public it derives — site `stats` skips its rows (and rows of a
+  vanished, cancelled plan), and resolve notifications wait until it is announced.
 - **`placement: "admin"` renders nowhere.** There is no podcaster slot at all: the manifest declares
   `episode`/`card` and `episode`/`main` only, and every podcaster control is a dialog on the tile.
 - **A plugin authors no HTTP routes.** Everything derived happens in `register()` and `onSchedule`, so the
@@ -120,7 +129,7 @@ frontend/locales/{en,de}.json           UI strings
   tick — never trusted from a podcaster's stale pick.
 
 ## Deviations from `docs/BRIEF.md` (flagged, agreed with the maintainer)
-1. Lifecycle from a backend `phase` doc, not `ctx.episode.status` (impossible).
+1. Lifecycle from a backend `phase` doc, not `ctx.episode.status` (it is the episode's, not the bingo's).
 2. Resolution board is a dialog on the tile, not an `admin` slot (renders nowhere) and not a `sidebar`
    one (buries the one action a podcaster came for under everything else on a phone).
 3. Fan cards in the `USER` scope, not `card:fan:{userId}` (IDOR).
