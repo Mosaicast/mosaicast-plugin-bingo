@@ -284,18 +284,68 @@ describe('<EpisodeBingo>', () => {
     expect(host.querySelectorAll('.bingo__cell--hit').length).toBeGreaterThan(0);
   });
 
-  it('blurs a resolved card for a listener who has not heard the episode', async () => {
+  it('covers what others predicted for a listener who has not heard the episode, never their own card', async () => {
     // A courtesy, not access control: this reads the position stored in *this* browser, so the same
     // person on another device is not covered, and one click reveals it anyway.
-    await render(ctxWith(RESOLVED_BINGO));
+    await render(ctxWith(RESOLVED_BINGO, { user: fan }));
 
+    expect(host.querySelector('.bingo__grid')).not.toBeNull();
+    expect(host.textContent).not.toContain('Spoilers');
+
+    await act(async () => (host.querySelector('[role="tab"]') as HTMLButtonElement).click());
     expect(host.textContent).toContain('Spoilers');
     expect(host.querySelector('.bingo__grid')).toBeNull();
 
     await act(async () => {
-      (host.querySelector('.bingo__btn--quiet') as HTMLButtonElement).click();
+      (host.querySelector('.bingo__spoiler .bingo__btn--quiet') as HTMLButtonElement).click();
     });
     expect(host.querySelector('.bingo__grid')).not.toBeNull();
+  });
+
+  const CODE = 'GOP7-K2MQ-9XD4-HTFA';
+  const HASH = 'b80087d0460bafadda33996223a80e9e44e963829286bdeb4701ce8d3cb845c0';
+  /** Sealed by BingoImportTest for this code: card `Tyrion drinks` + an empty square, for episode `ep`. */
+  const SEALED = { iv: 'AAAAAAAAAAAAAAAA', data: 'Q9gJMEAyl/xCGRT0i0joZW1lpCdjsNu6djjrgYRsx1ylG7qYCwB14HvIGw==', episodes: ['ep'] };
+
+  it('copies a claimed card into the viewer’s partition and draws it, instead of offering a late card', async () => {
+    const scopeEp = { type: 'episode' as const, id: 'ep' };
+    const docs = makeMockDocs({
+      'data/episode/ep/template': { size: 3 },
+      'data/episode/ep/phase': { phase: 'RESOLVED', suggested: 'LOCKED', allowLate: true },
+      'data/site/main/imports': { claimed: { [HASH]: { linked: 1, skipped: 0, episodes: ['ep'], sealed: SEALED } } },
+      'data/user/me/claim': { codes: [CODE] },
+    });
+    const ctx = makeBingoCtx({ scope: scopeEp, docs, user: fan, progress: { get: async () => 3600 } });
+    await act(async () => {
+      root.render(<EpisodeBingo ctx={ctx} />);
+    });
+    for (let i = 0; i < 6; i++) {
+      await flush(ctx);
+      await act(async () => new Promise((resolve) => setTimeout(resolve, 30)));
+    }
+
+    expect(docs.stored['data/user/me/card:ep']).toEqual({ entries: ['Tyrion drinks', ''], imported: true });
+    expect((host.querySelector('.bingo__grid') as HTMLElement).textContent).toContain('Tyrion drinks');
+    expect(host.textContent).not.toContain('Submit');
+  }, 30_000);
+
+  it('offers no late card to somebody the published board already lists', async () => {
+    await render(
+      ctxWith(
+        {
+          [docPath('template')]: { size: 3 },
+          [docPath('phase')]: { phase: 'LOCKED', suggested: 'LOCKED', allowLate: true },
+          [docPath('leaderboard')]: {
+            published: true, players: 1, rankBy: 'lines',
+            ranked: [{ author: 'u1', fields: 3, lines: 1, cells: 9, ranked: true }], late: [],
+          },
+        },
+        { user: fan },
+      ),
+    );
+
+    expect(host.querySelector('textarea')).toBeNull();
+    expect(host.textContent).toContain('is being linked');
   });
 
   it('does not blur a locked bingo that has nothing resolved yet', async () => {

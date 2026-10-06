@@ -4,6 +4,7 @@
 import { useEffect, useState } from 'react';
 import { isPluginApiError, type PluginContext } from '@mosaicast/plugin-sdk';
 import type { PluginI18n } from '../i18n';
+import { copyClaimedCards } from '../claimCards';
 import { KEY_CLAIM } from '../keys';
 import type { ClaimDoc, Imports } from '../types';
 
@@ -57,6 +58,16 @@ export function ClaimBox({ ctx, i18n, imports }: { ctx: PluginContext; i18n: Plu
       live = false;
     };
   }, [codes.join('|')]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  // Linked cards go into the player's own partition, where the tile draws "your card" from (claimCards.ts).
+  const linkedCount = Object.values(hashes).filter((h) => imports?.claimed?.[h]).length;
+  useEffect(() => {
+    if (!ctx.user || linkedCount === 0 || !doc) return;
+    copyClaimedCards(ctx, imports, doc).catch((error: unknown) =>
+      ctx.log('warn', `bingo: could not copy claimed cards (${String(error)})`),
+    );
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- once per newly linked code
+  }, [linkedCount]);
 
   // Only on a site that has imported past bingos; elsewhere there is nothing to claim.
   if (!ctx.user || !imports || (!imports.claims && !imports.claimed)) return null;

@@ -461,11 +461,21 @@ export interface History {
   computedAt?: string;
 }
 
+/** The claimed cards, encrypted with the claim code; see `claimCards.ts`. */
+export interface Sealed {
+  iv: string;
+  data: string;
+  episodes: string[];
+}
+
 /** What one claim did. */
 export interface ClaimResult {
   linked: number;
   skipped: number;
   at?: string;
+  /** The episodes whose imported card moved to the claimant. */
+  episodes?: string[];
+  sealed?: Sealed | null;
 }
 
 /** Backend-owned, site scope: imports and claims, by code hash only. */

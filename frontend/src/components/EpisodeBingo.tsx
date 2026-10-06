@@ -1,11 +1,11 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 // SPDX-FileCopyrightText: 2026 The Mosaicast Authors
 
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { isPluginApiError, type PluginContext } from '@mosaicast/plugin-sdk';
 import { makeI18n } from '../i18n';
 import { Icon } from '../icons';
-import { KEY_CONTROL, KEY_PREFS, cardKey } from '../keys';
+import { KEY_CLAIM, KEY_CONTROL, KEY_IMPORTS, KEY_PREFS, cardKey } from '../keys';
 import {
   countsTowardsRanking,
   fillableCells,
@@ -18,6 +18,8 @@ import {
   DEFAULT_FUZZY_THRESHOLD,
   lineCount,
   prefOrDefault,
+  type ClaimDoc,
+  type Imports,
   type Leaderboard,
   type Phase,
   type RankBy,
@@ -34,7 +36,8 @@ import { Results } from './Results';
 import { ShareButton } from './ShareButton';
 import { FeatureModal } from './FeatureModal';
 import { ResolveModal, undecided } from './ResolveModal';
-import { useBingo, type BingoData } from './useBingo';
+import { pick, readScope, useBingo, type BingoData } from './useBingo';
+import { copyClaimedCards } from '../claimCards';
 
 
 const PHASE_ICON: Record<Phase, 'clock' | 'lock' | 'check' | 'board'> = {
@@ -69,6 +72,8 @@ export function EpisodeBingo({ ctx }: { ctx: PluginContext }) {
   const [revealed, setRevealed] = useState(false);
   const [unheard, setUnheard] = useState(false);
   const [modal, setModal] = useState<'resolve' | 'catchup' | 'feature' | null>(null);
+  const [linking, setLinking] = useState(false);
+  const copied = useRef<string | null>(null);
 
   const size = gridSize(data.template);
   const freeCentre = hasFreeCentre(data.template);
@@ -107,6 +112,36 @@ export function EpisodeBingo({ ctx }: { ctx: PluginContext }) {
     setShowSuggestions(prefOrDefault(data.myPrefs?.suggestions));
   }, [data.loading, data.myCard, data.myPrefs, size, freeCentre]);
 
+  // A claimed card is on the record but not in the viewer's partition, where the tile draws it from; only
+  // this browser can put it there (see claimCards.ts). Once per episode, and only when it could apply.
+  const phaseNow = data.phase?.phase;
+  useEffect(() => {
+    const done = phaseNow === 'RESOLVED' || phaseNow === 'ARCHIVED';
+    if (data.loading || !ctx.user || data.myCard || !done || copied.current === ctx.scope.id) return;
+    copied.current = ctx.scope.id;
+    let live = true;
+    (async () => {
+      const [site, claim] = await Promise.all([
+        readScope(ctx, { type: 'site', id: 'main' }, [KEY_IMPORTS]),
+        ctx.docs.get<ClaimDoc>('self', KEY_CLAIM),
+      ]);
+      const imports = pick<Imports>(site, KEY_IMPORTS);
+      if (!imports?.claimed || !claim?.codes?.length || !live) return;
+      setLinking(true);
+      const written = await copyClaimedCards(ctx, imports, claim, ctx.scope.id);
+      if (!live) return;
+      setLinking(false);
+      if (written.length > 0) data.reload();
+    })().catch((error: unknown) => {
+      if (live) setLinking(false);
+      ctx.log('warn', `bingo: could not copy a claimed card (${String(error)})`);
+    });
+    return () => {
+      live = false;
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- keyed on what decides whether it applies
+  }, [data.loading, data.myCard, phaseNow, ctx.scope.id, ctx.user?.id]);
+
   if (data.loading) return <Shell>{i18n.t('common.loading')}</Shell>;
   if (data.failed) return <Shell>{i18n.t('common.error')}</Shell>;
 
@@ -128,7 +163,9 @@ export function EpisodeBingo({ ctx }: { ctx: PluginContext }) {
   // Blur only when there is something to give away. A locked bingo whose answers nobody has ticked off yet
   // spoils nothing, and blurring it would hide the tile's whole point from every first-time visitor.
   const hasSpoilers = Object.values(data.resolution?.hits ?? {}).some(Boolean);
-  const hideForSpoilers = hasSpoilers && unheard && !revealed;
+  // Covers what someone else predicted, and the recap. Never the viewer's own card: they played it, and the
+  // hits on it are their own result, not news about the episode.
+  const spoilersCovered = hasSpoilers && unheard && !revealed;
 
   const save = async () => {
     if (!draft) return;
@@ -206,11 +243,18 @@ export function EpisodeBingo({ ctx }: { ctx: PluginContext }) {
   };
 
   const active = tabs.find((t) => t.id === tab) ?? tabs[tabs.length - 1];
+  const hideForSpoilers = spoilersCovered && active.id !== 'me';
   const signedIn = Boolean(ctx.user);
   const hasCard = Boolean(data.myCard);
+  // A card can be on the record without being in the viewer's partition yet: one imported and claimed,
+  // until it has been copied in. Offering a late card then would be a control the backend ignores.
+  const onRecord =
+    hasCard || linking || [...(data.leaderboard?.ranked ?? []), ...(data.leaderboard?.late ?? [])].some(
+      (r) => r.author === ctx.user?.id,
+    );
   const allowLate = data.phase?.allowLate !== false;
   // Editable while predictions are open; after that only a card that does not exist yet, and then once.
-  const editable = active.id === 'me' && signedIn && canEditCard(phase, hasCard, allowLate);
+  const editable = active.id === 'me' && signedIn && canEditCard(phase, onRecord, allowLate);
   const finalSubmission = editable && isFinalSubmission(phase);
   // A standing choice about how you appear, not part of the card — so it stays changeable after the freeze.
   const canChoose = active.id === 'me' && signedIn && phase !== 'ARCHIVED';
@@ -238,6 +282,9 @@ export function EpisodeBingo({ ctx }: { ctx: PluginContext }) {
       {finalSubmission && <p className="bingo__warn">{i18n.t('late.warning')}</p>}
       {active.id === 'me' && signedIn && !editable && hasCard && phase !== 'ARCHIVED' && (
         <p className="bingo__note">{i18n.t('episode.frozen')}</p>
+      )}
+      {active.id === 'me' && signedIn && !hasCard && onRecord && (
+        <p className="bingo__note">{i18n.t('episode.linking')}</p>
       )}
 
       <div className="bingo__tabs" role="tablist" aria-label={i18n.t('episode.cards')}>
@@ -446,7 +493,16 @@ export function EpisodeBingo({ ctx }: { ctx: PluginContext }) {
         rankBy={rankBy}
       />
       {/* It names what happened in the episode, so it sits behind the same cover as the grid. */}
-      {!hideForSpoilers && <RecapPanel recap={data.recap} i18n={i18n} />}
+      {data.recap?.published && spoilersCovered ? (
+        <div className="bingo__spoiler">
+          <p className="bingo__note">{i18n.t('episode.spoilerBody')}</p>
+          <button type="button" className="bingo__btn bingo__btn--quiet" onClick={() => setRevealed(true)}>
+            {i18n.t('episode.spoilerReveal')}
+          </button>
+        </div>
+      ) : (
+        <RecapPanel recap={data.recap} i18n={i18n} />
+      )}
       <div className="bingo__actions">
         {/* A player's own result only once the published board carries it — the backend answers for that
             page and no other; everyone else shares the bingo itself. */}

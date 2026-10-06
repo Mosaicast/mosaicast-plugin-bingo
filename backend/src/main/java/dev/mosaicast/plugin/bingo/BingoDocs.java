@@ -506,5 +506,22 @@ final class BingoDocs {
      * @param skipped  bingos left anonymous because the claimant already had their own card there
      * @param episodes the episodes that moved, so the claim can be taken back
      */
-    record ClaimResult(String pseudonym, int linked, int skipped, List<String> episodes, String at) {}
+    record ClaimResult(String pseudonym, int linked, int skipped, List<String> episodes, String at,
+                       Sealed sealed) {
+
+        ClaimResult withSealed(Sealed next) {
+            return new ClaimResult(pseudonym, linked, skipped, episodes, at, next);
+        }
+    }
+
+    /**
+     * The claimed cards, encrypted with the claim code, so the claimant's browser - the only thing that can
+     * write their partition, and the only thing besides them that knows the code - can copy them in.
+     * AES-256-GCM under a PBKDF2-HMAC-SHA256 key from the code (see {@code BingoImport.seal}).
+     *
+     * @param iv       base64, 12 bytes
+     * @param data     base64 ciphertext with its tag: JSON {@code {slug: [entries…]}}
+     * @param episodes the slugs sealed, so a later change re-seals
+     */
+    record Sealed(String iv, String data, List<String> episodes) {}
 }

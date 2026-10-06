@@ -441,26 +441,12 @@ public class BingoPlugin implements PluginBackend, UserDataHandler, PageRoutePro
         }
         rows.forEach((author, authorRows) -> {
             if (!out.containsKey(author)) {
-                out.put(author, new CardInput(author, entriesOf(authorRows, template)));
+                out.put(author, new CardInput(author, BingoExport.entriesOf(authorRows, template)));
             }
         });
         return List.copyOf(out.values());
     }
 
-    /** A card's entries back from its rows, in the order they were written, blanks where nothing was. */
-    private static List<String> entriesOf(List<EntryRow> rows, Template template) {
-        int size = template.gridSize();
-        boolean freeCentre = template.hasFreeCentre();
-        String[] entries = new String[BingoScore.fillableCells(size, freeCentre)];
-        java.util.Arrays.fill(entries, "");
-        for (EntryRow row : rows) {
-            int index = BingoScore.entryIndex(row.position(), size, freeCentre);
-            if (index >= 0 && index < entries.length) {
-                entries[index] = row.text();
-            }
-        }
-        return List.of(entries);
-    }
 
     /**
      * Everyone's card, by episode.

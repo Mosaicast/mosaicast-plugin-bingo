@@ -294,6 +294,79 @@ class BingoImportTest extends BingoTestSupport {
         assertEquals("b80087d0460bafadda33996223a80e9e44e963829286bdeb4701ce8d3cb845c0", BingoImport.hashOf("gop7-k2mq 9xd4-htfa"));
     }
 
+    // ---------------------------------------------------------------- the cards, handed to the claimant
+
+    @Test
+    void aClaimHandsTheCardsToTheClaimantSealedWithTheirCode() throws Exception {
+        var ctx = ctx(published(true));
+        putImport(ctx, "import:b1-1", bingo(3, true, Map.of(BingoImport.hashOf(MAX_CODE), max),
+                card(max, true, "a", true, "", false, "c", false, "d", false, "e", false, "f", false, "g", false,
+                        "h", false)));
+        var plugin = new BingoPlugin(clock);
+        plugin.register(ctx);
+        claim(ctx, alice, MAX_CODE);
+        plugin.tick();
+
+        var sealed = imports(ctx).claimed().get(BingoImport.hashOf(MAX_CODE)).sealed();
+        assertEquals(List.of(EPISODE), sealed.episodes());
+        var cards = open(sealed, MAX_CODE);
+        assertEquals(List.of("a", "", "c", "d", "e", "f", "g", "h"), cards.get(EPISODE),
+                "in card order, the free middle not written");
+        assertTrue(!imports(ctx).toString().contains("\"c\""), "the public report carries no card text");
+    }
+
+    @Test
+    void aClaimMadeBeforeSealingIsSealedOnTheNextPassAndResealedWhenItGrows() throws Exception {
+        var ctx = ctx(published(true));
+        String later = "the-sample-cast-s01e05";
+        feeds.withDisplay(later, published(true));
+        putImport(ctx, "import:b1-1", bingo(3, false, Map.of(BingoImport.hashOf(MAX_CODE), max), nine(max, "a", true)));
+        var plugin = new BingoPlugin(clock);
+        plugin.register(ctx);
+        claim(ctx, alice, MAX_CODE);
+        plugin.tick();
+        // As an older version left it: linked, nothing sealed.
+        var report = imports(ctx);
+        var bare = new LinkedHashMap<>(report.claimed());
+        bare.replaceAll((h, r) -> r.withSealed(null));
+        ctx.store().put(Scope.site(), BingoDocs.KEY_IMPORTS, new BingoDocs.Imports(report.applied(), report.rejected(),
+                report.claims(), bare, report.updatedAt()));
+
+        plugin.tick();
+        assertEquals(List.of(EPISODE), imports(ctx).claimed().get(BingoImport.hashOf(MAX_CODE)).sealed().episodes());
+
+        Map<String, Object> next = new LinkedHashMap<>(bingo(3, false, Map.of(), nine(max, "b", true)));
+        next.put("slug", later);
+        putImport(ctx, "import:b2-1", next);
+        plugin.tick();
+        var cards = open(imports(ctx).claimed().get(BingoImport.hashOf(MAX_CODE)).sealed(), MAX_CODE);
+        assertEquals(java.util.Set.of(EPISODE, later), cards.keySet());
+    }
+
+    @Test
+    void theSealIsPinnedForTheBrowser() {
+        // frontend/src/claimCards.test.ts opens exactly this: if the parameters drift, claims stop showing.
+        var sealed = BingoImport.seal(MAX_CODE, Map.of("ep", List.of("Tyrion drinks", "")), new byte[12], List.of("ep"));
+        assertEquals("AAAAAAAAAAAAAAAA", sealed.iv());
+        assertEquals(SEALED_VECTOR, sealed.data());
+    }
+
+    static final String SEALED_VECTOR = "Q9gJMEAyl/xCGRT0i0joZW1lpCdjsNu6djjrgYRsx1ylG7qYCwB14HvIGw==";
+
+    /** The browser's side, in Java: PBKDF2 then AES-GCM, the same parameters. */
+    @SuppressWarnings("unchecked")
+    private static Map<String, List<String>> open(BingoDocs.Sealed sealed, String code) throws Exception {
+        String clean = code.replaceAll("[^A-Za-z0-9]", "").toUpperCase(java.util.Locale.ROOT);
+        byte[] key = javax.crypto.SecretKeyFactory.getInstance("PBKDF2WithHmacSHA256").generateSecret(
+                new javax.crypto.spec.PBEKeySpec(clean.toCharArray(), BingoImport.SEAL_SALT.getBytes(
+                        java.nio.charset.StandardCharsets.UTF_8), BingoImport.SEAL_ITERATIONS, 256)).getEncoded();
+        var cipher = javax.crypto.Cipher.getInstance("AES/GCM/NoPadding");
+        cipher.init(javax.crypto.Cipher.DECRYPT_MODE, new javax.crypto.spec.SecretKeySpec(key, "AES"),
+                new javax.crypto.spec.GCMParameterSpec(128, java.util.Base64.getDecoder().decode(sealed.iv())));
+        byte[] plain = cipher.doFinal(java.util.Base64.getDecoder().decode(sealed.data()));
+        return tools.jackson.databind.json.JsonMapper.builder().build().readValue(plain, Map.class);
+    }
+
     // ---------------------------------------------------------------- export
 
     @Test

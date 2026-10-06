@@ -110,7 +110,8 @@ final class BingoImport {
             state.changed = true;
         }
 
-        Map<String, String> claimantByHash = claimants();
+        Map<String, String> codeByHash = new HashMap<>();
+        Map<String, String> claimantByHash = claimants(codeByHash);
         for (DocEntry doc : ctx.store().query(Scope.site(), UNCLAIM_PREFIX)) {
             UnclaimDoc unclaim = BingoDocs.read(doc.value(), UnclaimDoc.class, ctx.logger());
             if (unclaim != null) {
@@ -121,6 +122,9 @@ final class BingoImport {
         }
         for (Map.Entry<String, String> claim : claimantByHash.entrySet()) {
             rows |= claim(claim.getKey(), claim.getValue(), state);
+        }
+        for (Map.Entry<String, String> claim : claimantByHash.entrySet()) {
+            sealFor(claim.getKey(), claim.getValue(), codeByHash.get(claim.getKey()), state);
         }
 
         if (state.changed) {
@@ -335,7 +339,7 @@ final class BingoImport {
     // ---------------------------------------------------------------- claims
 
     /** Every code anybody has entered, as hash to claimant. A hash already used stays with its first user. */
-    private Map<String, String> claimants() {
+    private Map<String, String> claimants(Map<String, String> codeByHash) {
         Map<String, String> byHash = new LinkedHashMap<>();
         for (OwnedDocEntry entry : everyone.query(KEY_CLAIM)) {
             if (!KEY_CLAIM.equals(entry.key())) {
@@ -347,8 +351,8 @@ final class BingoImport {
             }
             for (String code : claim.codes()) {
                 String hash = hashOf(code);
-                if (hash != null) {
-                    byHash.putIfAbsent(hash, entry.userId().toString());
+                if (hash != null && byHash.putIfAbsent(hash, entry.userId().toString()) == null) {
+                    codeByHash.put(hash, code);
                 }
             }
         }
@@ -383,7 +387,7 @@ final class BingoImport {
             moved.add(slug);
         }
         state.claims.remove(hash);
-        state.claimed.put(hash, new ClaimResult(pseudonym, moved.size(), skipped, moved, now()));
+        state.claimed.put(hash, new ClaimResult(pseudonym, moved.size(), skipped, moved, now(), null));
         state.changed = true;
         return !moved.isEmpty();
     }
@@ -409,7 +413,8 @@ final class BingoImport {
             quiet(slug, user);
             episodes.add(slug);
         }
-        state.claimed.put(hash, new ClaimResult(earlier.pseudonym(), episodes.size(), earlier.skipped(), episodes, now()));
+        state.claimed.put(hash, new ClaimResult(earlier.pseudonym(), episodes.size(), earlier.skipped(), episodes, now(),
+                earlier.sealed()));
         state.changed = true;
         return true;
     }
@@ -462,6 +467,62 @@ final class BingoImport {
         Set<String> ids = new LinkedHashSet<>(told == null || told.userIds() == null ? List.of() : told.userIds());
         if (ids.add(user)) {
             ctx.store().put(scope, KEY_NOTIFIED, new NotifyState(List.copyOf(ids), now()));
+        }
+    }
+
+    // ---------------------------------------------------------------- handing the cards to the claimant
+
+    /** PBKDF2 parameters both halves use; the browser's {@code claimCards.ts} must match them exactly. */
+    static final String SEAL_SALT = "mosaicast-bingo/claim";
+    static final int SEAL_ITERATIONS = 200_000;
+
+    /**
+     * Publishes the claimed cards, sealed with the claim code, whenever the set of claimed episodes changed.
+     *
+     * <p>The tile draws a player's card from their own partition, which only their browser can write, so a
+     * claim that only moved rows left the card empty on screen - and offered a late card the record would
+     * then ignore. The browser copies these in; sealed, because the report is public and a card is the
+     * player's own words.
+     */
+    private void sealFor(String hash, String user, String code, State state) {
+        ClaimResult result = state.claimed.get(hash);
+        if (result == null || code == null || result.episodes().isEmpty()) {
+            return;
+        }
+        if (result.sealed() != null && result.sealed().episodes().equals(result.episodes())) {
+            return;
+        }
+        Map<String, List<String>> cards = new LinkedHashMap<>();
+        for (String slug : result.episodes()) {
+            Template template = ctx.store().get(Scope.episode(slug), KEY_TEMPLATE, Template.class).orElse(null);
+            List<EntryRow> rows = ctx.schema().select(ENTITY_ENTRY, byCard(slug, user), EntryRow.class);
+            if (template != null && !rows.isEmpty()) {
+                cards.put(slug, BingoExport.entriesOf(rows, template));
+            }
+        }
+        byte[] iv = new byte[12];
+        RANDOM.nextBytes(iv);
+        state.claimed.put(hash, result.withSealed(seal(code, cards, iv, result.episodes())));
+        state.changed = true;
+    }
+
+    private static final java.security.SecureRandom RANDOM = new java.security.SecureRandom();
+
+    /** AES-256-GCM over the cards as JSON, keyed by PBKDF2-HMAC-SHA256 from the normalised code. */
+    static Sealed seal(String code, Map<String, List<String>> cards, byte[] iv, List<String> episodes) {
+        try {
+            String clean = code.replaceAll("[^A-Za-z0-9]", "").toUpperCase(Locale.ROOT);
+            javax.crypto.SecretKeyFactory factory = javax.crypto.SecretKeyFactory.getInstance("PBKDF2WithHmacSHA256");
+            byte[] key = factory.generateSecret(new javax.crypto.spec.PBEKeySpec(clean.toCharArray(),
+                    SEAL_SALT.getBytes(StandardCharsets.UTF_8), SEAL_ITERATIONS, 256)).getEncoded();
+            javax.crypto.Cipher cipher = javax.crypto.Cipher.getInstance("AES/GCM/NoPadding");
+            cipher.init(javax.crypto.Cipher.ENCRYPT_MODE, new javax.crypto.spec.SecretKeySpec(key, "AES"),
+                    new javax.crypto.spec.GCMParameterSpec(128, iv));
+            byte[] data = cipher.doFinal(MAPPER.writeValueAsBytes(cards));
+            java.util.Base64.Encoder b64 = java.util.Base64.getEncoder();
+            return new Sealed(b64.encodeToString(iv), b64.encodeToString(data), List.copyOf(episodes));
+        } catch (java.security.GeneralSecurityException e) {
+            throw new IllegalStateException("cannot seal claimed cards", e);
         }
     }
 
