@@ -1,0 +1,130 @@
+# SPDX-License-Identifier: AGPL-3.0-or-later
+# SPDX-FileCopyrightText: 2026 The Mosaicast Authors
+
+# Builds and tests the backend (Gradle/Java) and frontend (Vite/Vitest) on every PR and on master,
+# then proves the repo's actual deliverable — `./build.sh` producing a complete `dist/` — still works.
+name: CI
+
+on:
+  pull_request:
+    types: [opened, synchronize, reopened]
+  push:
+    branches: [master]
+
+jobs:
+  backend:
+    name: Backend (Gradle)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: actions/setup-java@v6.0.0
+        with:
+          distribution: temurin
+          java-version: '21'
+          cache: gradle
+
+      - name: Build and test
+        working-directory: backend
+        env:
+          GITHUB_ACTOR: ${{ github.actor }}
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: ./gradlew --no-daemon clean build
+
+  frontend:
+    name: Frontend (Vite/Vitest)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+
+      # jsdom 30 declares `engines: ^22.22.2 || ^24.15.0 || >=26`, and on Node 20 its bundled undici
+      # dies at import with `webidl.util.markAsUncloneable is not a function` before a single test runs.
+      # Node 20 went end-of-life in April 2026 anyway, so the floor moves rather than the dependency.
+      - uses: actions/setup-node@v7
+        with:
+          node-version: '22'
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+
+      - name: Install
+        working-directory: frontend
+        run: npm ci
+
+      # Vite transpiles without type-checking, so `npm run build` alone would happily ship a type
+      # error. tsconfig.json is `noEmit: true` precisely so this step is the one that enforces it.
+      - name: Typecheck
+        working-directory: frontend
+        run: npm run typecheck
+
+      - name: Build
+        working-directory: frontend
+        run: npm run build
+
+      - name: Test
+        working-directory: frontend
+        run: npm test
+
+  package:
+    name: Package (build.sh -> dist/)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: actions/setup-java@v6.0.0
+        with:
+          distribution: temurin
+          java-version: '21'
+          cache: gradle
+
+      # Same floor as the frontend job above — build.sh runs the same npm install.
+      - uses: actions/setup-node@v7
+        with:
+          node-version: '22'
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+
+      # The drop-in `dist/` layout build.sh
+      # writes is the deliverable — the two jobs above would stay green even if build.sh broke.
+      - name: Run build.sh
+        env:
+          GITHUB_ACTOR: ${{ github.actor }}
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: ./build.sh
+
+      - name: Verify dist/ layout
+        run: |
+          set -euo pipefail
+          for f in dist/plugin.json dist/bingo.jar dist/assets/bingo.es.js; do
+            [ -s "$f" ] || { echo "::error::missing or empty $f"; exit 1; }
+          done
+          # The manifest's platformApi must match the SDK the backend actually compiled against.
+          manifest_api=$(grep -o '"platformApi": *"[^"]*"' dist/plugin.json | cut -d'"' -f4)
+          gradle_api=$(grep -o 'plugin-api:[0-9][^"]*' backend/build.gradle.kts | cut -d: -f2)
+          [ "$manifest_api" = "$gradle_api" ] || {
+            echo "::error::plugin.json platformApi=$manifest_api but backend builds against plugin-api:$gradle_api"
+            exit 1
+          }
+          # The test kit ships with the same anchor; a stale one compiles and then fakes an older contract.
+          testkit_api=$(grep -o 'plugin-testkit:[0-9][^"]*' backend/build.gradle.kts | cut -d: -f2)
+          [ "$manifest_api" = "$testkit_api" ] || {
+            echo "::error::plugin.json platformApi=$manifest_api but tests use plugin-testkit:$testkit_api"
+            exit 1
+          }
+
+          # The plugin's OWN version — a different thing from platformApi — lives in three files and nothing
+          # keeps them in step. release.yml compares the tag against the manifest and would catch a drift
+          # there, but only once someone has already published a release whose parts disagree.
+          # `scripts/set-version.sh` is what bumps all three; this is what notices when it was not used.
+          version=$(sed -n 's/.*"version"[[:space:]]*:[[:space:]]*"\([^"]*\)".*/\1/p' plugin.json | head -1)
+          npm_version=$(sed -n 's/.*"version"[[:space:]]*:[[:space:]]*"\([^"]*\)".*/\1/p' frontend/package.json | head -1)
+          gradle_version=$(sed -n 's/^version = "\(.*\)"/\1/p' backend/build.gradle.kts)
+          [ "$version" = "$npm_version" ] && [ "$version" = "$gradle_version" ] || {
+            echo "::error::plugin version disagrees — plugin.json=$version frontend=$npm_version backend=$gradle_version; run scripts/set-version.sh"
+            exit 1
+          }
+          echo "dist/ complete, platformApi=$manifest_api ✅"
+
+      - uses: actions/upload-artifact@v7
+        with:
+          name: plugin-dist
+          path: dist/
