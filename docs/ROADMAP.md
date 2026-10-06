@@ -10,18 +10,6 @@ specs. This file is repo-local and is updated as items move.
 
 ## Waiting on the platform
 
-### Close the schema read surface (security)
-Core serves `entry` and `card_result` over `GET /api/plugins/bingo/schema/*` under `data.readableBy`, which
-is `anonymous` here because the tile has to be public. Every prediction, score and author id is therefore
-readable by anyone. That includes rows from quiet episodes and from players who opted out of the
-leaderboard. The plugin can't close this on its own: raising the floor breaks the tile, and the backend
-has no private storage to hold a pseudonymisation secret in.
-
-- Filed: [core#261](https://github.com/Mosaicast/mosaicast-core/issues/261), [sdk#99](https://github.com/Mosaicast/mosaicast-plugin-sdk/issues/99)
-  (an optional `storage.schemaReadableBy`, the schema-table counterpart of `blobs.readableBy`).
-- **When it ships:** set it to `admin`. Nothing in the frontend reads `ctx.schema`, which is deliberate:
-  every new feature reads backend-published documents instead, so nothing breaks.
-
 ### Personal history ("your last bingos")
 The only path today is a browser schema read filtered by the viewer's own author id, which works only
 *because* of the leak above. The backend also can't write into a `USER` partition (`DocStore` throws on
@@ -61,13 +49,10 @@ Importing is a script for now (`scripts/bingo-import.mjs`). The backend path is 
 a dialog on the page could write just as well: file picker, the same dry-run report, then apply. It's worth
 building once a second podcast wants to import.
 
-### The plugin's part of the GDPR data export
-`exportUser` already returns a person's own cards as `mosaicast-bingo/1`. Core doesn't ask yet:
-[core#263](https://github.com/Mosaicast/mosaicast-core/issues/263) and
-[sdk#102](https://github.com/Mosaicast/mosaicast-plugin-sdk/issues/102) propose one ZIP built from every
-plugin's part. Once the file form lands, hand the same document over as `bingos.json`. An admin full
-export, with everyone's cards, stays an ops script after core#261. It is never offered to players: being
-listed covers a name and a score, not a card.
+### An admin's full export
+A person's own cards reach core's data export as `plugins/bingo/bingo.json` (core 0.8.0). An admin export
+with everyone's cards stays an ops script: it is never offered to players, because being listed covers a
+name and a score, not a card.
 
 ### Anonymous suggestions
 Suggestions are for signed-in players only, because only they can fill in a card. If anonymous visitors

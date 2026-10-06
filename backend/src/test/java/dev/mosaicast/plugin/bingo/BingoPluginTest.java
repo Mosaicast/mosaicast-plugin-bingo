@@ -16,6 +16,7 @@ import dev.mosaicast.plugin.testkit.UserDataHandlerHarness;
 import org.junit.jupiter.api.Test;
 
 import java.time.Duration;
+import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 import java.util.UUID;
@@ -756,6 +757,66 @@ class BingoPluginTest extends BingoTestSupport {
     }
 
     @Test
+    void anEpisodeGoingQuietAgainLeavesTheSiteDocumentsAtOnce() {
+        var ctx = ctx(snapshot(EpisodePhase.UPCOMING));
+        seedTemplate(ctx);
+        seedCard(ctx, alice, List.of("kraken"));
+        resolve(ctx, Map.of("kraken", true));
+        control(ctx, "RESOLVED");
+        new BingoPlugin(clock).register(ctx);
+        assertEquals(1, ctx.episodePhaseListenerCount());
+        assertEquals(1, stats(ctx).episodes(), "announced: its bingo counts");
+
+        // A podcaster moves announceAt back into the future (platformApi 0.19.0). No tick runs in between.
+        feeds.withPhase(EPISODE, EpisodePhase.PLANNED);
+        clock.advance(java.time.Duration.ofSeconds(1));
+        ctx.fireEpisodePhaseChanged(EPISODE, EpisodePhase.PLANNED);
+
+        assertEquals(0, stats(ctx).episodes(), "hidden from visitors, so gone from what they can read, now");
+        assertTrue(ctx.logger().events(org.slf4j.event.Level.ERROR).isEmpty());
+    }
+
+    @Test
+    void aBurstOfConcurrentPhaseEventsRunsOnePassAndOnlyOneCallerWaits() throws Exception {
+        var ctx = ctx(published(true));
+        seedTemplate(ctx);
+        var plugin = new BingoPlugin(clock);
+        plugin.register(ctx);
+
+        // A deleted feed: one event per episode, each on its own virtual thread, all at once (core 0.8.1).
+        // The lock is held as if a scheduled tick were running, so every caller arrives before any pass.
+        int events = 50;
+        var returned = new java.util.concurrent.CountDownLatch(events - 1);
+        var threads = new ArrayList<Thread>();
+        plugin.passLock.lock();
+        try {
+            for (int i = 0; i < events; i++) {
+                String slug = "gone-" + i;
+                threads.add(Thread.ofVirtual().start(() -> {
+                    plugin.phaseChanged(slug, null);
+                    returned.countDown();
+                }));
+            }
+            assertTrue(returned.await(10, java.util.concurrent.TimeUnit.SECONDS), "all but one return at once");
+            assertEquals(1, plugin.passLock.getQueueLength(), "and only the one that queued the pass waits");
+        } finally {
+            plugin.passLock.unlock();
+        }
+        for (Thread thread : threads) {
+            thread.join(10_000);
+        }
+
+        assertEquals(1, phasePasses(ctx), "fifty events, one pass");
+        ctx.fireEpisodePhaseChanged(EPISODE, EpisodePhase.PLANNED);
+        assertEquals(2, phasePasses(ctx), "and a later change runs one again");
+    }
+
+    private static long phasePasses(FakePluginContext ctx) {
+        return ctx.logger().events(org.slf4j.event.Level.INFO).stream()
+                .filter(e -> e.message().startsWith("bingo pass after a phase change")).count();
+    }
+
+    @Test
     void aReleaseClosesPredictionsWithoutWaitingForTheNextTick() {
         var ctx = ctx(published(false));
         seedTemplate(ctx);
@@ -1029,7 +1090,7 @@ class BingoPluginTest extends BingoTestSupport {
         plugin.register(ctx);
 
         var harness = new UserDataHandlerHarness(plugin);
-        assertTrue(harness.export(alice.toString()).isPresent(), "an export is a request in its own right");
+        assertTrue(harness.exportFiles(alice.toString()).isPresent(), "an export is a request in its own right");
 
         harness.eraseTwice(alice.toString()); // fails loudly if the second call is not a no-op
 

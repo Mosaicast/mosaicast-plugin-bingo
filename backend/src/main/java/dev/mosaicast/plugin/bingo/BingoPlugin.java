@@ -6,6 +6,7 @@ package dev.mosaicast.plugin.bingo;
 import dev.mosaicast.plugin.api.CrossUserStore;
 import dev.mosaicast.plugin.api.DisplaySnapshot;
 import dev.mosaicast.plugin.api.EpisodePhase;
+import dev.mosaicast.plugin.api.ExportFile;
 import dev.mosaicast.plugin.api.OgMeta;
 import dev.mosaicast.plugin.api.OwnedDocEntry;
 import dev.mosaicast.plugin.api.PageRouteProvider;
@@ -15,6 +16,7 @@ import dev.mosaicast.plugin.api.SchemaStore;
 import dev.mosaicast.plugin.api.Scope;
 import dev.mosaicast.plugin.api.ShareMetadataProvider;
 import dev.mosaicast.plugin.api.UserDataHandler;
+import dev.mosaicast.plugin.api.UserExport;
 import org.pf4j.Extension;
 
 import java.time.Clock;
@@ -31,6 +33,8 @@ import java.util.Optional;
 import java.util.Set;
 import java.util.TreeSet;
 import java.util.UUID;
+import java.util.concurrent.atomic.AtomicBoolean;
+import java.util.concurrent.locks.ReentrantLock;
 
 import tools.jackson.databind.JsonNode;
 
@@ -89,6 +93,11 @@ public class BingoPlugin implements PluginBackend, UserDataHandler, PageRoutePro
     static final Duration ROLL_UP_REFRESH = Duration.ofHours(1);
 
     private final Clock clock;
+    /**
+     * A phase-triggered pass is waiting for the lock and has not started yet. Every phase event arriving
+     * meanwhile joins it instead of queueing a pass of its own (see {@link #phaseChanged}).
+     */
+    private final AtomicBoolean phasePassQueued = new AtomicBoolean();
     private PluginContext ctx;
     /** Every player's partition, read-only. Present because the manifest declares {@code data.readsAllUsers}. */
     private CrossUserStore everyone;
@@ -99,8 +108,12 @@ public class BingoPlugin implements PluginBackend, UserDataHandler, PageRoutePro
      * this lock serialises the release event with them, but only within one instance. A release bound on one
      * instance while another runs the tick can still overlap — not a case before core runs several instances
      * (ARCHITECTURE: v3), and the reason this lock is worth revisiting then.
+     *
+     * <p>A {@link ReentrantLock}, not a monitor: the host calls each listener on a virtual thread of its own,
+     * and on Java 21 (core's runtime) a virtual thread waiting to enter a {@code synchronized} block pins its
+     * carrier thread, which the host needs for everything else. Package-private for the concurrency test.
      */
-    private final Object passLock = new Object();
+    final ReentrantLock passLock = new ReentrantLock();
     private BingoLifecycle lifecycle;
     private BingoRecord record;
     private BingoPublish publish;
@@ -147,6 +160,9 @@ public class BingoPlugin implements PluginBackend, UserDataHandler, PageRoutePro
         // while a fast listener could still rewrite a card with the episode playing. Best effort: the tick
         // reconciles by phase as well, so a release this instance never heard of still closes on time.
         ctx.onEpisodeReleased(this::released);
+        // The other direction leaks (platformApi 0.19.0): an episode going quiet again or cancelled is hidden at
+        // once, while the site documents this plugin published keep naming it until the next tick.
+        ctx.onEpisodePhaseChanged(this::phaseChanged);
         ctx.logger().info("bingo registered; ingest every {}s, schema={}",
                 ingestInterval().toSeconds(), ctx.schema() == null ? "absent" : ctx.schema().namespace());
     }
@@ -162,7 +178,8 @@ public class BingoPlugin implements PluginBackend, UserDataHandler, PageRoutePro
 
     /** One scheduled pass over the working set, then the site-wide roll-up. */
     void tick() {
-        synchronized (passLock) {
+        passLock.lock();
+        try {
             // Past bingos and claims first, so the pass below already scores and publishes what they changed.
             try {
                 if (importer.run(settings().threshold())) {
@@ -188,6 +205,8 @@ public class BingoPlugin implements PluginBackend, UserDataHandler, PageRoutePro
             } catch (RuntimeException e) {
                 ctx.logger().warn("bingo stats pass failed", e);
             }
+        } finally {
+            passLock.unlock();
         }
     }
 
@@ -200,8 +219,42 @@ public class BingoPlugin implements PluginBackend, UserDataHandler, PageRoutePro
      * may handle the same release.
      */
     void released(String slug) {
-        synchronized (passLock) {
+        passLock.lock();
+        try {
             tickEpisode(slug, pass());
+        } finally {
+            passLock.unlock();
+        }
+    }
+
+    /**
+     * A podcaster's write moved an episode's phase: a whole pass now, rather than up to one interval later.
+     *
+     * <p>Going back to {@code PLANNED} or being cancelled ({@code phase == null}) hides the episode at once,
+     * but the site's {@code stats}, {@code history} and {@code suggestions} still name it until the roll-up
+     * runs again. The pass sees the new quiet set (or the vanished slug), which moves the roll-up's
+     * fingerprint, so those documents drop it now. A whole pass because the roll-up reads what every episode's
+     * pass collected. A withdrawal closes predictions like a release, and an announcement opens them. A release
+     * is left to {@link #released}, which the host has just called. Idempotent with the tick.
+     *
+     * <p><strong>Single flight.</strong> A deleted feed fires one event per episode (core 0.8.1), all after the
+     * one delete committed, each on its own virtual thread and at once. One caller queues a pass; everyone
+     * arriving before it starts joins it and returns at once, so only that caller ever waits for the lock.
+     * The flag clears as the pass starts, which is when it reads the state: an event arriving after that may
+     * describe a change the pass has not seen, so it queues exactly one more. A burst costs at most two passes,
+     * and nothing is missed.
+     */
+    void phaseChanged(String slug, EpisodePhase phase) {
+        if (phase == EpisodePhase.RELEASED || !phasePassQueued.compareAndSet(false, true)) {
+            return;
+        }
+        passLock.lock();
+        try {
+            phasePassQueued.set(false);
+            ctx.logger().info("bingo pass after a phase change: {} is now {}", slug, phase == null ? "gone" : phase);
+            tick();
+        } finally {
+            passLock.unlock();
         }
     }
 
@@ -563,15 +616,19 @@ public class BingoPlugin implements PluginBackend, UserDataHandler, PageRoutePro
         ctx.logger().info("bingo erased the identity link on a user's rows");
     }
 
+    /** Where the person's cards land in their data export: {@code plugins/bingo/bingo.json} in core's ZIP. */
+    static final String EXPORT_FILE = "bingo.json";
+
     /**
      * {@inheritDoc}
      *
-     * <p>The person's own cards, in {@code mosaicast-bingo/1} - the format the import script reads - so the
-     * part core bundles into a data export is a file they can take elsewhere and bring back. Only their own
-     * cards: nobody else's card is personal data of theirs. Core does not call this yet (core#263).
+     * <p>The person's own cards, as one {@code mosaicast-bingo/1} file - the format the import script reads -
+     * so what core bundles into a data export (core 0.8.0) is a file they can take elsewhere and bring back.
+     * Only their own cards: nobody else's card is personal data of theirs. {@code exportUser} stays at its
+     * default; the host asks this first.
      */
     @Override
-    public Optional<Map<String, Object>> exportUser(String userId) {
+    public Optional<UserExport> exportFiles(String userId) {
         SchemaStore schema = ctx.schema();
         if (schema == null) {
             return Optional.empty();
@@ -580,8 +637,10 @@ public class BingoPlugin implements PluginBackend, UserDataHandler, PageRoutePro
         if (entries.isEmpty()) {
             return Optional.empty();
         }
-        return Optional.of(BingoExport.ownBingos(entries, slug ->
-                ctx.store().get(Scope.episode(slug), KEY_TEMPLATE, Template.class).orElse(null)));
+        Map<String, Object> bingos = BingoExport.ownBingos(entries, slug ->
+                ctx.store().get(Scope.episode(slug), KEY_TEMPLATE, Template.class).orElse(null));
+        return Optional.of(UserExport.of(ExportFile.text(EXPORT_FILE, "application/json",
+                MAPPER.writerWithDefaultPrettyPrinter().writeValueAsString(bingos))));
     }
 
     // ---------------------------------------------------------------- pages

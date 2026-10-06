@@ -314,7 +314,7 @@ $C --name bingo down
 re-copies it and restarts only the app, keeping the database (add `--core origin/master` to move core too). Without it
 (or `--plugins`) no plugin loads and the tile is simply absent.
 
-Requires **core 0.7.7 or newer** (`platformApi` 0.18.0). Core matches that version on `major.minor` exactly,
+Requires **core 0.8.0 or newer** (`platformApi` 0.19.0). Core matches that version on `major.minor` exactly,
 so an older core rejects this build at load and a newer minor rejects it too.
 
 If the tile does not appear, the reason is in the admin log viewer at `/admin/logs` — a rejected manifest
@@ -389,15 +389,20 @@ is what makes the partition private. Integrity comes from the backend freezing e
 changes nothing. Scores keep updating past the freeze, because the podcaster is still ticking off answers:
 what freezes is what a card *says*, never what it is worth.
 
-## Known limitation: the schema read surface
+## Who can read what
 
-Core serves this plugin's schema tables over HTTP under the same `data.readableBy` floor as its
-documents. That floor is `anonymous`, because the tile is public. So the raw rows (entries, scores,
-author ids) are readable more widely than anything the plugin publishes itself. That includes rows from
-quiet episodes and from players who opted out of the leaderboard. The plugin can't close this on its own.
-A separate schema floor is proposed in [core#261](https://github.com/Mosaicast/mosaicast-core/issues/261)
-and [sdk#99](https://github.com/Mosaicast/mosaicast-plugin-sdk/issues/99). Nothing in the frontend reads
-`ctx.schema`, so the floor can move to `admin` the day it exists. See [`docs/ROADMAP.md`](docs/ROADMAP.md).
+The tile is public, so the plugin's documents are readable by anyone (`data.readableBy: anonymous`), and
+everything public is published by the backend. Raw material stays behind higher floors (core 0.8.0):
+
+- **Schema rows** (every entry and score, with author ids, quiet episodes and opted-out players):
+  `storage.schemaReadableBy: admin`. The frontend never reads `ctx.schema`; the backend's own reads are
+  unaffected.
+- **Import files and unclaim requests** (`import:*`, `unclaim:*`) and **who may be featured**
+  (`participants`): podcaster and up, through `data.keyFloors`.
+- **Who was notified** (`notified`): admin only. It names everyone who played, opted out or not.
+
+When a podcaster sends an announced episode back to quiet, or cancels it, the backend runs a pass at once
+(`onEpisodePhaseChanged`), so the site documents stop naming it right away instead of on the next tick.
 
 ## Contributing
 

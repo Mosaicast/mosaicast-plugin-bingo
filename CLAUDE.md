@@ -11,13 +11,13 @@ four-state lifecycle, schema-backed history, and a site page (`/p/bingo/`) with 
 Work in plan mode first.
 
 ## Tech stack
-Java 21 (Gradle, PF4J extension) · React 18 + Vite (Web Component) · **platformApi 0.18.0** (core 0.7.7+)
+Java 21 (Gradle, PF4J extension) · React 18 + Vite (Web Component) · **platformApi 0.19.0** (core 0.8.0+)
 
 ## Commands
 ```
 ./build.sh                                    # -> dist/{plugin.json,bingo.jar,assets/bingo.es.js}
-cd backend  && ./gradlew test                 # 141 tests
-cd frontend && npm test && npm run typecheck  # 145 tests
+cd backend  && ./gradlew test                 # 145 tests
+cd frontend && npm test && npm run typecheck  # 159 tests
 node --test scripts/*.test.mjs                # import script (also in CI)
 scripts/set-version.sh <x.y.z>                # bumps the plugin version in all three files
 ```
@@ -59,7 +59,8 @@ frontend/locales/{en,de}.json           UI strings
   0.18.0/core 0.7.7) is the *episode's* phase; the bingo's also carries the podcaster's intent.
 - **Release closes predictions, by phase, never by date (0.18.0).** `snapshot.phase()` `RELEASED` *or*
   `WITHDRAWN` counts as released. `onEpisodeReleased` runs one full episode pass at once (best effort);
-  the tick reconciles by phase. Both take `passLock`: a pass rewrites rows delete-then-insert, so two at
+  the tick reconciles by phase. Both take `passLock` (a `ReentrantLock`: listeners run on virtual threads, and
+  `synchronized` pins a carrier on Java 21): a pass rewrites rows delete-then-insert, so two at
   once would duplicate a frozen card. A full pass, never just a phase write — the pass applying the lock
   ingests the last cards as ranked.
 - **A quiet (`PLANNED`) episode is visible to the backend only.** The host hides its scope from visitors;
@@ -122,9 +123,9 @@ frontend/locales/{en,de}.json           UI strings
   `ctx.api`, uncached, one request. `ctx.docs.getMany` feeds the same memory. Only the viewer's own
   partition (`'self'`) may use `ctx.docs.get`.
 - **`--mc-accent` is for fills; `--mc-accent-text` for text, focus rings and state borders (0.16.0).**
-- **The schema HTTP surface is readable at `data.readableBy` (= anonymous).** Raw rows (author ids, quiet
-  episodes, opted-out players) are public until core#261/sdk#99 add a separate floor. So the frontend must
-  **never** read `ctx.schema`; publish what a page needs as a backend-owned document instead.
+- **Schema rows are `schemaReadableBy: admin`; bookkeeping has `keyFloors` (0.19.0).** So the frontend must
+  **never** read `ctx.schema` (publish a backend-owned document), and never floor a key a fan's tile reads:
+  a floored key silently drops out of the batch read. `onEpisodePhaseChanged`: single-flight full tick, not on release.
 - **After the freeze, derive from the record.** Candidates, counts and featured cards come from frozen rows
   (`whatCardsSay`), never from partition docs their owners can still write. Decided groups are seeded so a
   late spelling cannot rename them; a row's `canonical` follows the current grouping, so pins re-score.

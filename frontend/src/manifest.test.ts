@@ -53,6 +53,25 @@ describe('plugin.json', () => {
     expect(manifest.data.writableBy).toBe('podcaster');
   });
 
+  it('keeps raw rows and bookkeeping from visitors, and nothing the tile reads', () => {
+    // Rows name every author, quiet episodes and opted-out players. The frontend never reads them, so the
+    // backend is the only reader that needs them (platformApi 0.19.0; the SchemaStore ignores the floor).
+    expect(manifest.storage.schemaReadableBy).toBe('admin');
+    const floor = (key: string) =>
+      manifest.data.keyFloors.find((f) => f.keys.some((k) => (k.endsWith('*') ? key.startsWith(k.slice(0, -1)) : k === key)))
+        ?.readableBy;
+    // Who played and who may be featured are the podcaster's picker and the backend's own memory.
+    expect(floor('import:batch-1')).toBe('podcaster');
+    expect(floor('unclaim:abcd')).toBe('podcaster');
+    expect(floor(KEY_PARTICIPANTS)).toBe('podcaster');
+    expect(floor('notified')).toBe('admin');
+    // A floor on a key a fan's tile reads would quietly drop it from their batch read.
+    for (const key of [KEY_PHASE, KEY_CANDIDATES, KEY_LEADERBOARD, KEY_RECAP, KEY_STATS, KEY_SUGGESTIONS, KEY_HISTORY,
+                       KEY_IMPORTS, KEY_SHOWCASED, KEY_TEMPLATE, KEY_RESOLUTION, KEY_CONTROL, KEY_SHOWCASE, KEY_GROUPING]) {
+      expect(floor(key)).toBeUndefined();
+    }
+  });
+
   it('declares only placements the shell actually renders', () => {
     // `admin` passes validation and is mounted by no region, so a board declared there would load cleanly
     // and be invisible. `sidebar` is gone on purpose: the podcaster's controls live on the tile itself,

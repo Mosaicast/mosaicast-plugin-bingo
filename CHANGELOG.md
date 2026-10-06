@@ -10,9 +10,8 @@ in the three files that carry it.
 
 ## [Unreleased]
 
-Built against **`platformApi` 0.18.0**, so it needs **core 0.7.7 or newer**. Core matches that version on
-`major.minor` exactly: core 0.7.6 and older reject this build at load, and core 0.7.7 rejects the 0.6.x
-build.
+Built against **`platformApi` 0.19.0**, so it needs **core 0.8.0 or newer**. Core matches that version on
+`major.minor` exactly: core 0.7.x rejects this build at load, and core 0.8.0 rejects the 0.6.x build.
 
 ### Added
 - **The bingo page, `/p/bingo/`**, from a *Bingo* menu entry. It shows the site standings (computed
@@ -52,8 +51,11 @@ build.
   every card scores exactly as the file marks it. Players get **claim codes** instead of being attached
   to accounts: until claimed they count without a name, and the person enters their code on `/p/bingo/`
   to take the cards over. A code can be revoked and reissued.
-- `exportUser` hands over a person's own cards as `mosaicast-bingo/1`, ready for core's data export
-  (core#263).
+- **The plugin's part of a data export** (core 0.8.0): a person's own cards as one `mosaicast-bingo/1`
+  file, `plugins/bingo/bingo.json` in their ZIP, which the import script reads back (`exportFiles`).
+- **An episode going quiet again, or cancelled, leaves the site page at once** (`onEpisodePhaseChanged`),
+  instead of on the next tick. A burst of events, like a deleted feed sending one per episode at once,
+  runs at most two passes, and only one caller waits for the other.
 - Season pills name the feed when the history spans more than one.
 - **Rankings per season, and per card.** The all-time standings at the top gain a Total / Per card
   switch. The history section adds a second ranking that follows the season pill, and the records follow
@@ -120,9 +122,12 @@ build.
 - Fuzzy grouping normalises each entry once and skips comparisons that can't reach the threshold. A test
   holds the results identical to the plain definition.
 
-### Known issue
-- Core serves the schema tables under `data.readableBy` (anonymous here), so raw rows are public. A
-  separate floor is proposed in core#261 / sdk#99. The frontend never reads `ctx.schema`.
+### Security
+- **Raw schema rows are admin-only** (`storage.schemaReadableBy`, core#261). Core used to serve them under
+  `data.readableBy`, anonymous here, so every entry, score and author id was public, quiet episodes and
+  opted-out players included.
+- **Bookkeeping keys get their own floors** (`data.keyFloors`): import files, unclaim requests and
+  `participants` are for podcasters, `notified` (everyone who played) for admins.
 
 ### Not adopted
 - **`ctx.docs.getMany` in place of `readEpisode`**, although every host of 0.17.0 forgets a miss after 30 s
