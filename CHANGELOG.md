@@ -54,7 +54,8 @@ Built against **`platformApi` 0.19.0**, so it needs **core 0.8.0 or newer**. Cor
 - **The plugin's part of a data export** (core 0.8.0): a person's own cards as one `mosaicast-bingo/1`
   file, `plugins/bingo/bingo.json` in their ZIP, which the import script reads back (`exportFiles`).
 - **An episode going quiet again, or cancelled, leaves the site page at once** (`onEpisodePhaseChanged`),
-  instead of on the next tick.
+  instead of on the next tick. Events within two seconds of each other (a deleted feed sends one per
+  episode) run a single pass.
 - Season pills name the feed when the history spans more than one.
 - **Rankings per season, and per card.** The all-time standings at the top gain a Total / Per card
   switch. The history section adds a second ranking that follows the season pill, and the records follow

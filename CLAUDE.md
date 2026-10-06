@@ -124,7 +124,7 @@ frontend/locales/{en,de}.json           UI strings
 - **`--mc-accent` is for fills; `--mc-accent-text` for text, focus rings and state borders (0.16.0).**
 - **Schema rows are `schemaReadableBy: admin`; bookkeeping has `keyFloors` (0.19.0).** So the frontend must
   **never** read `ctx.schema` (publish a backend-owned document), and never floor a key a fan's tile reads:
-  a floored key silently drops out of the batch read. `onEpisodePhaseChanged` runs a full tick (not on a release).
+  a floored key silently drops out of the batch read. `onEpisodePhaseChanged`: one full tick per burst, not on release.
 - **After the freeze, derive from the record.** Candidates, counts and featured cards come from frozen rows
   (`whatCardsSay`), never from partition docs their owners can still write. Decided groups are seeded so a
   late spelling cannot rename them; a row's `canonical` follows the current grouping, so pins re-score.

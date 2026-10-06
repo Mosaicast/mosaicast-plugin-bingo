@@ -89,8 +89,15 @@ public class BingoPlugin implements PluginBackend, UserDataHandler, PageRoutePro
     static final int DEFAULT_MIN_CARDS = 3;
     /** How stale the site roll-up may get while none of its inputs visibly moved. */
     static final Duration ROLL_UP_REFRESH = Duration.ofHours(1);
+    /**
+     * Phase events this close together run one pass: a deleted feed fires one per episode (core 0.8.1), each
+     * after the delete committed, so the first pass already sees all of them gone.
+     */
+    static final Duration PHASE_BURST = Duration.ofSeconds(2);
 
     private final Clock clock;
+    /** When the last phase-triggered pass finished; guarded by {@code passLock}. */
+    private Instant lastPhasePass;
     private PluginContext ctx;
     /** Every player's partition, read-only. Present because the manifest declares {@code data.readsAllUsers}. */
     private CrossUserStore everyone;
@@ -218,11 +225,22 @@ public class BingoPlugin implements PluginBackend, UserDataHandler, PageRoutePro
      * runs again. The pass sees the new quiet set (or the vanished slug), which moves the roll-up's
      * fingerprint, so those documents drop it now. A whole pass because the roll-up reads what every episode's
      * pass collected. A withdrawal closes predictions like a release, and an announcement opens them. A release
-     * is left to {@link #released}, which the host has just called. Idempotent with the tick.
+     * is left to {@link #released}, which the host has just called. Idempotent with the tick, and a burst of
+     * events (see {@link #PHASE_BURST}) runs one pass.
      */
     void phaseChanged(String slug, EpisodePhase phase) {
-        if (phase != EpisodePhase.RELEASED) {
+        if (phase == EpisodePhase.RELEASED) {
+            return;
+        }
+        synchronized (passLock) {
+            // Measured from the end of the last pass, so an event that waited for the lock while it ran is
+            // covered by it. A distinct change caught inside the window is left to the tick, as any missed
+            // event is.
+            if (lastPhasePass != null && now().isBefore(lastPhasePass.plus(PHASE_BURST))) {
+                return;
+            }
             tick();
+            lastPhasePass = now();
         }
     }
 

@@ -776,6 +776,29 @@ class BingoPluginTest extends BingoTestSupport {
     }
 
     @Test
+    void aBurstOfPhaseEventsRunsOnePass() {
+        var ctx = ctx(published(true));
+        seedTemplate(ctx);
+        seedCard(ctx, alice, List.of("kraken"));
+        resolve(ctx, Map.of("kraken", true));
+        control(ctx, "RESOLVED");
+        new BingoPlugin(clock).register(ctx);
+
+        // A deleted feed fires one event per episode, after the delete committed (core 0.8.1).
+        clock.advance(java.time.Duration.ofMinutes(1));
+        ctx.fireEpisodePhaseChanged(EPISODE, null);
+        String first = stats(ctx).computedAt();
+        clock.advance(java.time.Duration.ofMillis(500));
+        seedPrefs(ctx, alice, false, true); // something the roll-up would follow, were it to run again
+        ctx.fireEpisodePhaseChanged("the-sample-cast-s01e05", null);
+        assertEquals(first, stats(ctx).computedAt(), "the second event of the burst runs no pass");
+
+        clock.advance(BingoPlugin.PHASE_BURST);
+        ctx.fireEpisodePhaseChanged(EPISODE, EpisodePhase.PLANNED);
+        assertNotEquals(first, stats(ctx).computedAt(), "a later change runs one again");
+    }
+
+    @Test
     void aReleaseClosesPredictionsWithoutWaitingForTheNextTick() {
         var ctx = ctx(published(false));
         seedTemplate(ctx);
