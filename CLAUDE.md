@@ -1,7 +1,7 @@
 # Project: Mosaicast – mosaicast-plugin-bingo
 
-Episode plugin: a bingo card per host and per fan, one shared fuzzy-deduplicated resolution, a four-state
-lifecycle, and schema-backed history.
+Episode plugin: a card per player, one shared fuzzy-deduplicated resolution (podcaster can split/merge), a
+four-state lifecycle, schema-backed history, and a site page (`/p/bingo/`) with standings and share cards.
 
 ## Read first (mandatory)
 - `docs/ARCHITECTURE.md` — source of truth for the platform.
@@ -16,8 +16,9 @@ Java 21 (Gradle, PF4J extension) · React 18 + Vite (Web Component) · **platfor
 ## Commands
 ```
 ./build.sh                                    # -> dist/{plugin.json,bingo.jar,assets/bingo.es.js}
-cd backend  && ./gradlew test                 # 79 tests
-cd frontend && npm test && npm run typecheck  # 60 tests
+cd backend  && ./gradlew test                 # 141 tests
+cd frontend && npm test && npm run typecheck  # 145 tests
+node --test scripts/*.test.mjs                # import script (also in CI)
 scripts/set-version.sh <x.y.z>                # bumps the plugin version in all three files
 ```
 
@@ -25,12 +26,17 @@ scripts/set-version.sh <x.y.z>                # bumps the plugin version in all 
 ```
 plugin.json                             manifest: slots, storage.schema, data floors, config
 backend/src/main/java/dev/mosaicast/plugin/bingo/
-  BingoPlugin.java                      register + the scheduled tick + UserDataHandler
-  BingoFuzzy.java                       pure entry grouping (no ctx, no clock, no I/O)
-backend/src/test/.../BingoSchemaFixture.java   builds FakeSchemaStore FROM plugin.json
-frontend/src/bingo-element.tsx          defines the three custom elements
-frontend/src/{keys,types}.ts            doc keys and document shapes — mirror BingoPlugin's records
-frontend/src/components/                EpisodeBingo, EpisodeCardBadge, ResolutionBoard, useBingo
+  BingoPlugin.java                      register + tick + every extension point (PF4J singleton)
+  BingoDocs / BingoLifecycle / BingoRecord   keys+records / phase derivation / rows (the freeze) + scoring
+  BingoPublish / BingoPages / BingoImport    showcase, notify, stats, suggestions, history / /p/bingo routes+OG /
+                                             import:* docs → resolved bingos, claims (BingoExport: own cards)
+  BingoFuzzy / BingoScore / BingoHistory     pure (no ctx, clock, I/O): grouping, scoring, the history doc
+backend/src/test/.../BingoSchemaFixture + BingoTestSupport   schema FROM plugin.json; shared fixtures
+shared/fuzzy-vectors.json · scripts/bingo-import.mjs (no deps; docs/import-format.md) · docs/ROADMAP.md (keep current)
+frontend/src/{keys,types}.ts            doc keys and shapes — mirror BingoDocs' records
+frontend/src/{fuzzy,regroup,history,palette}.ts   card checks, split/merge pins, chart transforms, player palette
+frontend/src/components/                EpisodeBingo (+ parts), EpisodeCardBadge, BingoPage, HistoryPanel, ClaimBox,
+                                        ResolveModal, charts/ (hand-drawn SVG, no chart library)
 frontend/locales/{en,de}.json           UI strings
 ```
 
@@ -116,15 +122,32 @@ frontend/locales/{en,de}.json           UI strings
   `ctx.api`, uncached, one request. `ctx.docs.getMany` feeds the same memory. Only the viewer's own
   partition (`'self'`) may use `ctx.docs.get`.
 - **`--mc-accent` is for fills; `--mc-accent-text` for text, focus rings and state borders (0.16.0).**
+- **The schema HTTP surface is readable at `data.readableBy` (= anonymous).** Raw rows (author ids, quiet
+  episodes, opted-out players) are public until core#261/sdk#99 add a separate floor. So the frontend must
+  **never** read `ctx.schema`; publish what a page needs as a backend-owned document instead.
+- **After the freeze, derive from the record.** Candidates, counts and featured cards come from frozen rows
+  (`whatCardsSay`), never from partition docs their owners can still write. Decided groups are seeded so a
+  late spelling cannot rename them; a row's `canonical` follows the current grouping, so pins re-score.
+- **Nothing public reflects an unresolved bingo's score**: not the board, not site standings, not a
+  suggestion's hit count. And no share card (OG) ever names a prediction — previews are read unspoilered.
+- **Imports never attach an account**: authors are `import:<uuid>` (real ids refused), unlisted until the
+  person claims them with a code (hash-only on the server). Imported scores must equal the file's hit flags.
+- **Rankings and records per scope come from the backend** (`history.scopes`: `all` + `<feed>:<season>`),
+  never recomputed from `history.players` (capped, would miss late joiners). Per card needs `minCardsPerCard`.
+- **Charts colour by player, never by rank in the current view**: slot = place in `history.players`. A
+  named series exists only for listed players; place/aggregates count everyone.
+- **The site roll-up (stats + suggestions + history) is dirty-gated** in `BingoPlugin.rollUp`: add any new input to
+  its fingerprint, or the document silently goes stale for up to `ROLL_UP_REFRESH`.
 
 ## Architecture guardrails (do not violate)
 - Identity (`EpisodeRef`) is separate from presentation (feed snapshot). Plugin metrics are
   non-authoritative and live only in the plugin UI.
 - The host resolves scopes and decides access/filters — plugins only consume.
 - Per-user data goes in the `USER` scope, **never** in a key. A key naming a user is an IDOR.
-- Keys the backend computes (`phase`, `candidates`, `leaderboard`, `stats`, `notified`, `participants`,
-  `showcased`) are in `data.backendOwned` and written in `register()` as well as on the schedule.
-  Client-written keys (`template`, `resolution`, `control`, `showcase`) must **never** be listed there.
+- Keys the backend computes (`phase`, `candidates`, `leaderboard`, `recap`, `stats`, `suggestions`, `history`, `imports`, `notified`,
+  `participants`, `showcased`) are in `data.backendOwned` and written in `register()` as well as on the schedule.
+  Client-written keys (`template`, `resolution`, `control`, `showcase`, `grouping`, `import:*`, `unclaim:*`)
+  must **never** be listed there.
 - A person's visibility choice lives in their own partition (`prefs`) and is enforced backend-side on every
   tick — never trusted from a podcaster's stale pick.
 

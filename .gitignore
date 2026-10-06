@@ -22,3 +22,6 @@ dist/
 .claude/settings.local.json
 # Playwright MCP
 .playwright-mcp/
+
+# Bingo import state: pseudonyms and claim codes (secret)
+*.players.json

@@ -4,7 +4,7 @@
 /**
  * The documents this plugin reads and writes, as they sit in the doc store.
  *
- * Keep these in step with the records nested on `BingoPlugin` — Jackson serialises those, so the record
+ * Keep these in step with the records nested on `BingoDocs` — Jackson serialises those, so the record
  * *is* the wire format and there is no generated type to lean on.
  *
  * Note what is absent: no document anywhere carries a person's name. Rows and cards carry a user id, and
@@ -36,6 +36,11 @@ export interface Card {
 export interface Prefs {
   listed?: boolean;
   showcasable?: boolean;
+  /**
+   * Whether the card editor offers suggestions. A choice about this person's own screen only, so it sits
+   * in their partition with the rest and the backend never reads it. Absent means yes.
+   */
+  suggestions?: boolean;
   updatedAt?: string;
 }
 
@@ -48,6 +53,15 @@ export interface Resolution {
 export interface Control {
   phase: Phase;
   updatedAt: string;
+}
+
+/**
+ * The podcaster's corrections to the grouping, keyed by an entry as written. The value is the canonical
+ * form of the group it belongs in, or `''` for a group of its own. Client-written.
+ */
+export interface GroupingDoc {
+  pins?: Record<string, string>;
+  updatedAt?: string;
 }
 
 /** Whom the podcaster picked to feature. Client-written. */
@@ -66,6 +80,51 @@ export interface PhaseState {
   lockedAt: string | null;
   resolvedAt: string | null;
   archiveAt: string | null;
+  /** How alike two entries must be to count as one. Published because there is no `ctx.config`. */
+  fuzzyThreshold?: number;
+}
+
+/** One prediction several people keep making. */
+export interface Suggestion {
+  label: string;
+  /** How many different people wrote it — never fewer than two. */
+  people: number;
+  /** On how many episodes' cards it appeared. */
+  episodes: number;
+  /** On how many of those it came true. */
+  hits: number;
+}
+
+/** Backend-owned, site scope: what the card editor offers. */
+export interface Suggestions {
+  items?: Suggestion[];
+  computedAt?: string;
+}
+
+/** A candidate worth naming in a recap. */
+export interface Highlight {
+  label: string;
+  /** On how many cards. */
+  cards: number;
+  hit: boolean;
+}
+
+/**
+ * Backend-owned: one bingo in a few lines. `published` is false — and everything but `players` empty —
+ * until it is resolved, because "the most predicted thing came true" is the spoiler.
+ */
+export interface Recap {
+  published: boolean;
+  players: number;
+  ranked: number;
+  /** Squares that came true on an average ranked card, the free centre included. */
+  avgFields: number;
+  /** The share of ranked cards, 0 to 1, with at least one line. */
+  withLine: number;
+  mostPredicted: Highlight | null;
+  rarestHit: Highlight | null;
+  biggestMiss: Highlight | null;
+  computedAt?: string;
 }
 
 /** One distinct thing to tick off, merged across every card. */
@@ -232,28 +291,39 @@ export function countsTowardsRanking(phase: Phase): boolean {
  * having one here is what lets a reader place themselves without the server publishing everybody.
  */
 export function countLines(hits: boolean[], size: number): number {
-  if (hits.length !== size * size) return 0;
-  let lines = 0;
+  return completedLines(hits, size).length;
+}
+
+/** One completed line: the grid squares it runs between, first to last. */
+export interface CompletedLine {
+  from: number;
+  to: number;
+}
+
+/**
+ * Every complete row, column and diagonal on a grid of hits, by its two end squares. What the card draws a
+ * stroke through, and — counted — the score in lines, so the two cannot disagree.
+ */
+export function completedLines(hits: boolean[], size: number): CompletedLine[] {
+  if (hits.length !== size * size) return [];
+  const lines: CompletedLine[] = [];
+  const whole = (cells: number[]) => cells.every((c) => hits[c]);
+  const range = (f: (i: number) => number) => Array.from({ length: size }, (_, i) => f(i));
   for (let r = 0; r < size; r++) {
-    if (hits.slice(r * size, r * size + size).every(Boolean)) lines++;
+    const cells = range((c) => r * size + c);
+    if (whole(cells)) lines.push({ from: cells[0], to: cells[size - 1] });
   }
   for (let c = 0; c < size; c++) {
-    let whole = true;
-    for (let r = 0; r < size; r++) whole = whole && hits[r * size + c];
-    if (whole) lines++;
+    const cells = range((r) => r * size + c);
+    if (whole(cells)) lines.push({ from: cells[0], to: cells[size - 1] });
   }
-  let down = true;
-  let up = true;
-  for (let i = 0; i < size; i++) {
-    down = down && hits[i * size + i];
-    up = up && hits[i * size + (size - 1 - i)];
-  }
-  if (down) lines++;
-  if (up) lines++;
+  const down = range((i) => i * size + i);
+  if (whole(down)) lines.push({ from: down[0], to: down[size - 1] });
+  const up = range((i) => i * size + (size - 1 - i));
+  if (whole(up)) lines.push({ from: up[0], to: up[size - 1] });
   return lines;
 }
 
-/** Lays a card's hits out over the grid, giving the middle square away when this bingo does. */
 export function hitGrid(hits: boolean[], size: number, freeCentre: boolean): boolean[] {
   const centre = freeCentre && size % 2 === 1 ? Math.floor((size * size) / 2) : -1;
   const grid = new Array<boolean>(size * size).fill(false);
@@ -288,6 +358,148 @@ export function placeIn(
 }
 
 /** Absent means yes: someone who has never touched the toggles is listed and may be featured. */
+/** The grouping threshold until the backend's first pass has published the site's own. */
+export const DEFAULT_FUZZY_THRESHOLD = 0.82;
+
 export function prefOrDefault(value: boolean | undefined): boolean {
   return value !== false;
+}
+
+/** One player's cumulative standing across every resolved episode. */
+export interface StandingRow {
+  author: string;
+  fields: number;
+  lines: number;
+  /** How many ranked cards it is summed over. */
+  cards: number;
+  cells: number;
+}
+
+/** One bingo as the site page lists it — only episodes everyone may know about. */
+export interface BingoSummary {
+  slug: string;
+  /** The bingo's own name, if it has one; the episode's title is read live. */
+  title?: string | null;
+  phase: Phase;
+  /** Everyone who played; absent for an archived bingo, which the backend never reads again. */
+  players?: number | null;
+}
+
+/** Backend-owned, site scope: cumulative standings and the list of bingos, for the plugin's page. */
+export interface Stats {
+  players?: StandingRow[];
+  episodes?: number;
+  bingos?: BingoSummary[];
+  computedAt?: string;
+}
+
+
+/** One card on a player's series: episode index, squares, lines, place among every ranked card (1 best). */
+export interface HistoryPoint {
+  e: number;
+  f: number;
+  l: number;
+  p: number;
+}
+
+/** One resolved bingo in the history, oldest first. Aggregates count every card and name nobody. */
+export interface HistoryEpisode {
+  slug: string;
+  /** The bingo's own name, if it has one; the episode's title is read live. */
+  title?: string | null;
+  feed?: string | null;
+  season?: number | null;
+  episodeNo?: number | null;
+  publishedAt?: string | null;
+  players: number;
+  ranked: number;
+  late: number;
+  avgFields: number;
+  avgLines: number;
+  /** Share, 0 to 1, of ranked cards with at least one line. */
+  withLine: number;
+  /** Share, 0 to 1, of distinct predictions that came true. */
+  hitRate: number;
+  candidates: number;
+  /** How many ranked cards ended with 0, 1, 2… lines, by index. */
+  lineCounts?: number[];
+}
+
+/** One listed player's ranked cards, oldest first. */
+export interface PlayerSeries {
+  author: string;
+  cards: number;
+  points: HistoryPoint[];
+}
+
+/** Records over the whole history; each names a listed player or an episode, or is absent. */
+export interface HistoryRecords {
+  bestCard?: { author: string; slug: string; fields: number; lines: number; cells: number } | null;
+  mostCards?: { author: string; count: number } | null;
+  longestStreak?: { author: string; count: number } | null;
+  mostPredictable?: { slug: string; hitRate: number } | null;
+  leastPredictable?: { slug: string; hitRate: number } | null;
+}
+
+/** One player's score per card within a scope. */
+export interface AverageRow {
+  author: string;
+  cards: number;
+  fields: number;
+  lines: number;
+}
+
+/** Rankings and records within one scope. Listed players only; those below the card bar are counted, never named. */
+export interface ScopeStats {
+  byTotal?: StandingRow[];
+  byAverage?: AverageRow[];
+  /** How many cards the per-card ranking asks for in this scope. */
+  bar: number;
+  belowBar: number;
+  records?: HistoryRecords;
+  bingos: number;
+}
+
+/** Backend-owned, site scope: how past bingos went, for the site page's charts. Resolved, public bingos only. */
+export interface History {
+  episodes?: HistoryEpisode[];
+  /** At most fifty, best cumulative score first — which is also each player's colour slot. */
+  players?: PlayerSeries[];
+  distribution?: { lines: number; cards: number }[];
+  /** Rankings and records per scope: `"all"`, or one season as `<feed>:<season>` (see `scopeKey`). */
+  scopes?: Record<string, ScopeStats>;
+  rankBy?: RankBy;
+  computedAt?: string;
+}
+
+/** The claimed cards, encrypted with the claim code; see `claimCards.ts`. */
+export interface Sealed {
+  iv: string;
+  data: string;
+  episodes: string[];
+}
+
+/** What one claim did. */
+export interface ClaimResult {
+  linked: number;
+  skipped: number;
+  at?: string;
+  /** The episodes whose imported card moved to the claimant. */
+  episodes?: string[];
+  sealed?: Sealed | null;
+}
+
+/** Backend-owned, site scope: imports and claims, by code hash only. */
+export interface Imports {
+  /** Unused code hash → the pseudonym it unlocks. Present means this site has imported bingos. */
+  claims?: Record<string, string>;
+  /** Used code hash → what claiming it did. */
+  claimed?: Record<string, ClaimResult>;
+  updatedAt?: string;
+}
+
+/** A player's claim codes, in their own partition. `savedAt` lets the box tell "waiting" from "unknown". */
+export interface ClaimDoc {
+  codes?: string[];
+  savedAt?: Record<string, string>;
 }

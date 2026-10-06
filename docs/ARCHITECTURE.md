@@ -70,6 +70,8 @@ EpisodeRef
   external_guid String?      -- the source's GUID (null when PLANNED)
   season        Int?         -- from itunes:season, persisted as a relation
   episode_no    Int?
+  numbers_pinned Bool        -- season + episode_no set by a podcaster; polls no longer overwrite them (4.4)
+  feed_season, feed_episode_no Int?  -- what the feed last declared, so un-pinning restores it at once (4.4)
   status        Enum         -- PLANNED | PUBLISHED | WITHDRAWN
   access        Access       -- PUBLIC | TIER(ref)
   first_seen_at, last_seen_at
@@ -112,6 +114,8 @@ Nothing flips at `announce_at`: every read compares it with the clock, so there 
 ### 4.4 Season as a first-class concept
 Season is **not** a plugin concern. The fetcher extracts `itunes:season` and persists it as a relation on the `EpisodeRef`. A season = "all EpisodeRefs of a feed with season=N". Season is a **scope** (§6).
 
+**A podcaster can set the numbers by hand.** A feed cannot always say what the podcaster means: Apple's spec allows only a non-zero `itunes:episode`, so the season prologue a podcaster calls episode 0 arrives with a season and no number (Acast drops the 0). A podcaster or admin may therefore set a released episode's `season` and `episode_no` — **both together**, and either may be empty — which sets `numbers_pinned`. From then on the reconciler still records what the feed declares, in `feed_season` / `feed_episode_no`, but leaves the effective numbers alone, so a poll never undoes the choice; un-pinning restores the feed's values immediately, without waiting for a poll. The pinned numbers are the episode's numbers **everywhere** — season scope and filter, listing order, labels, and the `season` / `episodeNo` plugins receive (§4.2) — and change nothing else: the slug was minted once and is kept (§4.1), and previous/next still follow release order (§6.2), so an explicit 0 is a podcaster's statement, not the coercion §6.2 rules out. A **planned** episode has no override: its numbers are edited with the plan (§4.3), and on binding the feed's numbers take over as for any new item — unless the plan is matched to an imported episode whose numbers a podcaster had already pinned, in which case the pin moves across with it, like its tags (§5.3). The host never infers a number on its own — not from a title (`5.00 Prolog`), not from a gap in the sequence.
+
 ---
 
 ## 5. Feed Pipeline
@@ -138,7 +142,7 @@ record RawEpisode(String externalGuid, String title, String description, String 
 ### 5.2 Reconciler – raw items become EpisodeRefs
 Match by `(source_id, external_guid)`:
 1. **New GUID** → create `EpisodeRef` (identity + relations only).
-2. **Known GUID** → refresh season relation + display snapshot, plugin data untouched.
+2. **Known GUID** → refresh season relation (only the `feed_*` record when the podcaster pinned the numbers, §4.4) + display snapshot, plugin data untouched.
 3. **Ref exists, GUID now missing** → **never hard delete** (plugin data would orphan, feeds glitch). Set `status=WITHDRAWN`.
 
 ### 5.3 PLANNED binding & dedup (same machinery)

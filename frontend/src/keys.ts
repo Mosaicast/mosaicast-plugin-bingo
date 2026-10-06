@@ -2,12 +2,12 @@
 // SPDX-FileCopyrightText: 2026 The Mosaicast Authors
 
 /**
- * The doc-store keys this plugin uses, in one place so the frontend and `BingoPlugin`'s constants cannot
+ * The doc-store keys this plugin uses, in one place so the frontend and `BingoDocs`' constants cannot
  * drift apart silently.
  *
  * Which of these the browser may write is not a matter of taste: everything marked backend-owned below is
  * declared in the manifest, so a `PUT` to it is refused with a 403 whose problem type is
- * `problems/backend-owned-key`. The browser writes `template`, `resolution`, `control` and `showcase`; a
+ * `problems/backend-owned-key`. The browser writes `template`, `resolution`, `control`, `showcase` and `grouping`; a
  * player writes only into their own partition.
  */
 
@@ -20,6 +20,12 @@ export const KEY_RESOLUTION = 'resolution';
 /** The podcaster's lifecycle intent. Written here, obeyed by the backend over its own suggestion. */
 export const KEY_CONTROL = 'control';
 
+/**
+ * The podcaster's corrections to the automatic grouping: which written entry belongs in which group.
+ * Written by the podcaster, applied on the backend's next pass — so deliberately not backend-owned.
+ */
+export const KEY_GROUPING = 'grouping';
+
 /** Which players a podcaster has chosen to feature. Written by the podcaster. */
 export const KEY_SHOWCASE = 'showcase';
 
@@ -28,6 +34,9 @@ export const KEY_PHASE = 'phase';
 
 /** Backend-owned: cards are invisible here, so this list can only be computed on the backend. */
 export const KEY_CANDIDATES = 'candidates';
+
+/** Backend-owned: what happened, in a few lines. Empty until the bingo is resolved, like the board. */
+export const KEY_RECAP = 'recap';
 
 /** Backend-owned: per-episode scores, for players who allow being listed. */
 export const KEY_LEADERBOARD = 'leaderboard';
@@ -48,6 +57,15 @@ export const KEY_PARTICIPANTS = 'participants';
  */
 export const KEY_SHOWCASED = 'showcased';
 
+/**
+ * Backend-owned, in the site scope: predictions several people keep making, for the card editor to offer.
+ * Never one person's own words — the backend publishes only what at least two different people wrote.
+ */
+export const KEY_SUGGESTIONS = 'suggestions';
+
+/** Backend-owned, in the site scope: how past bingos went, episode after episode — the page's charts. */
+export const KEY_HISTORY = 'history';
+
 /** Backend-owned, in the site scope: cumulative standings. */
 export const KEY_STATS = 'stats';
 
@@ -57,8 +75,11 @@ export const KEY_STATS = 'stats';
  * The partition is flat — one per person, not one per person and episode — so the episode goes in the key.
  */
 export function cardKey(episodeSlug: string): string {
-  return `card:${episodeSlug}`;
+  return `${CARD_PREFIX}${episodeSlug}`;
 }
+
+/** The prefix every one of a player's cards shares, for listing their own partition. */
+export const CARD_PREFIX = 'card:';
 
 /**
  * A player's own visibility preferences, in their own partition.
@@ -68,3 +89,12 @@ export function cardKey(episodeSlug: string): string {
  * how a preference becomes noise people stop reading.
  */
 export const KEY_PREFS = 'prefs';
+
+/**
+ * Backend-owned, site scope: what became of every import of past bingos and every claim. Holds claim-code
+ * hashes only, so a player finds their own result by hashing their code (see `ClaimBox`).
+ */
+export const KEY_IMPORTS = 'imports';
+
+/** A player's claim codes for imported bingos, in their own partition. */
+export const KEY_CLAIM = 'claim';

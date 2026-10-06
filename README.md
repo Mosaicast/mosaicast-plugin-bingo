@@ -1,13 +1,13 @@
 # mosaicast-plugin-bingo
 
-> Episode plugin: a bingo card per host and per fan, one shared resolution, and a leaderboard.
+> Episode plugin: everyone fills in their own bingo card, one shared resolution scores them all, and a site page keeps the standings.
 
 Part of **[Mosaicast](https://github.com/mosaicast)** — an extensible website platform for podcasts.
 Status: **v1 in development**.
 
 ## What it does
 
-Every host keeps their own bingo card for an episode; fans fill in theirs. When the episode lands, the
+Everyone fills in their own bingo card for an episode, hosts and fans alike. When the episode lands, the
 podcaster ticks entries off **one shared list** — the plugin merges the different ways people wrote the
 same prediction, so "Alex says 'damn it'", "alex says damn it!" and "Alex says: Damn it" appear once, and
 every card scores against the same truth.
@@ -51,12 +51,43 @@ the middle square away, create. Everyone can fill in a card from the moment it e
 The middle square is **yours to write by default**. Giving it away is a deliberate choice per bingo, and it
 only means anything under line scoring — on a 3x3 the middle sits on four of the eight lines.
 
+## Importing past bingos
+
+Bingos played before a site ran Mosaicast can be imported with `scripts/bingo-import.mjs` and a
+podcaster's personal access token. It does a dry run first and imports only with `--apply`. Imported
+bingos are resolved bingos like any other: scored exactly as the file marks them, ranked, and part of the
+history and charts.
+
+Players are never attached to an account by the importer. Each one gets a **claim code** and counts
+without a name until the person enters that code on `/p/bingo/`. The full format, the rules, and what is
+refused and why are in [`docs/import-format.md`](docs/import-format.md).
+
+## Filling in a card
+
+The editor checks a card's own squares as you type, in the browser and without asking the backend. A
+square that repeats another word for word (after case, accents and punctuation are folded away) blocks
+saving, because one event would tick off both. A square merely *close* to another, by the site's
+`fuzzyThreshold`, gets a hint that the two will most likely count as the same prediction. The threshold
+comes from the `phase` document, because there is no `ctx.config` in a browser.
+
+These checks use a browser copy of the backend's comparison rules (`frontend/src/fuzzy.ts`). It only
+advises: grouping stays the backend's decision. `shared/fuzzy-vectors.json` holds both halves to the same
+answers, and the Java and the TypeScript test suites both read it.
+
+**Suggestions.** Signed-in players get chips with what several people keep predicting across the site,
+next to the site's tags. They come from a backend-owned site document, `suggestions`. It's built only
+from episodes everyone can see, and only from predictions **at least two different people** wrote, so
+one person's own words are never offered to anybody else. A "came true" count is included only for
+resolved bingos. A *Show suggestions* switch turns the chips off. It's saved to the player's own `prefs`
+the moment it's flipped, and the backend never reads it.
+
 ## Scoring
 
 Two quantities, both always counted:
 
 - **Fields** — squares that came true.
-- **Lines** — completed rows, columns and diagonals; `2n+2` of them on an n-by-n grid.
+- **Lines** — completed rows, columns and diagonals; `2n+2` of them on an n-by-n grid. A scored card
+  marks each one with a soft band behind its squares.
 
 The site's `rankBy` setting decides which one orders the leaderboard, and the other always breaks the tie.
 The card tabs and the feed badge lead with whichever one that is.
@@ -75,6 +106,83 @@ place still sees themselves in 73rd, even though no row for them was ever publis
 who played, opted out included — they are precisely the readers with no published row, so leaving them out
 would empty the tally of its purpose and misplace everybody else. It costs an entry per distinct score
 rather than per player, and names nobody.
+
+### What happened
+
+Once a bingo is resolved, a backend-owned `recap` document sums it up: the most predicted thing and
+whether it came true, the rarest hit, the biggest miss, the average card, and how many cards got a line.
+It's empty until the resolution, like the board, and the tile keeps it behind the spoiler cover because it
+names what happened.
+
+### Site standings and rankings
+
+Standings count **resolved** bingos only, for players who allow being listed, on episodes everyone can see.
+An unresolved bingo is left out: its scores move with every tick-off, and counting them would leak the
+progress the episode's own board withholds.
+
+There are two rankings, each with its own **Total / Per card** switch:
+- **The standings at the top** of `/p/bingo/` are all-time.
+- **The ranking inside the history section** follows the season pill.
+
+*Per card* divides a player's score by the cards they played, so someone who joined later can lead. They
+are only placed once they have played `minCardsPerCard` cards (3 by default; a season with fewer bingos
+asks for all of them), so one lucky card can't lead for good. Players below that bar are counted in a
+sentence, never named. The records follow the season pill too.
+
+All of these are computed on the backend for each scope (all, and each season of each feed). The browser
+only has the top 50 all-time series, which would miss exactly the late joiner the per-card ranking is
+for.
+
+## The bingo page and sharing
+
+`/p/bingo/` is the plugin's own page, reached from a *Bingo* menu entry:
+
+| Path | Shows |
+|---|---|
+| `/p/bingo/` | the site standings and every bingo, with live episode titles |
+| `/p/bingo/e/<slug>` | one bingo: board, recap (behind the spoiler cover) and a way into the episode |
+| `/p/bingo/e/<slug>/u/<user>` | one player's result, as the published board shows it |
+
+Every other subpath is a real 404 (`PageRouteProvider`). That includes a quiet episode's bingo, and the
+result of a player who opted out or is past the board's cap. Each page has an OpenGraph card
+(`ShareMetadataProvider`) in the site's default language. A card says how many played and how a card
+scored, **never what was predicted or came true**, because a link preview is read in chats by people who
+may not have listened.
+
+### How past bingos went
+
+Below the standings, the page charts every **resolved** bingo on an episode everyone may see. It follows
+the stats plugin's design: hand-drawn SVG, season pills, tiles, records, and the same validated player
+palette.
+
+- **Tiles:** bingos, cards, the average card, cards with a line, and predictions that came true.
+- **Form over the season:** a line per player, in *per episode*, *running total* or *place* mode
+  (standing after each bingo). The viewer's own line is emphasised. Up to eight players can be picked,
+  and each keeps their colour under any filter. A crosshair tooltip and a table view are included.
+- **Cards per bingo**, **how predictable each episode was** (against the average) and **how cards score**.
+- **Records:** best single card, most bingos played, longest run with a line, the most and least
+  predictable episode, and the safest prediction.
+
+All of it comes from one backend-owned site document, `history` (`BingoHistory`, recomputed with the
+dirty-gated roll-up). Only players who allow being listed get a line, capped at the best 50 like the
+standings. Everything that names nobody counts every card, so places stay true. A bingo's own page
+adds how its cards scored and how predictable it was compared with the rest.
+
+The tile and the page have a *Share* button. It shares the player's own result once the published board
+carries it, and the bingo itself otherwise.
+
+## The feed badge
+
+One line per episode card, most specific first:
+
+1. "not announced yet", on a quiet episode, for the podcaster who can see it
+2. the viewer's own score, once the published board carries it
+3. "Your card is in", or "Fill in your card" / "Predict before it airs" while predictions are open
+4. the best score
+5. where the bingo stands
+
+Whether the viewer has played comes from **one** listing of their own partition per page, shared by every
+badge.
 
 ## When a card can change
 
@@ -97,6 +205,26 @@ is what makes the next part exact.
 
 Terms that arrive afterwards (someone playing late) are the ones with no decision, so the button becomes
 *Catch up (n)* and the dialog shows only those. No timestamps involved.
+
+### Correcting the grouping
+
+Each candidate in the resolve dialog opens up to show the spellings grouped into it. A podcaster can
+**split** a spelling off into a group of its own, or **merge** a whole candidate into another. The
+corrections are pins on a client-written `grouping` document, keyed by the spelling as written, and the
+backend applies them on its next pass. They apply to frozen cards too: what freezes is what a card
+*says*, but which group a square belongs to is a judgement the podcaster can still correct, so a row's
+group follows the current grouping and a merge re-scores. The dialog says when a correction hasn't landed
+yet. It works this out from the published result, not from a clock. If a merge joins two candidates that
+were decided differently, the target's decision wins, and the dialog warns before that happens.
+
+Two guarantees sit under this:
+
+- **A decided group keeps its name.** Left alone, a group is named after its first member in sorted
+  order, so a late spelling that sorts earlier would rename a decided group and orphan its decision.
+  Decided groups are seeded before matching.
+- **After the freeze, everything derived comes from the record.** The candidate list, its counts and
+  featured cards are built from the frozen rows, not from partition documents that their owners can
+  still write.
 
 ## Who plays, and how they are named
 
@@ -153,8 +281,9 @@ re-reads when it is opened and after the viewer's own actions.
 
 ```bash
 ./build.sh                                   # -> dist/
-cd backend && ./gradlew test                 # 79 tests, no core and no database
-cd frontend && npm test && npm run typecheck # 60 tests
+cd backend && ./gradlew test                 # 141 tests, no core and no database
+cd frontend && npm test && npm run typecheck # 145 tests
+node --test scripts/*.test.mjs               # the import script
 ```
 
 `build.sh` writes only `dist/` — `plugin.json`, `bingo.jar`, `assets/bingo.es.js`.
@@ -197,11 +326,26 @@ disables only this plugin, quietly, which looks exactly like a render bug and is
 plugin.json              the manifest: slots, schema, access floors, config
 backend/                 Java 21, PF4J extension, depends only on the SDK
   src/main/java/dev/mosaicast/plugin/bingo/
-    BingoPlugin.java     register + the scheduled tick, and UserDataHandler
+    BingoPlugin.java     register + the scheduled tick, and every extension point
+    BingoDocs.java       doc keys, document records, row shapes
+    BingoLifecycle.java  the phase: podcaster intent + episode release + archive timer
+    BingoRecord.java     cards into schema rows (the freeze), scoring
+    BingoPublish.java    featured cards, notifications, site standings, suggestions
+    BingoPages.java      which /p/bingo/ subpaths exist, and their share cards
+    BingoHistory.java    pure: the history the site page charts
+    BingoImport.java     past bingos taken in from import documents, and claims
+    BingoExport.java     a person's own cards as mosaicast-bingo/1
+scripts/bingo-import.mjs the importer (dry run, --apply, unclaim); docs/import-format.md
     BingoFuzzy.java      pure entry grouping — no ctx, no clock, no I/O
 frontend/                React 18 + Vite, bundled as one ES module
-  src/bingo-element.tsx  defines the three custom elements
-  src/components/        the tile, the feed badge, the podcaster board
+  src/bingo-element.tsx  defines the custom elements (tile, feed badge, page)
+  src/fuzzy.ts           the browser's advisory copy of the comparison rules
+  src/regroup.ts         pins for the podcaster's split/merge corrections
+  src/history.ts         pure transforms for the history charts; src/palette.ts the player colours
+  src/components/charts/ hand-drawn SVG line and bar charts
+  src/components/        the tile, the feed badge, the page, the resolve dialog
+shared/fuzzy-vectors.json  one answer key for the Java and TypeScript comparison rules
+docs/ROADMAP.md          ideas recorded but not built, and what each is waiting on
   locales/{en,de}.json   UI strings
 ```
 
@@ -220,10 +364,11 @@ value. Numbers carry bounds the host enforces on save; a stored value outside th
 | `rankBy` | `lines` | whether lines or fields order the leaderboard; the other breaks the tie. A dropdown, not free text — the manifest declares the two values it accepts |
 | `allowLateEntries` | true | whether someone can still play after the lock |
 | `archiveAfterDays` | 30 | days after resolving before a bingo closes for good, 1–3650 |
+| `minCardsPerCard` | 3 | how many cards someone needs before the per-card ranking places them, 1–100; a season with fewer bingos asks for all of them |
 
 ## Design notes
 
-Four things differ from `docs/BRIEF.md`, which predates the current plugin contract:
+Five things differ from `docs/BRIEF.md`, which predates the current plugin contract:
 
 - **The lifecycle does not come from `ctx.episode`.** That field says where the *episode* stands (filled
   since core 0.7.7); a bingo's state also depends on what the podcaster asked for, so the backend merges the
@@ -243,6 +388,16 @@ is what makes the partition private. Integrity comes from the backend freezing e
 `LOCKED`. After that the row is the record and the document is a scratchpad nothing reads, so a late edit
 changes nothing. Scores keep updating past the freeze, because the podcaster is still ticking off answers:
 what freezes is what a card *says*, never what it is worth.
+
+## Known limitation: the schema read surface
+
+Core serves this plugin's schema tables over HTTP under the same `data.readableBy` floor as its
+documents. That floor is `anonymous`, because the tile is public. So the raw rows (entries, scores,
+author ids) are readable more widely than anything the plugin publishes itself. That includes rows from
+quiet episodes and from players who opted out of the leaderboard. The plugin can't close this on its own.
+A separate schema floor is proposed in [core#261](https://github.com/Mosaicast/mosaicast-core/issues/261)
+and [sdk#99](https://github.com/Mosaicast/mosaicast-plugin-sdk/issues/99). Nothing in the frontend reads
+`ctx.schema`, so the floor can move to `admin` the day it exists. See [`docs/ROADMAP.md`](docs/ROADMAP.md).
 
 ## Contributing
 

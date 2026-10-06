@@ -1,6 +1,6 @@
 {
   "id": "bingo",
-  "version": "0.6.0",
+  "version": "0.7.0",
   "platformApi": "0.18.0",
   "name": "Bingo",
   "license": "AGPL-3.0-or-later",
@@ -16,7 +16,8 @@
     "entry": "bingo.es.js",
     "elements": [
       "bingo-episode",
-      "bingo-episode-card"
+      "bingo-episode-card",
+      "bingo-page"
     ]
   },
   "slots": [
@@ -33,6 +34,20 @@
       "placement": "main",
       "visibleTo": "anonymous",
       "order": 100
+    },
+    {
+      "scope": "site",
+      "element": "bingo-page",
+      "placement": "page",
+      "visibleTo": "anonymous",
+      "order": 100
+    }
+  ],
+  "nav": [
+    {
+      "path": "",
+      "label": "Bingo",
+      "icon": "dice"
     }
   ],
   "storage": {
@@ -66,7 +81,11 @@
       "phase",
       "candidates",
       "leaderboard",
+      "recap",
       "stats",
+      "suggestions",
+      "history",
+      "imports",
       "notified",
       "participants",
       "showcased"
@@ -146,6 +165,19 @@
       "description": {
         "en": "Days after resolving before a bingo closes for good and nothing more is recorded.",
         "de": "Tage nach dem Auflösen, bis ein Bingo endgültig schließt und nichts mehr aufgezeichnet wird."
+      }
+    },
+    "minCardsPerCard": {
+      "type": "number",
+      "default": 3,
+      "editableBy": "podcaster",
+      "min": 1,
+      "max": 100,
+      "step": 1,
+      "label": { "en": "Cards for the per-card ranking", "de": "Karten für die Wertung pro Karte" },
+      "description": {
+        "en": "How many cards someone needs before the per-card ranking places them, so one lucky card cannot lead for good. A season with fewer bingos asks for all of them.",
+        "de": "Wie viele Karten jemand braucht, bevor die Wertung pro Karte ihn platziert, damit nicht eine einzige Glückskarte dauerhaft führt. Eine Staffel mit weniger Bingos verlangt alle."
       }
     },
     "rankBy": {

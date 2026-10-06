@@ -5,6 +5,7 @@ import { defineMosaicastElement } from '@mosaicast/plugin-sdk';
 import { createRoot } from 'react-dom/client';
 import { EpisodeBingo } from './components/EpisodeBingo';
 import { EpisodeCardBadge } from './components/EpisodeCardBadge';
+import { BingoPage } from './components/BingoPage';
 
 /**
  * Every custom element this plugin declares in `plugin.json`, defined in one entry so Vite emits a single
@@ -44,3 +45,15 @@ defineMosaicastElement({
   },
 });
 
+/** `site`/`page` — `/p/bingo/…`: the site's standings, every bingo, one bingo's results, a shared result. */
+defineMosaicastElement({
+  tag: 'bingo-page',
+  render: ({ ctx, root }) => {
+    const reactRoot = createRoot(root);
+    reactRoot.render(<BingoPage ctx={ctx} />);
+    return {
+      update: (next) => reactRoot.render(<BingoPage ctx={next} />),
+      destroy: () => reactRoot.unmount(),
+    };
+  },
+});
