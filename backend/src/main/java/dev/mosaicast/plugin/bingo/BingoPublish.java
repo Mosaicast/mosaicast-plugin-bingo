@@ -375,7 +375,8 @@ final class BingoPublish {
      * How past bingos went, episode after episode, for the site page's charts (see {@link BingoHistory}).
      * Resolved bingos on episodes everyone may see; series only for players who allow being listed.
      */
-    void history(Corpus corpus, Map<String, Prefs> prefs, BingoScore.RankBy rankBy, List<BingoSummary> bingos) {
+    void history(Corpus corpus, Map<String, Prefs> prefs, BingoScore.RankBy rankBy, int minCards,
+                 List<BingoSummary> bingos) {
         List<BingoHistory.Input> episodes = new ArrayList<>();
         for (BingoSummary b : bingos) {
             DisplaySnapshot snapshot = corpus.visible().get(b.slug());
@@ -386,7 +387,7 @@ final class BingoPublish {
                     snapshot.episodeNo(), snapshot.publishedAt()));
         }
         History history = BingoHistory.compute(episodes, corpus.results(), corpus.entries(),
-                author -> prefsFor(prefs, author).listedOrDefault(), rankBy, MAX_PUBLISHED_ROWS, now());
+                author -> prefsFor(prefs, author).listedOrDefault(), rankBy, MAX_PUBLISHED_ROWS, minCards, now());
         ctx.store().put(Scope.site(), KEY_HISTORY, history);
     }
 }

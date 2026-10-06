@@ -40,7 +40,7 @@ class BingoHistoryTest extends BingoTestSupport {
                 card("ep-b", "ann", 3, 0), card("ep-b", "bob", 6, 1));
 
         var history = BingoHistory.compute(episodes, results, List.of(), a -> !a.equals("hidden"),
-                BingoScore.RankBy.LINES, 50, NOW);
+                BingoScore.RankBy.LINES, 50, 3, NOW);
 
         assertEquals(List.of("ep-a", "ep-b"), history.episodes().stream().map(BingoDocs.HistoryEpisode::slug).toList(),
                 "oldest first: the order the season was played in");
@@ -61,7 +61,7 @@ class BingoHistoryTest extends BingoTestSupport {
         results.add(new BingoDocs.CardResultRow(++ids, "ep-a", "latecomer", 9, 3, 9, false, NOW));
 
         var history = BingoHistory.compute(List.of(input("ep-a", "2026-01-01T00:00:00Z")), results, List.of(),
-                a -> true, BingoScore.RankBy.LINES, 50, NOW);
+                a -> true, BingoScore.RankBy.LINES, 50, 3, NOW);
 
         var episode = history.episodes().get(0);
         assertEquals(2, episode.players());
@@ -74,7 +74,7 @@ class BingoHistoryTest extends BingoTestSupport {
     void ignoresEpisodesItWasNotGiven() {
         var history = BingoHistory.compute(List.of(input("ep-a", "2026-01-01T00:00:00Z")),
                 List.of(card("ep-a", "ann", 5, 1), card("unresolved", "ann", 9, 3)), List.of(), a -> true,
-                BingoScore.RankBy.LINES, 50, NOW);
+                BingoScore.RankBy.LINES, 50, 3, NOW);
 
         assertEquals(1, series(history, "ann").points().size(),
                 "an unresolved bingo's score is the podcaster's progress, not a result");
@@ -88,11 +88,11 @@ class BingoHistoryTest extends BingoTestSupport {
                 entry("ep-a", "storm", false), entry("ep-a", "guest", true));
 
         var history = BingoHistory.compute(List.of(input("ep-a", "2026-01-01T00:00:00Z")),
-                List.of(card("ep-a", "ann", 2, 0)), entries, a -> true, BingoScore.RankBy.LINES, 50, NOW);
+                List.of(card("ep-a", "ann", 2, 0)), entries, a -> true, BingoScore.RankBy.LINES, 50, 3, NOW);
 
         assertEquals(4, history.episodes().get(0).candidates(), "distinct predictions, not entries");
         assertEquals(0.5, history.episodes().get(0).hitRate());
-        assertEquals("ep-a", history.records().mostPredictable().slug());
+        assertEquals("ep-a", history.scopes().get("all").records().mostPredictable().slug());
     }
 
     @Test
@@ -103,7 +103,7 @@ class BingoHistoryTest extends BingoTestSupport {
         }
 
         var history = BingoHistory.compute(List.of(input("ep-a", "2026-01-01T00:00:00Z")), results, List.of(),
-                a -> true, BingoScore.RankBy.LINES, 3, NOW);
+                a -> true, BingoScore.RankBy.LINES, 3, 3, NOW);
 
         assertEquals(List.of("p5", "p4", "p3"),
                 history.players().stream().map(BingoDocs.PlayerSeries::author).toList());
@@ -119,9 +119,9 @@ class BingoHistoryTest extends BingoTestSupport {
                 card("e2", "hidden", 9, 8));
 
         var history = BingoHistory.compute(episodes, results, List.of(), a -> !a.equals("hidden"),
-                BingoScore.RankBy.LINES, 50, NOW);
+                BingoScore.RankBy.LINES, 50, 3, NOW);
 
-        var records = history.records();
+        var records = history.scopes().get("all").records();
         assertEquals(new BingoDocs.CardRecord("ann", "e4", 5, 1, 9), records.bestCard(),
                 "the opted-out player's 8-line card is nobody's record");
         assertEquals(new BingoDocs.PlayerCount("ann", 4), records.mostCards());
@@ -132,11 +132,62 @@ class BingoHistoryTest extends BingoTestSupport {
     @Test
     void anEmptySiteHasAnEmptyHistory() {
         var history = BingoHistory.compute(List.of(), List.of(), List.of(), a -> true, BingoScore.RankBy.FIELDS,
-                50, NOW);
+                50, 3, NOW);
 
         assertTrue(history.episodes().isEmpty());
-        assertNull(history.records().bestCard());
+        assertNull(history.scopes().get("all").records().bestCard());
         assertEquals("fields", history.rankBy());
+    }
+
+    // ---------------------------------------------------------------- scopes: per season, per card
+
+    @Test
+    void ranksEachSeasonOnItsOwnAndByCardOnceAPlayerHasEnoughCards() {
+        var episodes = List.of(input("s1e1", 1, "2026-01-01T00:00:00Z"), input("s1e2", 1, "2026-01-08T00:00:00Z"),
+                input("s1e3", 1, "2026-01-15T00:00:00Z"), input("s2e1", 2, "2026-03-01T00:00:00Z"),
+                input("s2e2", 2, "2026-03-08T00:00:00Z"));
+        var results = List.of(
+                card("s1e1", "veteran", 4, 1), card("s1e2", "veteran", 4, 1), card("s1e3", "veteran", 4, 1),
+                card("s2e1", "veteran", 3, 0), card("s2e2", "veteran", 3, 0),
+                card("s2e1", "newcomer", 6, 2), card("s2e2", "newcomer", 6, 2),
+                card("s1e1", "oneshot", 9, 8));
+
+        var history = BingoHistory.compute(episodes, results, List.of(), a -> true, BingoScore.RankBy.LINES, 50, 3, NOW);
+
+        var all = history.scopes().get("all");
+        assertEquals(List.of("oneshot", "newcomer", "veteran"),
+                all.byTotal().stream().map(BingoDocs.StandingRow::author).toList());
+        assertEquals(3, all.bar());
+        assertEquals(List.of("veteran"), all.byAverage().stream().map(BingoDocs.AverageRow::author).toList(),
+                "one lucky card, or two good ones, are not three");
+        assertEquals(2, all.belowBar());
+        assertEquals(0.6, all.byAverage().get(0).lines(), 0.001);
+
+        var season2 = history.scopes().get("feed:2");
+        assertEquals(2, season2.bar(), "a season of two bingos asks for both, not for three");
+        assertEquals(List.of("newcomer", "veteran"),
+                season2.byAverage().stream().map(BingoDocs.AverageRow::author).toList(),
+                "who joined late leads where they played");
+        assertEquals(2, season2.bingos());
+        assertEquals("newcomer", season2.records().bestCard().author());
+        assertEquals(new BingoDocs.PlayerCount("newcomer", 2), season2.records().longestStreak());
+        assertEquals("oneshot", history.scopes().get("feed:1").records().bestCard().author());
+        assertEquals(new BingoDocs.PlayerCount("veteran", 3), history.scopes().get("feed:1").records().longestStreak());
+    }
+
+    @Test
+    void anybodyARankingNamesHasALineEvenPastTheCap() {
+        var episodes = List.of(input("s1e1", 1, "2026-01-01T00:00:00Z"), input("s2e1", 2, "2026-03-01T00:00:00Z"));
+        List<BingoDocs.CardResultRow> results = new ArrayList<>();
+        for (int i = 0; i < 5; i++) {
+            results.add(card("s1e1", "old" + i, 8, 5));
+        }
+        results.add(card("s2e1", "newcomer", 2, 1));
+
+        var history = BingoHistory.compute(episodes, results, List.of(), a -> true, BingoScore.RankBy.LINES, 3, 3, NOW);
+
+        assertTrue(history.players().stream().anyMatch(p -> p.author().equals("newcomer")),
+                "first in season 2, so drawn, though far from the all-time top three");
     }
 
     // ---------------------------------------------------------------- published by the roll-up
@@ -174,10 +225,44 @@ class BingoHistoryTest extends BingoTestSupport {
         assertTrue(List.of(BingoSchemaFixture.backendOwned()).contains(BingoDocs.KEY_HISTORY));
     }
 
+    @Test
+    void theCardBarComesFromTheSettingsAndAChangeRecomputes() {
+        var config = new MapPluginConfig().with("minCardsPerCard", 1);
+        var ctx = ctx(published(true), config);
+        seedTemplate(ctx);
+        seedCard(ctx, alice, List.of("kraken"));
+        resolve(ctx, Map.of("kraken", true));
+        control(ctx, "RESOLVED");
+        var plugin = new BingoPlugin(clock);
+        plugin.register(ctx);
+        assertEquals(1, scopeAll(ctx).byAverage().size());
+        String before = ctx.store().get(Scope.site(), BingoDocs.KEY_HISTORY, BingoDocs.History.class).orElseThrow()
+                .computedAt();
+
+        config.with("minCardsPerCard", 5);
+        clock.advance(java.time.Duration.ofMinutes(1));
+        plugin.tick();
+
+        assertTrue(!before.equals(ctx.store().get(Scope.site(), BingoDocs.KEY_HISTORY, BingoDocs.History.class)
+                .orElseThrow().computedAt()), "a changed bar is an input of the roll-up");
+
+        assertEquals(1, scopeAll(ctx).bar(), "one bingo on the site, so one card is all there is to ask for");
+        assertTrue(BingoSchemaFixture.manifest().path("config").path("minCardsPerCard").path("default").asInt() == 3);
+    }
+
+    private static BingoDocs.ScopeStats scopeAll(FakePluginContext ctx) {
+        return ctx.store().get(Scope.site(), BingoDocs.KEY_HISTORY, BingoDocs.History.class).orElseThrow()
+                .scopes().get("all");
+    }
+
     // ---------------------------------------------------------------- fixtures
 
     private static BingoHistory.Input input(String slug, String publishedAt) {
-        return new BingoHistory.Input(slug, null, "feed", 1, null, Instant.parse(publishedAt));
+        return input(slug, 1, publishedAt);
+    }
+
+    private static BingoHistory.Input input(String slug, int season, String publishedAt) {
+        return new BingoHistory.Input(slug, null, "feed", season, null, Instant.parse(publishedAt));
     }
 
     private BingoDocs.CardResultRow card(String episode, String author, int fields, int lines) {

@@ -392,7 +392,22 @@ final class BingoDocs {
      * @param distribution how many ranked cards ended with each number of lines
      */
     record History(List<HistoryEpisode> episodes, List<PlayerSeries> players, List<LineCount> distribution,
-                   HistoryRecords records, String rankBy, String computedAt) {}
+                   Map<String, ScopeStats> scopes, String rankBy, String computedAt) {}
+
+    /**
+     * Rankings and records within one scope: {@code "all"}, or one season as {@code <feed>:<season>}.
+     *
+     * @param byTotal   the best listed players by total score
+     * @param byAverage the best listed players by score per card, among those with at least {@code bar} cards
+     * @param bar       how many cards the per-card ranking asks for here
+     * @param belowBar  how many listed players have fewer; counted, never named
+     * @param bingos    how many bingos the scope holds
+     */
+    record ScopeStats(List<StandingRow> byTotal, List<AverageRow> byAverage, int bar, int belowBar,
+                      HistoryRecords records, int bingos) {}
+
+    /** One player's score per card within a scope. */
+    record AverageRow(String author, int cards, double fields, double lines) {}
 
     /**
      * One resolved bingo in the history.

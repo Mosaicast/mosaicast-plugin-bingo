@@ -82,6 +82,8 @@ public class BingoPlugin implements PluginBackend, UserDataHandler, PageRoutePro
     static final double DEFAULT_FUZZY_THRESHOLD = 0.82;
     static final int DEFAULT_GRID_SIZE = 3;
     static final int DEFAULT_ARCHIVE_AFTER_DAYS = 30;
+    /** How many cards the per-card ranking asks for by default; `minCardsPerCard` in the settings. */
+    static final int DEFAULT_MIN_CARDS = 3;
     /** How stale the site roll-up may get while none of its inputs visibly moved. */
     static final Duration ROLL_UP_REFRESH = Duration.ofHours(1);
 
@@ -236,7 +238,8 @@ public class BingoPlugin implements PluginBackend, UserDataHandler, PageRoutePro
                 .sorted()
                 .toList();
         String fingerprint = String.join("|", pass.settings().rankBy().name(),
-                Double.toString(pass.settings().threshold()), String.join(",", unlisted),
+                Double.toString(pass.settings().threshold()), Integer.toString(pass.settings().minCards()),
+                String.join(",", unlisted),
                 Integer.toHexString(slugs.hashCode()), String.join(",", new TreeSet<>(pass.quiet())),
                 Integer.toHexString(pass.bingos().hashCode()));
         Instant now = now();
@@ -248,7 +251,8 @@ public class BingoPlugin implements PluginBackend, UserDataHandler, PageRoutePro
         if (corpus != null) {
             publish.stats(corpus, pass.prefs(), pass.settings().rankBy(), pass.bingos());
             publish.suggestions(corpus, pass.settings().threshold());
-            publish.history(corpus, pass.prefs(), pass.settings().rankBy(), pass.bingos());
+            publish.history(corpus, pass.prefs(), pass.settings().rankBy(), pass.settings().minCards(),
+                    pass.bingos());
         }
         lastRollUpInputs = fingerprint;
         lastRollUp = now;
@@ -261,11 +265,12 @@ public class BingoPlugin implements PluginBackend, UserDataHandler, PageRoutePro
                 booleanConfig("allowLateEntries", true),
                 intConfig("archiveAfterDays", DEFAULT_ARCHIVE_AFTER_DAYS),
                 intConfig("defaultGridSize", DEFAULT_GRID_SIZE),
-                BingoScore.RankBy.of(ctx.config().get("rankBy", String.class, "lines")));
+                BingoScore.RankBy.of(ctx.config().get("rankBy", String.class, "lines")),
+                intConfig("minCardsPerCard", DEFAULT_MIN_CARDS));
     }
 
     private record Settings(double threshold, boolean allowLate, int archiveAfterDays, int defaultGridSize,
-                            BingoScore.RankBy rankBy) {}
+                            BingoScore.RankBy rankBy, int minCards) {}
 
     private void tickEpisode(String slug, Pass pass) {
         Settings settings = pass.settings();

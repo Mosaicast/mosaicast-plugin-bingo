@@ -167,6 +167,19 @@
         "de": "Tage nach dem Auflösen, bis ein Bingo endgültig schließt und nichts mehr aufgezeichnet wird."
       }
     },
+    "minCardsPerCard": {
+      "type": "number",
+      "default": 3,
+      "editableBy": "podcaster",
+      "min": 1,
+      "max": 100,
+      "step": 1,
+      "label": { "en": "Cards for the per-card ranking", "de": "Karten für die Wertung pro Karte" },
+      "description": {
+        "en": "How many cards someone needs before the per-card ranking places them, so one lucky card cannot lead for good. A season with fewer bingos asks for all of them.",
+        "de": "Wie viele Karten jemand braucht, bevor die Wertung pro Karte ihn platziert, damit nicht eine einzige Glückskarte dauerhaft führt. Eine Staffel mit weniger Bingos verlangt alle."
+      }
+    },
     "rankBy": {
       "type": "string",
       "default": "lines",
