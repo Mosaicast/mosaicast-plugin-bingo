@@ -1,9 +1,10 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 // SPDX-FileCopyrightText: 2026 The Mosaicast Authors
 
-import { describe, expect, it } from 'vitest';
+import { afterEach, describe, expect, it } from 'vitest';
 import { makeMockCtx, makeMockDocs } from '@mosaicast/plugin-sdk/testing';
 import { copyClaimedCards, openSealed } from './claimCards';
+import { sha256Hex, subtle, useSubtle } from './crypto';
 
 /** Sealed by BingoImportTest.theSealIsPinnedForTheBrowser: same code, same parameters, a zero IV. */
 const VECTOR = { iv: 'AAAAAAAAAAAAAAAA', data: 'Q9gJMEAyl/xCGRT0i0joZW1lpCdjsNu6djjrgYRsx1ylG7qYCwB14HvIGw==', episodes: ['ep'] };
@@ -14,6 +15,18 @@ const fan = { id: 'u1', role: 'fan' as const, displayName: 'Ned', avatarUrl: '/a
 describe('claimed cards', () => {
   it('opens what the backend sealed, with the code as typed', async () => {
     expect(await openSealed(VECTOR, 'gop7 k2mq 9xd4 htfa')).toEqual({ ep: ['Tyrion drinks', ''] });
+  });
+
+  describe('without WebCrypto, as on a site reached over plain HTTP', () => {
+    const native = subtle;
+    afterEach(() => useSubtle(native));
+
+    it('hashes and opens the same seal with the bundled implementation', async () => {
+      useSubtle(undefined);
+      expect(await sha256Hex('GOP7K2MQ9XD4HTFA')).toBe(HASH);
+      expect(await openSealed(VECTOR, CODE)).toEqual({ ep: ['Tyrion drinks', ''] });
+      expect(await openSealed(VECTOR, 'WRON-GCOD-E000-0000')).toBeNull();
+    });
   });
 
   it('opens nothing with the wrong code', async () => {

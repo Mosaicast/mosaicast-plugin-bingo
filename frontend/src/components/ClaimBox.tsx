@@ -5,6 +5,7 @@ import { useEffect, useState } from 'react';
 import { isPluginApiError, type PluginContext } from '@mosaicast/plugin-sdk';
 import type { PluginI18n } from '../i18n';
 import { copyClaimedCards } from '../claimCards';
+import { sha256Hex } from '../crypto';
 import { KEY_CLAIM } from '../keys';
 import type { ClaimDoc, Imports } from '../types';
 
@@ -18,8 +19,7 @@ export function cleanCode(code: string): string {
 
 /** SHA-256, hex — the only form a claim code is ever known by on the server. */
 export async function hashCode(code: string): Promise<string> {
-  const digest = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(cleanCode(code)));
-  return [...new Uint8Array(digest)].map((b) => b.toString(16).padStart(2, '0')).join('');
+  return sha256Hex(cleanCode(code));
 }
 
 /**

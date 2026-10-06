@@ -2,6 +2,7 @@
 // SPDX-FileCopyrightText: 2026 The Mosaicast Authors
 
 import type { PluginContext } from '@mosaicast/plugin-sdk';
+import { pbkdf2AesGcmDecrypt, sha256Hex } from './crypto';
 import { CARD_PREFIX, cardKey } from './keys';
 import type { ClaimDoc, Imports, Sealed } from './types';
 
@@ -32,24 +33,14 @@ function fromBase64(text: string): Uint8Array<ArrayBuffer> {
 }
 
 async function hashOf(code: string): Promise<string> {
-  const digest = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(cleanCode(code)));
-  return [...new Uint8Array(digest)].map((b) => b.toString(16).padStart(2, '0')).join('');
+  return sha256Hex(cleanCode(code));
 }
 
 /** The cards inside a seal, by episode slug, or `null` when the code does not open it. */
 export async function openSealed(sealed: Sealed, code: string): Promise<Record<string, string[]> | null> {
   try {
-    const material = await crypto.subtle.importKey('raw', new TextEncoder().encode(cleanCode(code)), 'PBKDF2', false, [
-      'deriveKey',
-    ]);
-    const key = await crypto.subtle.deriveKey(
-      { name: 'PBKDF2', hash: 'SHA-256', salt: new TextEncoder().encode(SEAL_SALT), iterations: SEAL_ITERATIONS },
-      material,
-      { name: 'AES-GCM', length: 256 },
-      false,
-      ['decrypt'],
-    );
-    const plain = await crypto.subtle.decrypt({ name: 'AES-GCM', iv: fromBase64(sealed.iv) }, key, fromBase64(sealed.data));
+    const plain = await pbkdf2AesGcmDecrypt(cleanCode(code), SEAL_SALT, SEAL_ITERATIONS, fromBase64(sealed.iv),
+      fromBase64(sealed.data));
     return JSON.parse(new TextDecoder().decode(plain)) as Record<string, string[]>;
   } catch {
     return null;
