@@ -129,6 +129,17 @@ export function matchEpisode(episode, episodes) {
   return { problem: `S${episode.season}E${episode.episode} is in ${found.length} feeds; give its slug` };
 }
 
+/**
+ * Whether a bingo's grid matches the one already on its episode — a merge into a different grid is refused
+ * by the backend, so the dry run says so first. Absent fields mean what the backend reads them as: 3x3,
+ * every square to write.
+ */
+export function gridMatches(bingo, template) {
+  const size = Number.isInteger(template?.size) && template.size >= 2 ? template.size : 3;
+  const free = template?.freeCentre === true && size % 2 === 1;
+  return bingo.size === size && bingo.freeCentre === free;
+}
+
 /** A fresh claim code: 16 characters, 80 bits, printed in groups of four. */
 export function newCode() {
   const bytes = randomBytes(16);
@@ -215,7 +226,7 @@ async function existingBingos(api, slugs) {
     const ids = slugs.slice(i, i + 100).map(encodeURIComponent).join(',');
     const found = (await api.get(`/api/plugins/${PLUGIN}/data/episode?ids=${ids}&keys=template,phase`)) ?? {};
     for (const [slug, docs] of Object.entries(found)) {
-      if (docs.template) out[slug] = docs.phase?.phase ?? 'OPEN';
+      if (docs.template) out[slug] = { phase: docs.phase?.phase ?? 'OPEN', template: docs.template };
     }
   }
   return out;
@@ -288,11 +299,14 @@ async function main(argv) {
   const onExisting = opts.existing === 'merge' ? 'merge' : 'skip';
   const todo = [];
   for (const p of plan) {
-    const phase = existing[p.slug];
+    const phase = existing[p.slug]?.phase;
     const merge = (p.bingo.onExisting ?? onExisting) === 'merge';
     if (phase && !merge) console.log(`– bingos[${p.b}] ${p.slug}: already has a bingo, skipped (--existing=merge to add the cards)`);
     else if (phase && phase !== 'RESOLVED') console.log(`– bingos[${p.b}] ${p.slug}: its bingo is ${phase}, only a resolved one takes imported cards; skipped`);
-    else {
+    else if (phase && !gridMatches(p.bingo, existing[p.slug].template)) {
+      const tpl = existing[p.slug].template;
+      console.log(`– bingos[${p.b}] ${p.slug}: its bingo is ${tpl.size ?? 3}x${tpl.size ?? 3}${tpl.freeCentre ? ' with a free centre' : ''}, the file says otherwise; skipped`);
+    } else {
       console.log(`✓ bingos[${p.b}] → ${p.slug}${phase ? ' (merge)' : ''}: ${p.bingo.cards.length} card(s)`);
       todo.push(p);
     }

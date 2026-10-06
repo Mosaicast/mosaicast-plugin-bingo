@@ -5,7 +5,7 @@
 
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
-import { ensurePlayers, fillable, hashOf, importDoc, matchEpisode, newCode, parse, validate } from './bingo-import.mjs';
+import { ensurePlayers, fillable, gridMatches, hashOf, importDoc, matchEpisode, newCode, parse, validate } from './bingo-import.mjs';
 
 const square = (text, hit = false) => ({ text, hit });
 const nine = (first) => [square(first, true), ...Array.from({ length: 8 }, (_, i) => square(`filler ${i}`))];
@@ -77,4 +77,11 @@ test('players get a pseudonym and a code once, and only claims for their own bin
   assert.equal(doc.cards[0].ranked, true);
   assert.deepEqual(Object.values(doc.claims), [state.players.max.pseudonym], 'alex has no card here');
   assert.ok(!JSON.stringify(doc).includes('Max'), 'no name ever leaves the file');
+});
+
+test('a merge must match the grid already there', () => {
+  assert.ok(gridMatches({ size: 3, freeCentre: true }, { size: 3, freeCentre: true }));
+  assert.ok(!gridMatches({ size: 3, freeCentre: false }, { size: 3, freeCentre: true }));
+  assert.ok(gridMatches({ size: 4, freeCentre: false }, { size: 4, freeCentre: true }), 'an even grid has no middle');
+  assert.ok(gridMatches({ size: 3, freeCentre: false }, {}), 'unstated means 3x3, every square written');
 });
