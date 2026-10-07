@@ -10,6 +10,25 @@ in the three files that carry it.
 
 ## [Unreleased]
 
+## [0.7.1] — the answers stay private until a bingo is resolved
+
+Built against **`platformApi` 0.19.0**, like 0.7.0, so it needs **core 0.8.1 or newer**: core went from 0.7.7
+straight to v0.8.1, and 0.8.0 was never tagged.
+
+### Security
+- **The answers stay private until the bingo is resolved.** The podcaster's `resolution` was readable by
+  anyone while they were still ticking it off. It is now podcaster-only, and the backend publishes
+  `answers` at RESOLVED (empty again if the bingo is reopened). Fans' cards show their hits from then on,
+  with the leaderboard; the podcaster still sees each tick at once. Bingos archived before this get their
+  answers on the first pass after the upgrade.
+
+### Changed
+- `docs/ARCHITECTURE.md` synced from core `v0.8.1`: key floors and the schema read floor (§7.2),
+  `onEpisodePhaseChanged`, including every episode of a deleted feed (§7.4), quiet plans in `ctx.episodes`
+  for podcasters, `displayMany` splitting, and the GDPR data export (§12.8.1).
+
+## [0.7.0] — the bingo page, stats and charts, imports with claim codes, and platformApi 0.19.0
+
 Built against **`platformApi` 0.19.0**, so it needs **core 0.8.1 or newer**. Core matches that version on
 `major.minor` exactly: core 0.7.x rejects this build at load, and core 0.8.1 rejects the 0.6.x build.
 
@@ -88,9 +107,6 @@ Built against **`platformApi` 0.19.0**, so it needs **core 0.8.1 or newer**. Cor
   isolated from every other session's, instead of copying into core's shared `./plugins` and the fixed
   `:8081` default instance — and `restart`, which takes a new build or core and keeps the database (0.7.6).
   README and CLAUDE.md say how.
-- `docs/ARCHITECTURE.md` synced from core `v0.8.1`: key floors and the schema read floor (§7.2),
-  `onEpisodePhaseChanged`, including every episode of a deleted feed (§7.4), quiet plans in `ctx.episodes`
-  for podcasters, `displayMany` splitting, and the GDPR data export (§12.8.1).
 - `docs/ARCHITECTURE.md` synced from core 0.7.7 (`baf12bc`, not tagged yet): planned, quiet and announced
   episodes and the derived release phase (§4.3), `onEpisodeReleased`, `ctx.episode` filled; and from 0.7.6
   a remembered miss lasting 30 s (§7.6), season and feed on the display snapshot, ZIP uploads, private blob
@@ -131,11 +147,6 @@ Built against **`platformApi` 0.19.0**, so it needs **core 0.8.1 or newer**. Cor
   opted-out players included.
 - **Bookkeeping keys get their own floors** (`data.keyFloors`): import files, unclaim requests and
   `participants` are for podcasters, `notified` (everyone who played) for admins.
-- **The answers stay private until the bingo is resolved.** The podcaster's `resolution` was readable by
-  anyone while they were still ticking it off. It is now podcaster-only, and the backend publishes
-  `answers` at RESOLVED (empty again if the bingo is reopened). Fans' cards show their hits from then on,
-  with the leaderboard; the podcaster still sees each tick at once. Bingos archived before this get their
-  answers on the first pass after the upgrade.
 
 ### Not adopted
 - **`ctx.docs.getMany` in place of `readEpisode`**, although every host of 0.17.0 forgets a miss after 30 s
