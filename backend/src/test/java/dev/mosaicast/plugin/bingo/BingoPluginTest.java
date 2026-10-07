@@ -492,6 +492,60 @@ class BingoPluginTest extends BingoTestSupport {
         assertEquals(afterFirst.ranked(), leaderboard(ctx).ranked());
     }
 
+    // ---------------------------------------------------------------- answers
+
+    @Test
+    void theAnswersArePublishedOnlyOnceTheBingoIsResolved() {
+        var ctx = ctx(published(true));
+        seedTemplate(ctx);
+        seedCard(ctx, alice, List.of("kraken", "merch plug"));
+        control(ctx, "LOCKED");
+        var plugin = new BingoPlugin(clock);
+        plugin.register(ctx);
+        assertEquals("LOCKED", phase(ctx).orElseThrow().phase());
+
+        resolve(ctx, Map.of("kraken", true, "merch plug", false)); // the podcaster is still ticking
+        plugin.tick();
+        assertEquals(Map.of(), answers(ctx), "a half-ticked list reaches nobody but the podcaster");
+
+        control(ctx, "RESOLVED");
+        plugin.tick();
+        assertEquals(Map.of("kraken", true, "merch plug", false), answers(ctx), "misses included");
+
+        control(ctx, "LOCKED"); // reopened to correct something
+        plugin.tick();
+        assertEquals(Map.of(), answers(ctx), "a reopened bingo takes its answers back");
+    }
+
+    @Test
+    void aBingoArchivedBeforeAnswersExistedGetsThemAtStartUp() {
+        var ctx = ctx(published(false), new MapPluginConfig().with("archiveAfterDays", 30));
+        seedTemplate(ctx);
+        seedCard(ctx, alice, List.of("kraken"));
+        resolve(ctx, Map.of("kraken", true));
+        control(ctx, "RESOLVED");
+        var before = new BingoPlugin(clock);
+        before.register(ctx);
+        clock.advance(Duration.ofDays(31));
+        before.tick();
+        assertEquals("ARCHIVED", phase(ctx).orElseThrow().phase());
+        assertEquals(Map.of("kraken", true), answers(ctx), "archived this pass: written on the way out");
+
+        // As the plugin found it after the upgrade: archived, and no document every pass now skips.
+        ctx.store().delete(Scope.episode(EPISODE), BingoDocs.KEY_ANSWERS);
+        before.tick();
+        assertTrue(ctx.store().get(Scope.episode(EPISODE), BingoDocs.KEY_ANSWERS, BingoDocs.Answers.class).isEmpty(),
+                "an archived bingo is not read again by every pass");
+
+        new BingoPlugin(clock).register(ctx); // the restart that brings the new version
+        assertEquals(Map.of("kraken", true), answers(ctx));
+    }
+
+    private static Map<String, Boolean> answers(FakePluginContext ctx) {
+        return ctx.store().get(Scope.episode(EPISODE), BingoDocs.KEY_ANSWERS, BingoDocs.Answers.class)
+                .orElseThrow().hits();
+    }
+
     // ---------------------------------------------------------------- ARCHIVED
 
     @Test

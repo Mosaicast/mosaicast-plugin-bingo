@@ -79,7 +79,7 @@
     "writableBy": "podcaster",
     "readsAllUsers": true,
     "keyFloors": [
-      { "keys": ["import:*", "unclaim:*", "participants"], "readableBy": "podcaster" },
+      { "keys": ["resolution", "import:*", "unclaim:*", "participants"], "readableBy": "podcaster" },
       { "keys": ["notified"], "readableBy": "admin" }
     ],
     "backendOwned": [
@@ -87,6 +87,7 @@
       "candidates",
       "leaderboard",
       "recap",
+      "answers",
       "stats",
       "suggestions",
       "history",

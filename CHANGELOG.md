@@ -128,6 +128,11 @@ Built against **`platformApi` 0.19.0**, so it needs **core 0.8.0 or newer**. Cor
   opted-out players included.
 - **Bookkeeping keys get their own floors** (`data.keyFloors`): import files, unclaim requests and
   `participants` are for podcasters, `notified` (everyone who played) for admins.
+- **The answers stay private until the bingo is resolved.** The podcaster's `resolution` was readable by
+  anyone while they were still ticking it off. It is now podcaster-only, and the backend publishes
+  `answers` at RESOLVED (empty again if the bingo is reopened). Fans' cards show their hits from then on,
+  with the leaderboard; the podcaster still sees each tick at once. Bingos archived before this get their
+  answers on the first pass after the upgrade.
 
 ### Not adopted
 - **`ctx.docs.getMany` in place of `readEpisode`**, although every host of 0.17.0 forgets a miss after 30 s

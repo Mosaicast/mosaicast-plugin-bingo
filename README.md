@@ -400,6 +400,10 @@ everything public is published by the backend. Raw material stays behind higher 
 - **Import files and unclaim requests** (`import:*`, `unclaim:*`) and **who may be featured**
   (`participants`): podcaster and up, through `data.keyFloors`.
 - **Who was notified** (`notified`): admin only. It names everyone who played, opted out or not.
+- **The podcaster's answer list** (`resolution`): podcaster and up. Everyone else reads `answers`, which
+  the backend copies out of it only once the bingo is resolved, so a half-ticked list never leaks how the
+  episode went. The podcaster sees their own ticks on the cards as they make them; fans see the hits
+  appear at RESOLVED, together with the leaderboard.
 
 When a podcaster sends an announced episode back to quiet, or cancels it, the backend runs a pass at once
 (`onEpisodePhaseChanged`), so the site documents stop naming it right away instead of on the next tick.

@@ -98,6 +98,12 @@ public class BingoPlugin implements PluginBackend, UserDataHandler, PageRoutePro
      * meanwhile joins it instead of queueing a pass of its own (see {@link #phaseChanged}).
      */
     private final AtomicBoolean phasePassQueued = new AtomicBoolean();
+    /**
+     * Whether a whole pass has run since start-up. An archived bingo is skipped by every pass, so the first
+     * one writes its {@code answers} once: a bingo archived before that document existed would otherwise
+     * show its cards with no hits for good. Guarded by {@code passLock}.
+     */
+    private boolean firstPassDone;
     private PluginContext ctx;
     /** Every player's partition, read-only. Present because the manifest declares {@code data.readsAllUsers}. */
     private CrossUserStore everyone;
@@ -205,6 +211,7 @@ public class BingoPlugin implements PluginBackend, UserDataHandler, PageRoutePro
             } catch (RuntimeException e) {
                 ctx.logger().warn("bingo stats pass failed", e);
             }
+            firstPassDone = true;
         } finally {
             passLock.unlock();
         }
@@ -256,6 +263,19 @@ public class BingoPlugin implements PluginBackend, UserDataHandler, PageRoutePro
         } finally {
             passLock.unlock();
         }
+    }
+
+    /**
+     * Copies what came true out of the podcaster's {@code resolution} once the bingo is resolved, and empties
+     * it otherwise - a reopened bingo takes its answers back. Before that, ticked answers would tell anyone
+     * how the episode went while the podcaster is still deciding, which is why the leaderboard waits too.
+     */
+    private void publishAnswers(Scope scope, Resolution resolution, Phase phase) {
+        boolean settled = phase == Phase.RESOLVED || phase == Phase.ARCHIVED;
+        Map<String, Boolean> hits = settled && resolution != null && resolution.hits() != null
+                ? resolution.hits()
+                : Map.of();
+        ctx.store().put(scope, KEY_ANSWERS, new Answers(hits));
     }
 
     /**
@@ -350,6 +370,10 @@ public class BingoPlugin implements PluginBackend, UserDataHandler, PageRoutePro
             // Terminal: this episode has left the working set for good. It is still a bingo that happened,
             // so it stays on the site page's list - with no headcount, which would cost a read per episode.
             pass.bingos().add(new BingoSummary(slug, template.get().title(), Phase.ARCHIVED.name(), null));
+            if (!firstPassDone) {
+                publishAnswers(scope, ctx.store().get(scope, KEY_RESOLUTION, Resolution.class).orElse(null),
+                        Phase.ARCHIVED);
+            }
             return;
         }
 
@@ -438,6 +462,7 @@ public class BingoPlugin implements PluginBackend, UserDataHandler, PageRoutePro
 
         ctx.store().put(scope, KEY_CANDIDATES,
                 new Candidates(items, assignments, cardCounts, now().toString()));
+        publishAnswers(scope, resolution, phase);
 
         if (phase == Phase.ARCHIVED) {
             // Newly archived this tick: the documents above are its final state, and nothing is ingested.

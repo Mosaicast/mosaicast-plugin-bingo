@@ -49,6 +49,11 @@ export interface Resolution {
   hits?: Record<string, boolean>;
 }
 
+/** What came true, by canonical form: the resolution, copied out by the backend at RESOLVED. */
+export interface Answers {
+  hits?: Record<string, boolean>;
+}
+
 /** The podcaster's stated intent. Client-written, and it beats the derived suggestion. */
 export interface Control {
   phase: Phase;

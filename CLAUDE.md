@@ -130,7 +130,7 @@ frontend/locales/{en,de}.json           UI strings
   (`whatCardsSay`), never from partition docs their owners can still write. Decided groups are seeded so a
   late spelling cannot rename them; a row's `canonical` follows the current grouping, so pins re-score.
 - **Nothing public reflects an unresolved bingo's score**: not the board, not site standings, not a
-  suggestion's hit count. And no share card (OG) ever names a prediction — previews are read unspoilered.
+  suggestion's hit count, not a hit: fans read `answers` (copied at RESOLVED), `resolution` is podcaster-only. And no share card (OG) ever names a prediction — previews are read unspoilered.
 - **Imports never attach an account**: authors are `import:<uuid>` (real ids refused), unlisted until the
   person claims them with a code (hash-only on the server). Imported scores must equal the file's hit flags.
 - **Rankings and records per scope come from the backend** (`history.scopes`: `all` + `<feed>:<season>`),
@@ -145,7 +145,7 @@ frontend/locales/{en,de}.json           UI strings
   non-authoritative and live only in the plugin UI.
 - The host resolves scopes and decides access/filters — plugins only consume.
 - Per-user data goes in the `USER` scope, **never** in a key. A key naming a user is an IDOR.
-- Keys the backend computes (`phase`, `candidates`, `leaderboard`, `recap`, `stats`, `suggestions`, `history`, `imports`, `notified`,
+- Keys the backend computes (`phase`, `candidates`, `leaderboard`, `recap`, `answers`, `stats`, `suggestions`, `history`, `imports`, `notified`,
   `participants`, `showcased`) are in `data.backendOwned` and written in `register()` as well as on the schedule.
   Client-written keys (`template`, `resolution`, `control`, `showcase`, `grouping`, `import:*`, `unclaim:*`)
   must **never** be listed there.

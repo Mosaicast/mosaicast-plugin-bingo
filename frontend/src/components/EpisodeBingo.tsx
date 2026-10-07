@@ -154,15 +154,18 @@ export function EpisodeBingo({ ctx }: { ctx: PluginContext }) {
     );
   }
 
+  // The podcaster sees their own ticks as they make them; everyone else sees the answers the backend
+  // publishes at RESOLVED. The host never hands `resolution` to anyone below podcaster.
+  const truth = data.resolution?.hits ?? data.answers?.hits ?? {};
   const hitsFor = (entries: string[]) =>
     entries.map((text) => {
       const canonical = data.assignments[text.trim()];
-      return Boolean(canonical && data.resolution?.hits?.[canonical]);
+      return Boolean(canonical && truth[canonical]);
     });
 
   // Blur only when there is something to give away. A locked bingo whose answers nobody has ticked off yet
   // spoils nothing, and blurring it would hide the tile's whole point from every first-time visitor.
-  const hasSpoilers = Object.values(data.resolution?.hits ?? {}).some(Boolean);
+  const hasSpoilers = Object.values(truth).some(Boolean);
   // Covers what someone else predicted, and the recap. Never the viewer's own card: they played it, and the
   // hits on it are their own result, not news about the episode.
   const spoilersCovered = hasSpoilers && unheard && !revealed;
