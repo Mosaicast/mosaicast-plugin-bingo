@@ -10,6 +10,17 @@ in the three files that carry it.
 
 ## [Unreleased]
 
+## [0.7.2] — SDK 0.19.1, for core 0.8.2
+
+Built against **`platformApi` 0.19.1**, a patch of 0.19.0. Core matches `major.minor` only, so it loads on core
+0.8.1 and newer; tested on core 0.8.2.
+
+### Changed
+- SDK 0.19.1 in all four places CI compares: `plugin.json`, `plugin-api`, `plugin-testkit` and
+  `@mosaicast/plugin-sdk`. Its one visible change, `i18n.bytes` in binary units (KiB/MiB), touches nothing
+  here: bingo formats no byte counts.
+- `docs/ARCHITECTURE.md` is unchanged: core v0.8.2 ships the same text as v0.8.1.
+
 ## [0.7.1] — the answers stay private until a bingo is resolved
 
 Built against **`platformApi` 0.19.0**, like 0.7.0, so it needs **core 0.8.1 or newer**: core went from 0.7.7

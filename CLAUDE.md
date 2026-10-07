@@ -11,7 +11,7 @@ four-state lifecycle, schema-backed history, and a site page (`/p/bingo/`) with 
 Work in plan mode first.
 
 ## Tech stack
-Java 21 (Gradle, PF4J extension) · React 18 + Vite (Web Component) · **platformApi 0.19.0** (core 0.8.1+)
+Java 21 (Gradle, PF4J extension) · React 18 + Vite (Web Component) · **platformApi 0.19.1** (core 0.8.1+)
 
 ## Commands
 ```
