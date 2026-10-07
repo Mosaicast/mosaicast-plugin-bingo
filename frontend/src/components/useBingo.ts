@@ -11,6 +11,7 @@ import {
   KEY_PREFS,
   KEY_RECAP,
   KEY_RESOLUTION,
+  KEY_ANSWERS,
   KEY_CONTROL,
   KEY_GROUPING,
   KEY_SHOWCASE,
@@ -32,6 +33,7 @@ import type {
   Prefs,
   Recap,
   Resolution,
+  Answers,
   Showcase,
   Showcased,
   ShowcasedCard,
@@ -58,7 +60,10 @@ export interface BingoData {
   /** How many distinct cards carry each candidate, keyed by canonical form. */
   cardCounts: Record<string, number>;
   assignments: Record<string, string>;
+  /** The podcaster's working list; `null` for everyone else, whom the host does not hand it to. */
   resolution: Resolution | null;
+  /** What came true, once the bingo is resolved. */
+  answers: Answers | null;
   /** The podcaster's corrections to the grouping; read so one not applied yet can say so. */
   grouping: GroupingDoc | null;
   leaderboard: Leaderboard | null;
@@ -92,6 +97,7 @@ const EMPTY: Omit<BingoData, 'reload'> = {
   cardCounts: {},
   assignments: {},
   resolution: null,
+  answers: null,
   grouping: null,
   leaderboard: null,
   recap: null,
@@ -155,6 +161,7 @@ export function useBingo(ctx: PluginContext): BingoData {
       const control = pick<Control>(episode, KEY_CONTROL);
       const candidates = pick<Candidates>(episode, KEY_CANDIDATES);
       const resolution = pick<Resolution>(episode, KEY_RESOLUTION);
+      const answers = pick<Answers>(episode, KEY_ANSWERS);
       const leaderboard = pick<Leaderboard>(episode, KEY_LEADERBOARD);
       const showcased = pick<Showcased>(episode, KEY_SHOWCASED);
       const participants = pick<Participants>(episode, KEY_PARTICIPANTS);
@@ -172,6 +179,7 @@ export function useBingo(ctx: PluginContext): BingoData {
         cardCounts: candidates?.cards ?? {},
         assignments: candidates?.assignments ?? {},
         resolution,
+        answers,
         grouping: pick<GroupingDoc>(episode, KEY_GROUPING),
         leaderboard,
         recap: pick<Recap>(episode, KEY_RECAP),
@@ -297,7 +305,7 @@ export function forgetOwnCards(): void {
 
 /** Every episode document the tile draws, in one request. */
 const TILE_KEYS = [
-  KEY_TEMPLATE, KEY_PHASE, KEY_CONTROL, KEY_CANDIDATES, KEY_RESOLUTION,
+  KEY_TEMPLATE, KEY_PHASE, KEY_CONTROL, KEY_CANDIDATES, KEY_RESOLUTION, KEY_ANSWERS,
   KEY_LEADERBOARD, KEY_SHOWCASED, KEY_PARTICIPANTS, KEY_SHOWCASE, KEY_GROUPING, KEY_RECAP,
 ];
 

@@ -46,6 +46,12 @@ final class BingoDocs {
     static final String KEY_LEADERBOARD = "leaderboard";
     /** What happened in one bingo, in a few lines - once it is resolved. Backend-owned. */
     static final String KEY_RECAP = "recap";
+    /**
+     * What came true, copied out of {@code resolution} once the bingo is resolved and empty before. Fans
+     * read this; {@code resolution} itself is the podcaster's working list and floored to them, so a
+     * half-ticked list never reaches anyone else. Backend-owned.
+     */
+    static final String KEY_ANSWERS = "answers";
     /** Who could be featured, as ids only - the picker's raw material. Backend-owned. */
     static final String KEY_PARTICIPANTS = "participants";
     /** The featured cards, copied out so anyone may read them. Backend-owned. */
@@ -179,6 +185,9 @@ final class BingoDocs {
     }
 
     /** The podcaster's shared truth list, keyed by a candidate's canonical form. */
+    /** {@link #KEY_ANSWERS}: the resolution's decisions, keyed by canonical form, or none before RESOLVED. */
+    record Answers(Map<String, Boolean> hits) {}
+
     record Resolution(Map<String, Boolean> hits) {
         boolean isHit(String canonical) {
             return hits != null && Boolean.TRUE.equals(hits.get(canonical));

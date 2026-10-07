@@ -314,7 +314,7 @@ $C --name bingo down
 re-copies it and restarts only the app, keeping the database (add `--core origin/master` to move core too). Without it
 (or `--plugins`) no plugin loads and the tile is simply absent.
 
-Requires **core 0.8.0 or newer** (`platformApi` 0.19.0). Core matches that version on `major.minor` exactly,
+Requires **core 0.8.1 or newer** (`platformApi` 0.19.0). Core matches that version on `major.minor` exactly,
 so an older core rejects this build at load and a newer minor rejects it too.
 
 If the tile does not appear, the reason is in the admin log viewer at `/admin/logs` — a rejected manifest
@@ -392,7 +392,7 @@ what freezes is what a card *says*, never what it is worth.
 ## Who can read what
 
 The tile is public, so the plugin's documents are readable by anyone (`data.readableBy: anonymous`), and
-everything public is published by the backend. Raw material stays behind higher floors (core 0.8.0):
+everything public is published by the backend. Raw material stays behind higher floors (core 0.8.1):
 
 - **Schema rows** (every entry and score, with author ids, quiet episodes and opted-out players):
   `storage.schemaReadableBy: admin`. The frontend never reads `ctx.schema`; the backend's own reads are
@@ -400,6 +400,10 @@ everything public is published by the backend. Raw material stays behind higher 
 - **Import files and unclaim requests** (`import:*`, `unclaim:*`) and **who may be featured**
   (`participants`): podcaster and up, through `data.keyFloors`.
 - **Who was notified** (`notified`): admin only. It names everyone who played, opted out or not.
+- **The podcaster's answer list** (`resolution`): podcaster and up. Everyone else reads `answers`, which
+  the backend copies out of it only once the bingo is resolved, so a half-ticked list never leaks how the
+  episode went. The podcaster sees their own ticks on the cards as they make them; fans see the hits
+  appear at RESOLVED, together with the leaderboard.
 
 When a podcaster sends an announced episode back to quiet, or cancels it, the backend runs a pass at once
 (`onEpisodePhaseChanged`), so the site documents stop naming it right away instead of on the next tick.

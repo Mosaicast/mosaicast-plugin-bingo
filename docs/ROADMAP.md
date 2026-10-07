@@ -50,7 +50,7 @@ a dialog on the page could write just as well: file picker, the same dry-run rep
 building once a second podcast wants to import.
 
 ### An admin's full export
-A person's own cards reach core's data export as `plugins/bingo/bingo.json` (core 0.8.0). An admin export
+A person's own cards reach core's data export as `plugins/bingo/bingo.json` (core 0.8.1). An admin export
 with everyone's cards stays an ops script: it is never offered to players, because being listed covers a
 name and a score, not a card.
 

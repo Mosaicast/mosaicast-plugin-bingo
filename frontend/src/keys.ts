@@ -16,6 +16,11 @@ export const KEY_TEMPLATE = 'template';
 
 /** The shared truth list, keyed by a candidate's canonical form. Written by the podcaster. */
 export const KEY_RESOLUTION = 'resolution';
+/**
+ * What came true, published by the backend once a bingo is resolved and empty before. Everyone but the
+ * podcaster reads hits from here: `resolution` is the podcaster's working list, floored to them.
+ */
+export const KEY_ANSWERS = 'answers';
 
 /** The podcaster's lifecycle intent. Written here, obeyed by the backend over its own suggestion. */
 export const KEY_CONTROL = 'control';

@@ -14,6 +14,7 @@ import {
   KEY_PHASE,
   KEY_RECAP,
   KEY_RESOLUTION,
+  KEY_ANSWERS,
   KEY_PARTICIPANTS,
   KEY_SHOWCASE,
   KEY_SHOWCASED,
@@ -31,8 +32,8 @@ describe('plugin.json', () => {
 
   it('reserves every key the backend computes', () => {
     const owned = manifest.data.backendOwned;
-    for (const key of [KEY_PHASE, KEY_CANDIDATES, KEY_LEADERBOARD, KEY_RECAP, KEY_STATS, KEY_SUGGESTIONS, KEY_HISTORY, KEY_IMPORTS,
-                       KEY_PARTICIPANTS, KEY_SHOWCASED]) {
+    for (const key of [KEY_PHASE, KEY_CANDIDATES, KEY_LEADERBOARD, KEY_RECAP, KEY_ANSWERS, KEY_STATS, KEY_SUGGESTIONS, KEY_HISTORY, KEY_IMPORTS,
+                       KEY_PARTICIPANTS, KEY_SHOWCASED, KEY_ANSWERS]) {
       expect(owned).toContain(key);
     }
   });
@@ -64,10 +65,12 @@ describe('plugin.json', () => {
     expect(floor('import:batch-1')).toBe('podcaster');
     expect(floor('unclaim:abcd')).toBe('podcaster');
     expect(floor(KEY_PARTICIPANTS)).toBe('podcaster');
+    // The podcaster's half-ticked list: fans read the answers published at RESOLVED instead.
+    expect(floor(KEY_RESOLUTION)).toBe('podcaster');
     expect(floor('notified')).toBe('admin');
     // A floor on a key a fan's tile reads would quietly drop it from their batch read.
     for (const key of [KEY_PHASE, KEY_CANDIDATES, KEY_LEADERBOARD, KEY_RECAP, KEY_STATS, KEY_SUGGESTIONS, KEY_HISTORY,
-                       KEY_IMPORTS, KEY_SHOWCASED, KEY_TEMPLATE, KEY_RESOLUTION, KEY_CONTROL, KEY_SHOWCASE, KEY_GROUPING]) {
+                       KEY_IMPORTS, KEY_SHOWCASED, KEY_TEMPLATE, KEY_CONTROL, KEY_SHOWCASE, KEY_GROUPING]) {
       expect(floor(key)).toBeUndefined();
     }
   });

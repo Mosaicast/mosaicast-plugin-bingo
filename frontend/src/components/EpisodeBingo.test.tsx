@@ -269,7 +269,8 @@ describe('<EpisodeBingo>', () => {
       items: [{ canonical: 'kraken', label: 'Kraken!', count: 1 }],
       assignments: { 'Kraken!': 'kraken' },
     },
-    [docPath('resolution')]: { hits: { kraken: true } },
+    // What a fan is handed: the published answers. The host keeps `resolution` from anyone below podcaster.
+    [docPath('answers')]: { hits: { kraken: true } },
   };
 
   /** Someone who has listened; the default mock reports no stored position at all. */
@@ -282,7 +283,7 @@ describe('<EpisodeBingo>', () => {
           [docPath('template')]: { size: 3, freeCentre: true },
           [docPath('phase')]: { phase: 'RESOLVED', suggested: 'LOCKED' },
           [docPath('candidates')]: { assignments: { a: 'a', b: 'b', c: 'c', d: 'd' } },
-          [docPath('resolution')]: { hits: { a: true, b: true, c: true, d: true } },
+          [docPath('answers')]: { hits: { a: true, b: true, c: true, d: true } },
           [`data/user/me/card:${EPISODE}`]: { entries: ['a', 'b', 'c', 'x', 'y', 'z', 'w', 'd'] },
         },
         { user: fan, progress: { get: async () => 3600 } },
@@ -305,6 +306,30 @@ describe('<EpisodeBingo>', () => {
       (host.querySelectorAll('[role="tab"]')[0] as HTMLButtonElement).click();
     });
     expect(host.querySelectorAll('.bingo__cell--hit').length).toBeGreaterThan(0);
+  });
+
+  /** A bingo the podcaster is still ticking off, as a fan's batch read returns it: no `resolution`. */
+  const LOCKED_BINGO = {
+    // No free middle: it is always a hit, and would be counted below.
+    [docPath('template')]: { size: 3, freeCentre: false },
+    [docPath('phase')]: { phase: 'LOCKED', suggested: 'LOCKED' },
+    [docPath('showcased')]: { items: [{ userId: 'u2', entries: ['Kraken!'] }] },
+    [docPath('candidates')]: { assignments: { 'Kraken!': 'kraken' } },
+    [docPath('answers')]: { hits: {} },
+  };
+
+  it('shows the podcaster their ticks as they make them', async () => {
+    await render(ctxWith({ ...LOCKED_BINGO, [docPath('resolution')]: { hits: { kraken: true } } },
+      { user: podcaster, ...heardIt }));
+    await act(async () => (host.querySelector('[role="tab"]') as HTMLButtonElement).click());
+    expect(host.querySelectorAll('.bingo__cell--hit')).toHaveLength(1);
+  });
+
+  it('shows a fan no hits until the bingo is resolved', async () => {
+    // The host floors `resolution` to podcasters, so a half-ticked list never reaches this tile.
+    await render(ctxWith(LOCKED_BINGO, { user: fan, ...heardIt }));
+    await act(async () => (host.querySelector('[role="tab"]') as HTMLButtonElement).click());
+    expect(host.querySelectorAll('.bingo__cell--hit')).toHaveLength(0);
   });
 
   it('covers what others predicted for a listener who has not heard the episode, never their own card', async () => {
@@ -412,7 +437,7 @@ describe('<EpisodeBingo>', () => {
       {
         method: 'get',
         path:
-          `data/episode?ids=${EPISODE}&keys=template,phase,control,candidates,resolution,` +
+          `data/episode?ids=${EPISODE}&keys=template,phase,control,candidates,resolution,answers,` +
           'leaderboard,showcased,participants,showcase,grouping,recap',
       },
     ]);
