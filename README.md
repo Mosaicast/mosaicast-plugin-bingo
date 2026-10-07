@@ -314,7 +314,7 @@ $C --name bingo down
 re-copies it and restarts only the app, keeping the database (add `--core origin/master` to move core too). Without it
 (or `--plugins`) no plugin loads and the tile is simply absent.
 
-Requires **core 0.8.1 or newer** (`platformApi` 0.19.0). Core matches that version on `major.minor` exactly,
+Requires **core 0.8.1 or newer** (`platformApi` 0.19.1). Core matches that version on `major.minor` exactly,
 so an older core rejects this build at load and a newer minor rejects it too.
 
 If the tile does not appear, the reason is in the admin log viewer at `/admin/logs` — a rejected manifest
