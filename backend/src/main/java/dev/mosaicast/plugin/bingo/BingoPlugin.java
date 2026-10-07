@@ -648,7 +648,7 @@ public class BingoPlugin implements PluginBackend, UserDataHandler, PageRoutePro
      * {@inheritDoc}
      *
      * <p>The person's own cards, as one {@code mosaicast-bingo/1} file - the format the import script reads -
-     * so what core bundles into a data export (core 0.8.0) is a file they can take elsewhere and bring back.
+     * so what core bundles into a data export (core 0.8.1) is a file they can take elsewhere and bring back.
      * Only their own cards: nobody else's card is personal data of theirs. {@code exportUser} stays at its
      * default; the host asks this first.
      */

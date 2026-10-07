@@ -8,7 +8,7 @@ SPDX-FileCopyrightText: 2026 The Mosaicast Authors
 Bingos played before a site ran Mosaicast come in through `scripts/bingo-import.mjs`. Once imported, they
 are resolved bingos like any played here: scored, ranked, and part of the site page's history and charts.
 The same format is what the plugin hands over for a person's own data export
-(core 0.8.0: `plugins/bingo/bingo.json` in the person's ZIP), so an export can be imported again.
+(core 0.8.1: `plugins/bingo/bingo.json` in the person's ZIP), so an export can be imported again.
 
 ## The file
 

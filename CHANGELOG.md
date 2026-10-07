@@ -10,8 +10,8 @@ in the three files that carry it.
 
 ## [Unreleased]
 
-Built against **`platformApi` 0.19.0**, so it needs **core 0.8.0 or newer**. Core matches that version on
-`major.minor` exactly: core 0.7.x rejects this build at load, and core 0.8.0 rejects the 0.6.x build.
+Built against **`platformApi` 0.19.0**, so it needs **core 0.8.1 or newer**. Core matches that version on
+`major.minor` exactly: core 0.7.x rejects this build at load, and core 0.8.1 rejects the 0.6.x build.
 
 ### Added
 - **The bingo page, `/p/bingo/`**, from a *Bingo* menu entry. It shows the site standings (computed
@@ -51,7 +51,7 @@ Built against **`platformApi` 0.19.0**, so it needs **core 0.8.0 or newer**. Cor
   every card scores exactly as the file marks it. Players get **claim codes** instead of being attached
   to accounts: until claimed they count without a name, and the person enters their code on `/p/bingo/`
   to take the cards over. A code can be revoked and reissued.
-- **The plugin's part of a data export** (core 0.8.0): a person's own cards as one `mosaicast-bingo/1`
+- **The plugin's part of a data export** (core 0.8.1): a person's own cards as one `mosaicast-bingo/1`
   file, `plugins/bingo/bingo.json` in their ZIP, which the import script reads back (`exportFiles`).
 - **An episode going quiet again, or cancelled, leaves the site page at once** (`onEpisodePhaseChanged`),
   instead of on the next tick. A burst of events, like a deleted feed sending one per episode at once,
@@ -88,6 +88,9 @@ Built against **`platformApi` 0.19.0**, so it needs **core 0.8.0 or newer**. Cor
   isolated from every other session's, instead of copying into core's shared `./plugins` and the fixed
   `:8081` default instance — and `restart`, which takes a new build or core and keeps the database (0.7.6).
   README and CLAUDE.md say how.
+- `docs/ARCHITECTURE.md` synced from core `v0.8.1`: key floors and the schema read floor (§7.2),
+  `onEpisodePhaseChanged`, including every episode of a deleted feed (§7.4), quiet plans in `ctx.episodes`
+  for podcasters, `displayMany` splitting, and the GDPR data export (§12.8.1).
 - `docs/ARCHITECTURE.md` synced from core 0.7.7 (`baf12bc`, not tagged yet): planned, quiet and announced
   episodes and the derived release phase (§4.3), `onEpisodeReleased`, `ctx.episode` filled; and from 0.7.6
   a remembered miss lasting 30 s (§7.6), season and feed on the display snapshot, ZIP uploads, private blob
