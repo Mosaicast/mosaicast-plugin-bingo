@@ -94,7 +94,8 @@ it, so the same key stays the same player.
 
 An imported player is **counted, never named**, until someone claims them: they appear in places,
 averages and hit rates, like a player who chose not to be on the leaderboard. To take their cards over,
-the person signs in, opens `/p/bingo/`, and enters their code under *Played before this site existed?*.
+the person signs in, opens `/p/bingo/`, and enters their code under *Played before this site existed?* at
+the foot of the page (one closed line until it is opened).
 On the next update the cards become theirs, and their own leaderboard choice applies to them.
 - A code works once.
 - If the person already played that episode here, their own card stays the record and the imported one

@@ -140,6 +140,36 @@ public final class BingoScore {
         return lines;
     }
 
+    /**
+     * Counts the lines one square short of complete: every row, column and diagonal with exactly one miss.
+     *
+     * @param hits one flag per grid square, in reading order; length must be {@code size * size}
+     * @param size the grid's edge length
+     * @return how many lines lack exactly one square
+     */
+    public static int nearLines(boolean[] hits, int size) {
+        if (size < 1 || hits.length != size * size) {
+            return 0;
+        }
+        int near = 0;
+        for (int i = 0; i < size; i++) {
+            int rowMisses = 0;
+            int colMisses = 0;
+            for (int j = 0; j < size; j++) {
+                rowMisses += hits[i * size + j] ? 0 : 1;
+                colMisses += hits[j * size + i] ? 0 : 1;
+            }
+            near += (rowMisses == 1 ? 1 : 0) + (colMisses == 1 ? 1 : 0);
+        }
+        int downMisses = 0;
+        int upMisses = 0;
+        for (int i = 0; i < size; i++) {
+            downMisses += hits[i * size + i] ? 0 : 1;
+            upMisses += hits[i * size + (size - 1 - i)] ? 0 : 1;
+        }
+        return near + (downMisses == 1 ? 1 : 0) + (upMisses == 1 ? 1 : 0);
+    }
+
     /** How many lines a grid of this size has at all. */
     public static int lineCount(int size) {
         return 2 * size + 2;

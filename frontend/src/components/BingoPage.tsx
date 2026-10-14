@@ -12,7 +12,6 @@ import {
   KEY_PHASE,
   KEY_RECAP,
   KEY_STATS,
-  KEY_SUGGESTIONS,
   KEY_TEMPLATE,
 } from '../keys';
 import {
@@ -26,7 +25,6 @@ import {
   type History,
   type Imports,
   type Stats,
-  type Suggestions,
   type Template,
 } from '../types';
 import { Shell, nameOf } from './common';
@@ -72,17 +70,16 @@ function SiteView({ ctx, i18n }: { ctx: PluginContext; i18n: PluginI18n }) {
     loading: boolean;
     stats: Stats | null;
     history: History | null;
-    suggestions: Suggestions | null;
     imports: Imports | null;
     titles: Record<string, DisplaySnapshot>;
     people: Record<string, UserRef>;
-  }>({ loading: true, stats: null, history: null, suggestions: null, imports: null, titles: {}, people: {} });
+  }>({ loading: true, stats: null, history: null, imports: null, titles: {}, people: {} });
 
   useEffect(() => {
     let live = true;
     (async () => {
       // Every site-wide document the page draws, in one request.
-      const site = await readScope(ctx, { type: 'site', id: 'main' }, [KEY_STATS, KEY_HISTORY, KEY_SUGGESTIONS, KEY_IMPORTS]);
+      const site = await readScope(ctx, { type: 'site', id: 'main' }, [KEY_STATS, KEY_HISTORY, KEY_IMPORTS]);
       const stats = pick<Stats>(site, KEY_STATS);
       const history = pick<History>(site, KEY_HISTORY);
       const slugs = [
@@ -97,7 +94,6 @@ function SiteView({ ctx, i18n }: { ctx: PluginContext; i18n: PluginI18n }) {
           loading: false,
           stats,
           history,
-          suggestions: pick<Suggestions>(site, KEY_SUGGESTIONS),
           imports: pick<Imports>(site, KEY_IMPORTS),
           titles,
           people,
@@ -105,7 +101,7 @@ function SiteView({ ctx, i18n }: { ctx: PluginContext; i18n: PluginI18n }) {
       }
     })().catch(() => {
       if (live) {
-        setState({ loading: false, stats: null, history: null, suggestions: null, imports: null, titles: {}, people: {} });
+        setState({ loading: false, stats: null, history: null, imports: null, titles: {}, people: {} });
       }
     });
     return () => {
@@ -141,13 +137,10 @@ function SiteView({ ctx, i18n }: { ctx: PluginContext; i18n: PluginI18n }) {
         label={i18n.t('stats.title')}
       />
 
-      <ClaimBox ctx={ctx} i18n={i18n} imports={state.imports} />
-
       <HistoryPanel
         ctx={ctx}
         i18n={i18n}
         history={state.history}
-        suggestions={state.suggestions}
         snapshots={state.titles}
         people={state.people}
       />
@@ -180,6 +173,8 @@ function SiteView({ ctx, i18n }: { ctx: PluginContext; i18n: PluginI18n }) {
           ))}
         </ul>
       )}
+
+      <ClaimBox ctx={ctx} i18n={i18n} imports={state.imports} />
     </>
   );
 }
@@ -342,7 +337,9 @@ function namedIn(history: History | null): string[] {
   for (const scope of Object.values(history?.scopes ?? {})) {
     for (const r of [...(scope.byTotal ?? []), ...(scope.byAverage ?? [])].slice(0, 100)) out.add(r.author);
     const rec = scope.records;
-    for (const r of [rec?.bestCard, rec?.mostCards, rec?.longestStreak]) if (r) out.add(r.author);
+    for (const r of [rec?.bestCard, rec?.mostCards, rec?.longestStreak, rec?.loneHits, rec?.nearMisses]) {
+      if (r) out.add(r.author);
+    }
   }
   return [...out];
 }

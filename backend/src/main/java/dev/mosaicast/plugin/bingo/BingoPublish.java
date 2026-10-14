@@ -275,16 +275,12 @@ final class BingoPublish {
      *
      * <p>Run with the site roll-up, so only when something it is computed from changed.
      */
-    void suggestions(Corpus corpus, double threshold) {
+    void suggestions(Corpus corpus) {
         // Whether a prediction came true is only settled once its bingo is resolved; counted earlier, the
         // number would move while a podcaster ticks off and give the progress away.
         Set<String> resolved = corpus.resolved();
-        List<EntryRow> rows = corpus.entries().stream()
-                .filter(EntryRow::ranked)
-                .filter(row -> corpus.isPublic(row.episode()))
-                .toList();
-
-        BingoFuzzy.Grouping grouping = BingoFuzzy.group(rows.stream().map(EntryRow::text).toList(), threshold);
+        List<EntryRow> rows = corpus.shared();
+        BingoFuzzy.Grouping grouping = corpus.grouping();
         Map<String, Set<String>> authors = new LinkedHashMap<>();
         Map<String, Set<String>> episodes = new LinkedHashMap<>();
         Map<String, Set<String>> hitIn = new LinkedHashMap<>();
@@ -339,17 +335,30 @@ final class BingoPublish {
      * @param entries  every {@code entry} row
      * @param visible  each episode in the rows or the bingo list that everyone may see, with its snapshot
      * @param resolved the bingos whose answers are settled
+     * @param grouping the ranked, public entries grouped across every bingo, as one bingo groups its own:
+     *                 the suggestions and the history's prediction lists share it, since grouping is the
+     *                 expensive part of both
      */
     record Corpus(List<CardResultRow> results, List<EntryRow> entries, Map<String, DisplaySnapshot> visible,
-                  Set<String> resolved) {
+                  Set<String> resolved, BingoFuzzy.Grouping grouping) {
 
         boolean isPublic(String slug) {
             return visible.containsKey(slug);
         }
+
+        /** The ranked entries on episodes everyone may see: what {@link #grouping} was built from. */
+        List<EntryRow> shared() {
+            return entries.stream().filter(EntryRow::ranked).filter(row -> isPublic(row.episode())).toList();
+        }
     }
 
-    /** Reads the rows and checks each episode against the feed once. {@code null} without a schema. */
-    Corpus corpus(List<BingoSummary> bingos) {
+    /**
+     * Reads the rows, checks each episode against the feed once and groups the shared entries.
+     *
+     * @param threshold the site's grouping threshold
+     * @return the corpus, or {@code null} without a schema
+     */
+    Corpus corpus(List<BingoSummary> bingos, double threshold) {
         SchemaStore schema = ctx.schema();
         if (schema == null) {
             return null;
@@ -366,7 +375,12 @@ final class BingoPublish {
                 visible.put(slug, snapshot);
             }
         }
-        return new Corpus(results, entries, visible, resolvedOf(bingos));
+        List<String> shared = entries.stream()
+                .filter(EntryRow::ranked)
+                .filter(row -> visible.containsKey(row.episode()))
+                .map(EntryRow::text)
+                .toList();
+        return new Corpus(results, entries, visible, resolvedOf(bingos), BingoFuzzy.group(shared, threshold));
     }
 
     // ---------------------------------------------------------------- history
@@ -376,7 +390,7 @@ final class BingoPublish {
      * Resolved bingos on episodes everyone may see; series only for players who allow being listed.
      */
     void history(Corpus corpus, Map<String, Prefs> prefs, BingoScore.RankBy rankBy, int minCards,
-                 List<BingoSummary> bingos) {
+                 int minPredictionBingos, List<BingoSummary> bingos) {
         List<BingoHistory.Input> episodes = new ArrayList<>();
         for (BingoSummary b : bingos) {
             DisplaySnapshot snapshot = corpus.visible().get(b.slug());
@@ -384,10 +398,12 @@ final class BingoPublish {
                 continue;
             }
             episodes.add(new BingoHistory.Input(b.slug(), b.title(), snapshot.feed(), snapshot.season(),
-                    snapshot.episodeNo(), snapshot.publishedAt()));
+                    snapshot.episodeNo(), snapshot.publishedAt(), b.size(), b.freeCentre()));
         }
+        BingoInsights.Sites sites = BingoInsights.Sites.of(corpus.grouping(), corpus.shared(), MIN_AUTHORS);
         History history = BingoHistory.compute(episodes, corpus.results(), corpus.entries(),
-                author -> prefsFor(prefs, author).listedOrDefault(), rankBy, MAX_PUBLISHED_ROWS, minCards, now());
+                author -> prefsFor(prefs, author).listedOrDefault(), rankBy, MAX_PUBLISHED_ROWS, minCards,
+                sites, minPredictionBingos, now());
         ctx.store().put(Scope.site(), KEY_HISTORY, history);
     }
 }

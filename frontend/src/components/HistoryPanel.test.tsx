@@ -35,13 +35,33 @@ const HISTORY: History = {
         longestStreak: { author: 'u1', count: 4 },
         mostPredictable: { slug: 'e2', hitRate: 0.8 },
         leastPredictable: { slug: 'e1', hitRate: 0.4 },
+        loneHits: { author: 'u2', count: 3 },
+        nearMisses: { author: 'u1', count: 2 },
       },
+      predictions: {
+        floor: 3,
+        best: [{ label: 'Kraken', bingos: 4, hits: 3, people: 3, cards: 9 }],
+        worst: [{ label: 'Merch plug', bingos: 3, hits: 0, people: 2, cards: 4 }],
+        popular: [
+          { label: 'Kraken', bingos: 4, hits: 3, people: 3, cards: 9 },
+          { label: 'Merch plug', bingos: 3, hits: 0, people: 2, cards: 4 },
+        ],
+      },
+      squares: [{
+        size: 3,
+        cells: [
+          { predicted: 10, hits: 5 }, { predicted: 10, hits: 2 }, { predicted: 10, hits: 1 },
+          { predicted: 10, hits: 1 }, { predicted: 0, hits: 0 }, { predicted: 10, hits: 1 },
+          { predicted: 10, hits: 1 }, { predicted: 10, hits: 1 }, { predicted: 10, hits: 9 },
+        ],
+      }],
     },
     'cast:2': {
       bar: 2, belowBar: 0, bingos: 2,
       byTotal: [{ author: 'u3', fields: 2, lines: 0, cards: 1, cells: 9 }],
       byAverage: [],
       records: { bestCard: { author: 'u3', slug: 'e3', fields: 2, lines: 0, cells: 9 } },
+      predictions: { floor: 3, best: [], worst: [], popular: [{ label: 'Storm', bingos: 2, hits: 1, people: 2, cards: 2 }] },
     },
   },
 };
@@ -70,9 +90,7 @@ describe('<HistoryPanel>', () => {
     const ctx = makeMockCtx(user ? { user: { ...people.u2, ...user, role: 'fan' } } : {});
     await act(async () => {
       root.render(
-        <HistoryPanel ctx={ctx} i18n={makeI18n(ctx.locale)} history={history} suggestions={{
-          items: [{ label: 'Kraken', people: 4, episodes: 3, hits: 2 }],
-        }} snapshots={{ e1: { title: 'The Pilot', description: '' } as never }} people={people} />,
+        <HistoryPanel ctx={ctx} i18n={makeI18n(ctx.locale)} history={history} snapshots={{ e1: { title: 'The Pilot', description: '' } as never }} people={people} />,
       );
     });
     return ctx;
@@ -94,7 +112,6 @@ describe('<HistoryPanel>', () => {
     expect(host.textContent).toContain('Best single card');
     expect(host.textContent).toContain('2 line(s), 5 square(s) · Ned');
     expect(host.textContent).toContain('The Pilot');
-    expect(host.textContent).toContain('“Kraken”');
   });
 
   it('filters every part to a season, without repainting anyone', async () => {
@@ -142,7 +159,7 @@ describe('<HistoryPanel>', () => {
   it('makes the ranking and the records follow the season pill', async () => {
     await render();
     expect(host.textContent).toContain('Ranking · all seasons');
-    expect(host.textContent).toContain('Safest prediction');
+    expect(host.textContent).toContain('Lone hits');
 
     await act(async () => button('Season 2').click());
 
@@ -151,7 +168,51 @@ describe('<HistoryPanel>', () => {
     expect(ranking).toContain('Bob');
     expect(ranking).not.toContain('Ned');
     expect(host.querySelector('.bingo__records')!.textContent).toContain('· Bob');
-    expect(host.textContent).not.toContain('Safest prediction');
+    expect(host.textContent).not.toContain('Lone hits');
+  });
+
+  it('lists the most and least reliable predictions and what people predict most', async () => {
+    await render();
+    const list = () => [...host.querySelectorAll('.bingo__prediction')].map((li) => li.textContent);
+    expect(list()).toEqual([expect.stringContaining('“Kraken”75%came true in 3 of 4 bingo(s)')]);
+    expect(host.querySelector('[role="meter"]')?.getAttribute('aria-valuenow')).toBe('75');
+    expect(host.textContent).toContain('on 3 bingos and at least two people wrote it');
+
+    await act(async () => button('Least reliable').click());
+    expect(list()).toEqual([expect.stringContaining('“Merch plug”0%')]);
+
+    await act(async () => button('Most predicted').click());
+    expect(list()).toHaveLength(2);
+    expect(list()[0]).toContain('on 9 cards by 3 people');
+  });
+
+  it('keeps the chosen list across seasons and says why a short season rates nothing', async () => {
+    await render();
+    await act(async () => button('Most predicted').click());
+    await act(async () => button('Season 2').click());
+    expect(host.querySelector('.bingo__prediction')?.textContent).toContain('“Storm”');
+
+    await act(async () => button('Most reliable').click());
+    expect(host.textContent).toContain('No prediction has been on 3 bingos yet.');
+  });
+
+  it('draws which squares come true, in words as well as in colour', async () => {
+    await render();
+    const cells = [...host.querySelectorAll('.bingo__heat')];
+    expect(cells).toHaveLength(9);
+    expect(cells[0].getAttribute('aria-label')).toBe('Row 1, column 1: 50%, 5 of 10 came true');
+    expect(cells[4].getAttribute('aria-label')).toBe('Row 2, column 2: nothing predicted here');
+    expect(host.querySelector('.bingo__heat--top')?.textContent).toContain('90%');
+
+    await act(async () => button('Season 2').click());
+    expect(host.querySelector('.bingo__heatmap')).toBeNull();
+  });
+
+  it('names who saw the most coming alone and who came closest without a line', async () => {
+    await render();
+    const records = host.querySelector('.bingo__records')!.textContent!;
+    expect(records).toContain('Lone hits3 nobody else saw coming · Alice');
+    expect(records).toContain('Near misses2 card(s) one square short of a line · Ned');
   });
 
   it('labels an episode 0 as such, not as unnumbered', async () => {

@@ -16,8 +16,8 @@ Java 21 (Gradle, PF4J extension) · React 18 + Vite (Web Component) · **platfor
 ## Commands
 ```
 ./build.sh                                    # -> dist/{plugin.json,bingo.jar,assets/bingo.es.js}
-cd backend  && ./gradlew test                 # 145 tests
-cd frontend && npm test && npm run typecheck  # 159 tests
+cd backend  && ./gradlew test                 # 160 tests
+cd frontend && npm test && npm run typecheck  # 168 tests
 node --test scripts/*.test.mjs                # import script (also in CI)
 scripts/set-version.sh <x.y.z>                # bumps the plugin version in all three files
 ```
@@ -30,7 +30,7 @@ backend/src/main/java/dev/mosaicast/plugin/bingo/
   BingoDocs / BingoLifecycle / BingoRecord   keys+records / phase derivation / rows (the freeze) + scoring
   BingoPublish / BingoPages / BingoImport    showcase, notify, stats, suggestions, history / /p/bingo routes+OG /
                                              import:* docs → resolved bingos, claims (BingoExport: own cards)
-  BingoFuzzy / BingoScore / BingoHistory     pure (no ctx, clock, I/O): grouping, scoring, the history doc
+  BingoFuzzy / BingoScore / BingoHistory / BingoInsights   pure (no ctx, clock, I/O): grouping … predictions
 backend/src/test/.../BingoSchemaFixture + BingoTestSupport   schema FROM plugin.json; shared fixtures
 shared/fuzzy-vectors.json · scripts/bingo-import.mjs (no deps; docs/import-format.md) · docs/ROADMAP.md (keep current)
 frontend/src/{keys,types}.ts            doc keys and shapes — mirror BingoDocs' records
@@ -137,6 +137,8 @@ frontend/locales/{en,de}.json           UI strings
   never recomputed from `history.players` (capped, would miss late joiners). Per card needs `minCardsPerCard`.
 - **Charts colour by player, never by rank in the current view**: slot = place in `history.players`. A
   named series exists only for listed players; place/aggregates count everyone.
+- **Prediction lists use one site-wide grouping** (`Corpus.grouping`, shared with suggestions), publish only
+  text 2+ people wrote (`MIN_AUTHORS`), skip late cards, and never lower `minPredictionBingos` per scope.
 - **The site roll-up (stats + suggestions + history) is dirty-gated** in `BingoPlugin.rollUp`: add any new input to
   its fingerprint, or the document silently goes stale for up to `ROLL_UP_REFRESH`.
 

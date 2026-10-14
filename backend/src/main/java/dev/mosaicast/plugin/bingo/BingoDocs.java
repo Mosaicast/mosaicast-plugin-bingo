@@ -358,9 +358,18 @@ final class BingoDocs {
      * One bingo, as the site page lists it. Only episodes everyone may know about.
      *
      * @param title   the bingo's own name, if the podcaster gave one; the episode's title is read live
-     * @param players everyone who played, or {@code null} for an archived bingo, which is never read again
+     * @param players    everyone who played, or {@code null} for an archived bingo, which is never read again
+     * @param size       the grid's edge, as the template states it
+     * @param freeCentre whether the middle square is a gift; the history needs both to find a card's lines
      */
-    record BingoSummary(String slug, String title, String phase, Integer players) {}
+    record BingoSummary(String slug, String title, String phase, Integer players, Integer size,
+                        Boolean freeCentre) {
+
+        static BingoSummary of(String slug, Template template, String phase, Integer players) {
+            return new BingoSummary(slug, template.title(), phase, players, template.gridSize(),
+                    template.hasFreeCentre());
+        }
+    }
 
     /**
      * One prediction people keep making.
@@ -410,10 +419,48 @@ final class BingoDocs {
      * @param byAverage the best listed players by score per card, among those with at least {@code bar} cards
      * @param bar       how many cards the per-card ranking asks for here
      * @param belowBar  how many listed players have fewer; counted, never named
-     * @param bingos    how many bingos the scope holds
+     * @param bingos      how many bingos the scope holds
+     * @param predictions which predictions came true most and least often, and which were made most
+     * @param squares     how often each square of the grid came true, one entry per grid size
      */
     record ScopeStats(List<StandingRow> byTotal, List<AverageRow> byAverage, int bar, int belowBar,
-                      HistoryRecords records, int bingos) {}
+                      HistoryRecords records, int bingos, PredictionStats predictions,
+                      List<SquareStats> squares) {}
+
+    /**
+     * Predictions across bingos, within one scope. Text is published only where at least
+     * {@code BingoPublish.MIN_AUTHORS} different people wrote it, the rule suggestions follow.
+     *
+     * @param floor   how many bingos a prediction needs before {@code best} or {@code worst} rate it; never
+     *                lowered for a short season, or one lucky hit would top the list again
+     * @param best    true in more than half its bingos, most reliable first by the lower Wilson bound
+     * @param worst   true in fewer than half, least reliable first by the upper Wilson bound
+     * @param popular on the most cards first
+     */
+    record PredictionStats(int floor, List<PredictionRow> best, List<PredictionRow> worst,
+                           List<PredictionRow> popular) {}
+
+    /**
+     * One prediction across the bingos of a scope.
+     *
+     * @param label  the first spelling of it anyone used
+     * @param bingos on how many bingos' ranked cards it appeared
+     * @param hits   on how many of those it came true
+     * @param people how many different people wrote it here
+     * @param cards  how many ranked cards carried it
+     */
+    record PredictionRow(String label, int bingos, int hits, int people, int cards) {}
+
+    /**
+     * How often each square of one grid size came true.
+     *
+     * @param size  the grid's edge
+     * @param cells one per square in reading order; a free centre has nothing predicted
+     */
+    record SquareStats(int size, List<SquareRate> cells) {}
+
+    /** One square: how many ranked predictions sat there, and how many of them came true. */
+    record SquareRate(int predicted, int hits) {}
 
     /** One player's score per card within a scope. */
     record AverageRow(String author, int cards, double fields, double lines) {}
@@ -449,9 +496,15 @@ final class BingoDocs {
     /** How many ranked cards ended with this many lines. */
     record LineCount(int lines, int cards) {}
 
-    /** The history's records. Each names a listed player or an episode, or is {@code null}. */
+    /**
+     * The history's records. Each names a listed player or an episode, or is {@code null}.
+     *
+     * @param loneHits   most predictions that came true and that no other card of that bingo had
+     * @param nearMisses most cards without a line that were one square short of one
+     */
     record HistoryRecords(CardRecord bestCard, PlayerCount mostCards, PlayerCount longestStreak,
-                          EpisodeRate mostPredictable, EpisodeRate leastPredictable) {}
+                          EpisodeRate mostPredictable, EpisodeRate leastPredictable, PlayerCount loneHits,
+                          PlayerCount nearMisses) {}
 
     /** One player's single best card. */
     record CardRecord(String author, String slug, int fields, int lines, int cells) {}

@@ -20,16 +20,19 @@ import {
 } from '../history';
 import { Icon } from '../icons';
 import { isDark, seriesColor } from '../palette';
-import type { History, HistoryEpisode, Leaderboard, RankBy, Suggestions } from '../types';
+import type { History, HistoryEpisode, Leaderboard, RankBy } from '../types';
 import { BarChart } from './charts/BarChart';
 import { Legend } from './charts/kit';
 import { LineChart, type LineSeries } from './charts/LineChart';
+import { SquareHeatmap } from './charts/SquareHeatmap';
 import { nameOf } from './common';
+import { PredictionsPanel } from './PredictionsPanel';
 import { RankingPanel } from './RankingPanel';
 
 /**
  * The site page's history: tiles, form over the season, cards per bingo, how predictable each episode was,
- * how cards score, and records — in the visual language of `mosaicast-plugin-stats`.
+ * how cards score, which predictions come true, which squares do, and records — in the visual language of
+ * `mosaicast-plugin-stats`.
  *
  * Everything comes from the backend's `history` document: resolved bingos on public episodes only, a named
  * series only for players who allow being listed. A season pill filters every part at once; a player keeps
@@ -39,14 +42,12 @@ export function HistoryPanel({
   ctx,
   i18n,
   history,
-  suggestions,
   snapshots,
   people,
 }: {
   ctx: PluginContext;
   i18n: PluginI18n;
   history: History | null;
-  suggestions: Suggestions | null;
   /** Live episode snapshots, for titles; an episode the visitor may not see has none. */
   snapshots: Record<string, DisplaySnapshot>;
   people: Record<string, UserRef>;
@@ -116,9 +117,6 @@ export function HistoryPanel({
   const records = scope?.records;
   const seasonLabel = seasons.find((x) => x.key === season);
   const bySlug = (slug: string) => episodes.find((e) => e.slug === slug);
-  const reliable = [...(suggestions?.items ?? [])]
-    .filter((x) => x.hits > 0)
-    .sort((a, b) => b.hits - a.hits || b.hits / b.episodes - a.hits / a.episodes)[0];
 
   return (
     <section className="bingo__history" aria-label={i18n.t('history.title')}>
@@ -260,6 +258,9 @@ export function HistoryPanel({
         </>
       )}
 
+      <PredictionsPanel i18n={i18n} stats={scope?.predictions} />
+      <SquareHeatmap i18n={i18n} squares={scope?.squares} />
+
       <h3 className="bingo__chart-title">{i18n.t('history.records')}</h3>
       <div className="bingo__records">
         {records?.bestCard && (
@@ -287,10 +288,15 @@ export function HistoryPanel({
           <Record label={i18n.t('history.leastPredictable')} value={pct(records.leastPredictable.hitRate)}
             where={titleIfKnown(bySlug(records.leastPredictable.slug), titleOf)} />
         )}
-        {/* Suggestions carry no season, so this one is all-time and shown only there. */}
-        {reliable && season === null && (
-          <Record label={i18n.t('history.reliable')} value={`“${reliable.label}”`}
-            where={i18n.t('history.reliableValue', { hits: String(reliable.hits), episodes: String(reliable.episodes) })} />
+        {records?.loneHits && (
+          <Record label={i18n.t('history.loneHits')}
+            value={i18n.t('history.loneHitsValue', { count: String(records.loneHits.count) })}
+            who={name(records.loneHits.author)} />
+        )}
+        {records?.nearMisses && (
+          <Record label={i18n.t('history.nearMisses')}
+            value={i18n.t('history.nearMissesValue', { count: String(records.nearMisses.count) })}
+            who={name(records.nearMisses.author)} />
         )}
       </div>
     </section>
