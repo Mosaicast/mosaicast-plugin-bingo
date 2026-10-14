@@ -65,6 +65,17 @@ describe('<ClaimBox>', () => {
     expect(host.textContent).toContain('linked on the next update');
   });
 
+  it('stays one closed line for most people', async () => {
+    await render({ claims: { [HASH]: 'import:x' } });
+    expect(host.querySelector('details')!.open).toBe(false);
+    expect(host.querySelector('summary')?.textContent).toBe('Played before this site existed?');
+  });
+
+  it('opens by itself for someone who saved a code, whose status is why they came back', async () => {
+    await render({ claims: { [HASH]: 'import:x' } }, { 'data/user/me/claim': { codes: [CODE] } });
+    expect(host.querySelector('details')!.open).toBe(true);
+  });
+
   it('reads its own result back by hash', async () => {
     await render(
       { claimed: { [HASH]: { linked: 12, skipped: 1 } } },

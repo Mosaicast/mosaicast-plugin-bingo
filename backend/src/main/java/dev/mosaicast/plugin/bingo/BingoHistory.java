@@ -13,6 +13,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.Set;
 import java.util.TreeMap;
+import java.util.function.Function;
 import java.util.function.Predicate;
 
 import static dev.mosaicast.plugin.bingo.BingoDocs.*;
@@ -33,8 +34,23 @@ final class BingoHistory {
 
     private BingoHistory() {}
 
-    /** One episode's bingo as the history knows it, before ordering. */
-    record Input(String slug, String title, String feed, Integer season, Integer episodeNo, Instant publishedAt) {}
+    /**
+     * One episode's bingo as the history knows it, before ordering.
+     *
+     * @param size       the grid's edge; {@code null} reads as the default size
+     * @param freeCentre whether the middle square is a gift; {@code null} reads as no
+     */
+    record Input(String slug, String title, String feed, Integer season, Integer episodeNo, Instant publishedAt,
+                 Integer size, Boolean freeCentre) {
+
+        int gridSize() {
+            return size == null || size < 2 ? BingoPlugin.DEFAULT_GRID_SIZE : size;
+        }
+
+        boolean hasFreeCentre() {
+            return Boolean.TRUE.equals(freeCentre) && gridSize() % 2 == 1;
+        }
+    }
 
     /**
      * Builds the history.
@@ -46,10 +62,13 @@ final class BingoHistory {
      * @param rankBy   how the site ranks
      * @param cap      how many rows a ranking publishes at most, and how many series beyond those it names
      * @param minCards how many cards a player needs before the per-card ranking places them
+     * @param sites    the site-wide grouping of predictions, and which of them may be shown
+     * @param floor    how many bingos a prediction needs before the prediction lists rate it
      * @param now      when this is computed
      */
     static History compute(List<Input> episodes, List<CardResultRow> results, List<EntryRow> entries,
-                           Predicate<String> listed, BingoScore.RankBy rankBy, int cap, int minCards, Instant now) {
+                           Predicate<String> listed, BingoScore.RankBy rankBy, int cap, int minCards,
+                           BingoInsights.Sites sites, int floor, Instant now) {
         // Oldest first: the order a season was played in. An episode with no date yet sorts last.
         List<Input> ordered = episodes.stream()
                 .sorted(Comparator.comparing(Input::publishedAt, Comparator.nullsLast(Comparator.naturalOrder()))
@@ -127,10 +146,11 @@ final class BingoHistory {
                 scopes.computeIfAbsent(seasonKey(episode), k -> new ArrayList<>()).add(i);
             }
         }
+        Insights insights = new Insights(ordered, entries, listed, sites, floor);
         Map<String, ScopeStats> stats = new LinkedHashMap<>();
         Set<String> named = new HashSet<>();
         for (Map.Entry<String, List<Integer>> scope : scopes.entrySet()) {
-            ScopeStats s = scope(scope.getValue(), pointsBy, out, cells, rankBy, minCards, cap);
+            ScopeStats s = scope(scope.getValue(), pointsBy, out, cells, rankBy, minCards, cap, insights);
             s.byTotal().forEach(r -> named.add(r.author()));
             s.byAverage().forEach(r -> named.add(r.author()));
             stats.put(scope.getKey(), s);
@@ -160,6 +180,24 @@ final class BingoHistory {
                 rankBy.name().toLowerCase(java.util.Locale.ROOT), now.toString());
     }
 
+    /** What {@link BingoInsights} needs for any scope, gathered once for all of them. */
+    private record Insights(List<Input> ordered, List<EntryRow> entries, Predicate<String> listed,
+                            BingoInsights.Sites sites, int floor) {
+
+        Insights {
+            Set<String> slugs = new HashSet<>();
+            ordered.forEach(i -> slugs.add(i.slug()));
+            entries = BingoInsights.rankedIn(slugs, entries);
+        }
+
+        /** The scope's ranked entries. */
+        List<EntryRow> in(List<Integer> indices) {
+            Set<String> slugs = new HashSet<>();
+            indices.forEach(i -> slugs.add(ordered.get(i).slug()));
+            return entries.stream().filter(r -> slugs.contains(r.episode())).toList();
+        }
+    }
+
     /** The key of "all bingos" among the scopes. */
     static final String ALL = "all";
 
@@ -177,7 +215,7 @@ final class BingoHistory {
      */
     private static ScopeStats scope(List<Integer> indices, Map<String, List<Point>> pointsBy,
                                     List<HistoryEpisode> episodes, int[] cells, BingoScore.RankBy rankBy,
-                                    int minCards, int cap) {
+                                    int minCards, int cap, Insights insights) {
         Map<Integer, Integer> position = new HashMap<>();
         for (int k = 0; k < indices.size(); k++) {
             position.put(indices.get(k), k);
@@ -230,12 +268,37 @@ final class BingoHistory {
         int belowBar = (int) totals.stream().filter(r -> r.cards() < bar).count();
 
         List<HistoryEpisode> scoped = indices.stream().map(episodes::get).toList();
-        return new ScopeStats(byTotal, byAverage, bar, belowBar,
-                records(scoped, inScope, position, best), indices.size());
+        List<EntryRow> ranked = insights.in(indices);
+        Map<String, Input> inputs = new HashMap<>();
+        indices.forEach(i -> inputs.put(insights.ordered().get(i).slug(), insights.ordered().get(i)));
+        Function<String, Integer> sizeOf = slug -> inputs.get(slug).gridSize();
+        HistoryRecords records = records(scoped, inScope, position, best,
+                mostOf(BingoInsights.loneHits(ranked), insights.listed()),
+                mostOf(BingoInsights.nearMisses(ranked, sizeOf, slug -> inputs.get(slug).hasFreeCentre()),
+                        insights.listed()));
+        return new ScopeStats(byTotal, byAverage, bar, belowBar, records, indices.size(),
+                BingoInsights.predictions(ranked, insights.sites(), insights.floor()),
+                BingoInsights.squares(ranked, sizeOf));
+    }
+
+    /** The listed player with the highest count, ties to the first author; {@code null} if nobody has one. */
+    private static PlayerCount mostOf(Map<String, Integer> counts, Predicate<String> listed) {
+        PlayerCount most = null;
+        for (Map.Entry<String, Integer> e : counts.entrySet()) {
+            if (!listed.test(e.getKey()) || e.getValue() <= 0) {
+                continue;
+            }
+            if (most == null || e.getValue() > most.count()
+                    || (e.getValue() == most.count() && e.getKey().compareTo(most.author()) < 0)) {
+                most = new PlayerCount(e.getKey(), e.getValue());
+            }
+        }
+        return most;
     }
 
     private static HistoryRecords records(List<HistoryEpisode> episodes, Map<String, List<Point>> pointsBy,
-                                          Map<Integer, Integer> position, CardRecord best) {
+                                          Map<Integer, Integer> position, CardRecord best, PlayerCount loneHits,
+                                          PlayerCount nearMisses) {
         PlayerCount mostCards = null;
         PlayerCount longestStreak = null;
         for (Map.Entry<String, List<Point>> e : pointsBy.entrySet()) {
@@ -263,7 +326,7 @@ final class BingoHistory {
                 least = new EpisodeRate(ep.slug(), ep.hitRate());
             }
         }
-        return new HistoryRecords(best, mostCards, longestStreak, most, least);
+        return new HistoryRecords(best, mostCards, longestStreak, most, least, loneHits, nearMisses);
     }
 
     /**

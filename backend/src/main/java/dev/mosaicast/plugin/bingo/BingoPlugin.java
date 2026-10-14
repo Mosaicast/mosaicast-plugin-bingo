@@ -89,6 +89,8 @@ public class BingoPlugin implements PluginBackend, UserDataHandler, PageRoutePro
     static final int DEFAULT_ARCHIVE_AFTER_DAYS = 30;
     /** How many cards the per-card ranking asks for by default; `minCardsPerCard` in the settings. */
     static final int DEFAULT_MIN_CARDS = 3;
+    /** How many bingos a prediction needs before it is rated; `minPredictionBingos` in the settings. */
+    static final int DEFAULT_MIN_PREDICTION_BINGOS = 3;
     /** How stale the site roll-up may get while none of its inputs visibly moved. */
     static final Duration ROLL_UP_REFRESH = Duration.ofHours(1);
 
@@ -315,6 +317,7 @@ public class BingoPlugin implements PluginBackend, UserDataHandler, PageRoutePro
                 .toList();
         String fingerprint = String.join("|", pass.settings().rankBy().name(),
                 Double.toString(pass.settings().threshold()), Integer.toString(pass.settings().minCards()),
+                Integer.toString(pass.settings().minPredictionBingos()),
                 String.join(",", unlisted),
                 Integer.toHexString(slugs.hashCode()), String.join(",", new TreeSet<>(pass.quiet())),
                 Integer.toHexString(pass.bingos().hashCode()), Integer.toHexString(pass.numbers().hashCode()));
@@ -323,12 +326,12 @@ public class BingoPlugin implements PluginBackend, UserDataHandler, PageRoutePro
         if (!rowsChanged && !stale && fingerprint.equals(lastRollUpInputs)) {
             return;
         }
-        BingoPublish.Corpus corpus = publish.corpus(pass.bingos());
+        BingoPublish.Corpus corpus = publish.corpus(pass.bingos(), pass.settings().threshold());
         if (corpus != null) {
             publish.stats(corpus, pass.prefs(), pass.settings().rankBy(), pass.bingos());
-            publish.suggestions(corpus, pass.settings().threshold());
+            publish.suggestions(corpus);
             publish.history(corpus, pass.prefs(), pass.settings().rankBy(), pass.settings().minCards(),
-                    pass.bingos());
+                    pass.settings().minPredictionBingos(), pass.bingos());
         }
         lastRollUpInputs = fingerprint;
         lastRollUp = now;
@@ -342,11 +345,12 @@ public class BingoPlugin implements PluginBackend, UserDataHandler, PageRoutePro
                 intConfig("archiveAfterDays", DEFAULT_ARCHIVE_AFTER_DAYS),
                 intConfig("defaultGridSize", DEFAULT_GRID_SIZE),
                 BingoScore.RankBy.of(ctx.config().get("rankBy", String.class, "lines")),
-                intConfig("minCardsPerCard", DEFAULT_MIN_CARDS));
+                intConfig("minCardsPerCard", DEFAULT_MIN_CARDS),
+                intConfig("minPredictionBingos", DEFAULT_MIN_PREDICTION_BINGOS));
     }
 
     private record Settings(double threshold, boolean allowLate, int archiveAfterDays, int defaultGridSize,
-                            BingoScore.RankBy rankBy, int minCards) {}
+                            BingoScore.RankBy rankBy, int minCards, int minPredictionBingos) {}
 
     private void tickEpisode(String slug, Pass pass) {
         Settings settings = pass.settings();
@@ -369,7 +373,7 @@ public class BingoPlugin implements PluginBackend, UserDataHandler, PageRoutePro
         if (previous != null && Phase.ARCHIVED.name().equals(previous.phase())) {
             // Terminal: this episode has left the working set for good. It is still a bingo that happened,
             // so it stays on the site page's list - with no headcount, which would cost a read per episode.
-            pass.bingos().add(new BingoSummary(slug, template.get().title(), Phase.ARCHIVED.name(), null));
+            pass.bingos().add(BingoSummary.of(slug, template.get(), Phase.ARCHIVED.name(), null));
             if (!firstPassDone) {
                 publishAnswers(scope, ctx.store().get(scope, KEY_RESOLUTION, Resolution.class).orElse(null),
                         Phase.ARCHIVED);
@@ -466,7 +470,7 @@ public class BingoPlugin implements PluginBackend, UserDataHandler, PageRoutePro
 
         if (phase == Phase.ARCHIVED) {
             // Newly archived this tick: the documents above are its final state, and nothing is ingested.
-            pass.bingos().add(new BingoSummary(slug, template.get().title(), Phase.ARCHIVED.name(), null));
+            pass.bingos().add(BingoSummary.of(slug, template.get(), Phase.ARCHIVED.name(), null));
             return;
         }
 
@@ -480,7 +484,7 @@ public class BingoPlugin implements PluginBackend, UserDataHandler, PageRoutePro
         ctx.store().put(scope, KEY_LEADERBOARD, scored.board());
         ctx.store().put(scope, KEY_RECAP, record.recap(scored, items, cardCounts, resolution, phase));
         if (release != EpisodePhase.PLANNED) {
-            pass.bingos().add(new BingoSummary(slug, template.get().title(), phase.name(), scored.players()));
+            pass.bingos().add(BingoSummary.of(slug, template.get(), phase.name(), scored.players()));
         }
 
         publish.showcase(slug, cards, prefs);

@@ -388,6 +388,9 @@ export interface BingoSummary {
   phase: Phase;
   /** Everyone who played; absent for an archived bingo, which the backend never reads again. */
   players?: number | null;
+  /** The grid's edge, as the template states it. */
+  size?: number | null;
+  freeCentre?: boolean | null;
 }
 
 /** Backend-owned, site scope: cumulative standings and the list of bingos, for the plugin's page. */
@@ -444,6 +447,40 @@ export interface HistoryRecords {
   longestStreak?: { author: string; count: number } | null;
   mostPredictable?: { slug: string; hitRate: number } | null;
   leastPredictable?: { slug: string; hitRate: number } | null;
+  /** Most predictions that came true and that no other card of that bingo had. */
+  loneHits?: { author: string; count: number } | null;
+  /** Most cards without a line that were one square short of one. */
+  nearMisses?: { author: string; count: number } | null;
+}
+
+/** One prediction across the bingos of a scope. Only text at least two people wrote is ever published. */
+export interface PredictionRow {
+  /** The first spelling of it anyone used. */
+  label: string;
+  /** On how many bingos' ranked cards it appeared. */
+  bingos: number;
+  /** On how many of those it came true. */
+  hits: number;
+  people: number;
+  cards: number;
+}
+
+/** Which predictions came true most and least often, and which were made most, within one scope. */
+export interface PredictionStats {
+  /** How many bingos a prediction needs before `best` or `worst` rate it. */
+  floor: number;
+  /** True in more than half its bingos; most reliable first, so a long record beats a lucky streak (Wilson). */
+  best?: PredictionRow[];
+  /** True in fewer than half; least reliable first. */
+  worst?: PredictionRow[];
+  /** On the most cards first. */
+  popular?: PredictionRow[];
+}
+
+/** How often each square of one grid size came true; `cells` in reading order, a free centre with nothing predicted. */
+export interface SquareStats {
+  size: number;
+  cells: { predicted: number; hits: number }[];
 }
 
 /** One player's score per card within a scope. */
@@ -463,6 +500,9 @@ export interface ScopeStats {
   belowBar: number;
   records?: HistoryRecords;
   bingos: number;
+  predictions?: PredictionStats | null;
+  /** One entry per grid size, smallest first. */
+  squares?: SquareStats[];
 }
 
 /** Backend-owned, site scope: how past bingos went, for the site page's charts. Resolved, public bingos only. */

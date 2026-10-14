@@ -186,6 +186,19 @@
         "de": "Wie viele Karten jemand braucht, bevor die Wertung pro Karte ihn platziert, damit nicht eine einzige Glückskarte dauerhaft führt. Eine Staffel mit weniger Bingos verlangt alle."
       }
     },
+    "minPredictionBingos": {
+      "type": "number",
+      "default": 3,
+      "editableBy": "podcaster",
+      "min": 2,
+      "max": 100,
+      "step": 1,
+      "label": { "en": "Bingos before a prediction is rated", "de": "Bingos, bevor eine Vorhersage bewertet wird" },
+      "description": {
+        "en": "How many bingos a prediction must appear on before the site page lists it as reliable or unreliable, so one lucky hit cannot top the list. It must also have been written by at least two people.",
+        "de": "Auf wie vielen Bingos eine Vorhersage stehen muss, bevor die Seite sie als zuverlässig oder unzuverlässig führt, damit ein einzelner Glückstreffer nicht die Liste anführt. Außerdem müssen sie mindestens zwei Personen geschrieben haben."
+      }
+    },
     "rankBy": {
       "type": "string",
       "default": "lines",

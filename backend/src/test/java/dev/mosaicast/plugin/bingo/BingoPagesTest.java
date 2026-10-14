@@ -106,7 +106,7 @@ class BingoPagesTest extends BingoTestSupport {
     void theStatsDocumentListsPublicBingosAndLeavesQuietOnesOut() {
         resolved(published(true));
         var stats = lastCtx.store().get(Scope.site(), BingoDocs.KEY_STATS, BingoDocs.Stats.class).orElseThrow();
-        assertEquals(List.of(new BingoDocs.BingoSummary(EPISODE, "Bingo", "RESOLVED", 2)), stats.bingos());
+        assertEquals(List.of(new BingoDocs.BingoSummary(EPISODE, "Bingo", "RESOLVED", 2, 3, false)), stats.bingos());
 
         resolved(snapshot(EpisodePhase.PLANNED));
         stats = lastCtx.store().get(Scope.site(), BingoDocs.KEY_STATS, BingoDocs.Stats.class).orElseThrow();

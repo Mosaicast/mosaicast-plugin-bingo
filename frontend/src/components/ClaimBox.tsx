@@ -29,6 +29,9 @@ export async function hashCode(code: string): Promise<string> {
  * The code goes into the player's own partition and the backend applies it on its next pass, so the box
  * reads the result back rather than assuming it: the public `imports` report holds code hashes only, and
  * hashing the code here finds this player's own line without anybody else being able to.
+ *
+ * Almost nobody has a code, so the box is one closed line at the foot of the page. It opens by itself only
+ * for somebody who already saved one, whose status is the reason they came back.
  */
 export function ClaimBox({ ctx, i18n, imports }: { ctx: PluginContext; i18n: PluginI18n; imports: Imports | null }) {
   const [doc, setDoc] = useState<ClaimDoc | null>(null);
@@ -104,8 +107,8 @@ export function ClaimBox({ ctx, i18n, imports }: { ctx: PluginContext; i18n: Plu
   };
 
   return (
-    <section className="bingo__claim" aria-label={i18n.t('claim.title')}>
-      <p className="bingo__section-title">{i18n.t('claim.title')}</p>
+    <details className="bingo__claim" open={codes.length > 0}>
+      <summary className="bingo__claim-summary">{i18n.t('claim.title')}</summary>
       <p className="bingo__note">{i18n.t('claim.hint')}</p>
       <div className="bingo__actions">
         <label className="bingo__field">
@@ -132,6 +135,6 @@ export function ClaimBox({ ctx, i18n, imports }: { ctx: PluginContext; i18n: Plu
           ))}
         </ul>
       )}
-    </section>
+    </details>
   );
 }

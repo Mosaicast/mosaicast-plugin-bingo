@@ -200,6 +200,11 @@ export const BINGO_CSS =
   a.bingo__btn { display: inline-flex; align-items: center; text-decoration: none; }
   .bingo__share { display: inline-flex; align-items: center; gap: .5rem; flex-wrap: wrap; }
   .bingo__section-title { font-size: .8125rem; color: var(--mc-text-muted); margin: .75rem 0 .25rem; }
+  .bingo__claim { margin-top: 1.25rem; border-top: 1px solid var(--mc-border); padding-top: .5rem; }
+  .bingo__claim[open] { display: flex; flex-direction: column; gap: .5rem; }
+  .bingo__claim-summary { cursor: pointer; font-size: .8125rem; color: var(--mc-text-muted); width: fit-content; }
+  .bingo__claim-summary:hover { color: var(--mc-text); }
+  .bingo__claim-summary:focus-visible { outline: 2px solid var(--mc-accent-text); outline-offset: 2px; }
 
   .bingo__spoiler { border: 1px dashed var(--mc-border); border-radius: .5rem; padding: 1rem; text-align: center; }
 
@@ -255,6 +260,22 @@ export const BINGO_CSS =
   .bingo__chip--player { display: inline-flex; align-items: center; gap: 6px; }
   .bingo__chip--player[aria-pressed="true"] { border-color: var(--mc-accent-text); }
   .bingo__chip--player:disabled { opacity: .5; cursor: default; }
+  .bingo__predictions { list-style: none; margin: .25rem 0 0; padding: 0; max-width: 40rem; display: flex; flex-direction: column; gap: 10px; }
+  .bingo__prediction { min-width: 0; }
+  .bingo__prediction-head { display: flex; justify-content: space-between; align-items: baseline; gap: 8px; }
+  .bingo__prediction-label { overflow-wrap: anywhere; min-width: 0; }
+  .bingo__prediction-rate { font-weight: 600; font-variant-numeric: tabular-nums; }
+  .bingo__meter { height: 6px; border-radius: 3px; background: var(--mc-border); overflow: hidden; margin: 3px 0 2px; }
+  .bingo__meter-fill { display: block; height: 100%; background: var(--mc-accent); border-radius: 3px; }
+  .bingo__heatmap { display: grid; gap: 6px; max-width: 360px; margin-top: .25rem; }
+  .bingo__heat {
+    aspect-ratio: 1; min-width: 0; border: 1px solid var(--mc-border); border-radius: 8px;
+    display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 2px;
+    color: var(--mc-text); text-align: center; padding: 4px;
+  }
+  .bingo__heat--top { border: 2px solid var(--mc-accent-text); }
+  .bingo__heat-value { font-weight: 600; font-variant-numeric: tabular-nums; }
+  .bingo__heat-sub { font-size: .72rem; color: var(--mc-text-muted); }
   .bingo__table-wrap { overflow-x: auto; }
   .bingo__table { border-collapse: collapse; font-size: .85rem; width: 100%; }
   .bingo__table th, .bingo__table td { padding: 4px 8px; border-bottom: 1px solid var(--mc-border); text-align: right; white-space: nowrap; }

@@ -160,8 +160,23 @@ palette.
   (standing after each bingo). The viewer's own line is emphasised. Up to eight players can be picked,
   and each keeps their colour under any filter. A crosshair tooltip and a table view are included.
 - **Cards per bingo**, **how predictable each episode was** (against the average) and **how cards score**.
+- **Predictions:** three lists, one at a time. *Most reliable* holds predictions that came true in more
+  than half their bingos; *least reliable* holds those that came true in fewer than half; *most predicted*
+  holds what people put on their cards most often. A prediction is rated only once it was on
+  `minPredictionBingos` bingos (3 by default, never lowered for a short season) and at least two people
+  wrote it. The text one person wrote is their own words, and is never published. The lists are ranked
+  by the Wilson bound of the hit rate, so "18 of 20" ranks above "3 of 3". The page shows the plain
+  numbers. Predictions are grouped across the whole site with the same fuzzy matching and threshold as a
+  single bingo; the suggestions share that grouping. The unit is a bingo: a prediction came true in a
+  bingo or it did not, however many cards carried it.
+- **Which squares come true:** the grid, with each square's share of predictions that came true and its
+  count, so a pattern (safe bets in the middle?) is visible. The tint is never the only signal.
 - **Records:** best single card, most bingos played, longest run with a line, the most and least
-  predictable episode, and the safest prediction.
+  predictable episode, *lone hits* (most correct predictions no other card of that bingo had) and *near
+  misses* (most cards without a line that were one square short of one).
+
+Late cards count towards none of the prediction stats, because a late card may have been written once the
+answers were known.
 
 All of it comes from one backend-owned site document, `history` (`BingoHistory`, recomputed with the
 dirty-gated roll-up). Only players who allow being listed get a line, capped at the best 50 like the
@@ -333,6 +348,7 @@ backend/                 Java 21, PF4J extension, depends only on the SDK
     BingoPublish.java    featured cards, notifications, site standings, suggestions
     BingoPages.java      which /p/bingo/ subpaths exist, and their share cards
     BingoHistory.java    pure: the history the site page charts
+    BingoInsights.java   pure: prediction lists, the square heatmap, lone hits and near misses
     BingoImport.java     past bingos taken in from import documents, and claims
     BingoExport.java     a person's own cards as mosaicast-bingo/1
 scripts/bingo-import.mjs the importer (dry run, --apply, unclaim); docs/import-format.md
@@ -342,7 +358,7 @@ frontend/                React 18 + Vite, bundled as one ES module
   src/fuzzy.ts           the browser's advisory copy of the comparison rules
   src/regroup.ts         pins for the podcaster's split/merge corrections
   src/history.ts         pure transforms for the history charts; src/palette.ts the player colours
-  src/components/charts/ hand-drawn SVG line and bar charts
+  src/components/charts/ hand-drawn SVG line and bar charts, and the square heatmap
   src/components/        the tile, the feed badge, the page, the resolve dialog
 shared/fuzzy-vectors.json  one answer key for the Java and TypeScript comparison rules
 docs/ROADMAP.md          ideas recorded but not built, and what each is waiting on
@@ -365,6 +381,7 @@ value. Numbers carry bounds the host enforces on save; a stored value outside th
 | `allowLateEntries` | true | whether someone can still play after the lock |
 | `archiveAfterDays` | 30 | days after resolving before a bingo closes for good, 1–3650 |
 | `minCardsPerCard` | 3 | how many cards someone needs before the per-card ranking places them, 1–100; a season with fewer bingos asks for all of them |
+| `minPredictionBingos` | 3 | how many bingos a prediction must be on before the prediction lists rate it, 2–100; never lowered for a short season |
 
 ## Design notes
 
