@@ -39,7 +39,13 @@ export function ClaimBox({ ctx, i18n, imports }: { ctx: PluginContext; i18n: Plu
   const [hashes, setHashes] = useState<Record<string, string>>({});
   const [busy, setBusy] = useState(false);
 
+  // A visitor has no partition: the USER scope answers 401, so read it only once somebody is signed in.
+  const userId = ctx.user?.id;
   useEffect(() => {
+    if (!userId) {
+      setDoc(null);
+      return;
+    }
     let live = true;
     ctx.docs
       .get<ClaimDoc>('self', KEY_CLAIM)
@@ -48,8 +54,8 @@ export function ClaimBox({ ctx, i18n, imports }: { ctx: PluginContext; i18n: Plu
     return () => {
       live = false;
     };
-    // eslint-disable-next-line react-hooks/exhaustive-deps -- the viewer's own partition, read once
-  }, []);
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- the viewer's own partition, once per sign-in
+  }, [userId]);
 
   const codes = doc?.codes ?? [];
   useEffect(() => {

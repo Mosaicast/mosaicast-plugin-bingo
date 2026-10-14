@@ -51,6 +51,22 @@ describe('<ClaimBox>', () => {
     expect(host.textContent).toBe('');
   });
 
+  it('never asks a visitor’s partition for codes, which would be a 401 on every anonymous page view', async () => {
+    const docs = makeMockDocs();
+    const asked: string[] = [];
+    const get = docs.get.bind(docs);
+    docs.get = ((scope: Parameters<typeof get>[0], key: string) => {
+      asked.push(`${String(scope)}/${key}`);
+      return get(scope, key);
+    }) as typeof docs.get;
+    const ctx = makeBingoCtx({ scope: { type: 'site', id: 'main' }, docs, user: null });
+    await act(async () => {
+      root.render(<ClaimBox ctx={ctx} i18n={makeI18n(ctx.locale)} imports={{ claims: { [HASH]: 'import:x' } }} />);
+    });
+    await flush(ctx);
+    expect(asked).toEqual([]);
+  });
+
   it('saves a code to the player’s own partition and says it is waiting', async () => {
     const { ctx, docs } = await render({ claims: { [HASH]: 'import:x' } });
     const input = host.querySelector('input')!;
