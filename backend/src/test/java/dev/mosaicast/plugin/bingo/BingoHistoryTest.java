@@ -19,7 +19,6 @@ import java.util.Set;
 import java.util.UUID;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
-import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /** The history the site page charts: who is named, what is counted, and in which order. */
@@ -92,7 +91,7 @@ class BingoHistoryTest extends BingoTestSupport {
 
         assertEquals(4, history.episodes().get(0).candidates(), "distinct predictions, not entries");
         assertEquals(0.5, history.episodes().get(0).hitRate());
-        assertEquals("ep-a", history.scopes().get("all").records().mostPredictable().slug());
+        assertEquals("ep-a", history.scopes().get("all").records().mostPredictable().get(0).slug());
     }
 
     @Test
@@ -122,11 +121,34 @@ class BingoHistoryTest extends BingoTestSupport {
                 BingoScore.RankBy.LINES, 50, 3, BingoInsights.Sites.NONE, 3, NOW);
 
         var records = history.scopes().get("all").records();
-        assertEquals(new BingoDocs.CardRecord("ann", "e4", 5, 1, 9), records.bestCard(),
-                "the opted-out player's 8-line card is nobody's record");
-        assertEquals(new BingoDocs.PlayerCount("ann", 4), records.mostCards());
-        assertEquals(new BingoDocs.PlayerCount("bob", 3), records.longestStreak(),
+        assertEquals(List.of(new BingoDocs.CardRecord("ann", "e4", 5, 1, 9), new BingoDocs.CardRecord("bob", "e1", 3, 1, 9)),
+                records.bestCard(), "the opted-out player's 8-line card is nobody's record, and one card per player");
+        assertEquals(List.of(new BingoDocs.PlayerCount("ann", 4), new BingoDocs.PlayerCount("bob", 3)),
+                records.mostCards());
+        assertEquals(new BingoDocs.PlayerCount("bob", 3), records.longestStreak().get(0),
                 "three bingos in a row with a line; ann's run broke at e3");
+        assertTrue(records.loneHits().isEmpty(), "no entries, so nobody holds it: an empty ranking, not a null");
+    }
+
+    @Test
+    void eachRecordRanksTheBestTenAndNoMore() {
+        List<BingoHistory.Input> episodes = new ArrayList<>();
+        List<BingoDocs.CardResultRow> results = new ArrayList<>();
+        for (int e = 0; e < 3; e++) {
+            episodes.add(input("e" + e, "2026-01-0" + (e + 1) + "T00:00:00Z"));
+            for (int p = 0; p < 14; p++) {
+                results.add(card("e" + e, "p" + (p < 10 ? "0" : "") + p, p % 9, p % 3));
+            }
+        }
+
+        var records = BingoHistory.compute(episodes, results, List.of(), a -> true, BingoScore.RankBy.LINES, 50, 3,
+                BingoInsights.Sites.NONE, 3, NOW).scopes().get("all").records();
+
+        assertEquals(BingoHistory.RECORD_DEPTH, records.bestCard().size());
+        assertEquals(BingoHistory.RECORD_DEPTH, records.mostCards().size());
+        assertEquals(10, records.bestCard().stream().map(BingoDocs.CardRecord::author).distinct().count(),
+                "ten different players, one card each");
+        assertTrue(records.bestCard().get(0).lines() >= records.bestCard().get(9).lines(), "best first");
     }
 
     @Test
@@ -135,7 +157,7 @@ class BingoHistoryTest extends BingoTestSupport {
                 50, 3, BingoInsights.Sites.NONE, 3, NOW);
 
         assertTrue(history.episodes().isEmpty());
-        assertNull(history.scopes().get("all").records().bestCard());
+        assertTrue(history.scopes().get("all").records().bestCard().isEmpty());
         assertEquals("fields", history.rankBy());
     }
 
@@ -169,10 +191,10 @@ class BingoHistoryTest extends BingoTestSupport {
                 season2.byAverage().stream().map(BingoDocs.AverageRow::author).toList(),
                 "who joined late leads where they played");
         assertEquals(2, season2.bingos());
-        assertEquals("newcomer", season2.records().bestCard().author());
-        assertEquals(new BingoDocs.PlayerCount("newcomer", 2), season2.records().longestStreak());
-        assertEquals("oneshot", history.scopes().get("feed:1").records().bestCard().author());
-        assertEquals(new BingoDocs.PlayerCount("veteran", 3), history.scopes().get("feed:1").records().longestStreak());
+        assertEquals("newcomer", season2.records().bestCard().get(0).author());
+        assertEquals(new BingoDocs.PlayerCount("newcomer", 2), season2.records().longestStreak().get(0));
+        assertEquals("oneshot", history.scopes().get("feed:1").records().bestCard().get(0).author());
+        assertEquals(new BingoDocs.PlayerCount("veteran", 3), history.scopes().get("feed:1").records().longestStreak().get(0));
     }
 
     @Test
@@ -283,8 +305,8 @@ class BingoHistoryTest extends BingoTestSupport {
         assertEquals(3, predictions.best().get(0).bingos(), "the quiet episode would announce itself");
         assertEquals(3, predictions.best().get(0).hits());
         var records = scopeAll(ctx).records();
-        assertEquals(alice.toString(), records.loneHits().author(), "bob saw more coming alone, but is unlisted");
-        assertEquals(1, records.loneHits().count());
+        assertEquals(List.of(new BingoDocs.PlayerCount(alice.toString(), 1)), records.loneHits(),
+                "bob saw more coming alone, but is unlisted, so he is not even a runner-up");
         var squares = scopeAll(ctx).squares();
         assertEquals(3, squares.get(0).size());
         assertEquals(new BingoDocs.SquareRate(6, 6), squares.get(0).cells().get(0), "kraken, on every card");

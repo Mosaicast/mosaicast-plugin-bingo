@@ -30,8 +30,8 @@ export async function hashCode(code: string): Promise<string> {
  * reads the result back rather than assuming it: the public `imports` report holds code hashes only, and
  * hashing the code here finds this player's own line without anybody else being able to.
  *
- * Almost nobody has a code, so the box is one closed line at the foot of the page. It opens by itself only
- * for somebody who already saved one, whose status is the reason they came back.
+ * Almost nobody has a code, so the box is one closed line at the foot of the page, for everybody. Somebody
+ * who saved a code sees how it went in that line, without opening it.
  */
 export function ClaimBox({ ctx, i18n, imports }: { ctx: PluginContext; i18n: PluginI18n; imports: Imports | null }) {
   const [doc, setDoc] = useState<ClaimDoc | null>(null);
@@ -113,8 +113,13 @@ export function ClaimBox({ ctx, i18n, imports }: { ctx: PluginContext; i18n: Plu
   };
 
   return (
-    <details className="bingo__claim" open={codes.length > 0}>
-      <summary className="bingo__claim-summary">{i18n.t('claim.title')}</summary>
+    <details className="bingo__claim">
+      <summary className="bingo__claim-summary">
+        {i18n.t('claim.title')}
+        {linkedCount > 0
+          ? ` · ${i18n.t('claim.summaryLinked', { count: String(linkedCount) })}`
+          : codes.length > 0 && ` · ${i18n.t('claim.summarySaved', { count: String(codes.length) })}`}
+      </summary>
       <p className="bingo__note">{i18n.t('claim.hint')}</p>
       <div className="bingo__actions">
         <label className="bingo__field">

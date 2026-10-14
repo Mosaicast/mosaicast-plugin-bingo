@@ -16,8 +16,8 @@ Java 21 (Gradle, PF4J extension) · React 18 + Vite (Web Component) · **platfor
 ## Commands
 ```
 ./build.sh                                    # -> dist/{plugin.json,bingo.jar,assets/bingo.es.js}
-cd backend  && ./gradlew test                 # 160 tests
-cd frontend && npm test && npm run typecheck  # 168 tests
+cd backend  && ./gradlew test                 # 163 tests
+cd frontend && npm test && npm run typecheck  # 179 tests
 node --test scripts/*.test.mjs                # import script (also in CI)
 scripts/set-version.sh <x.y.z>                # bumps the plugin version in all three files
 ```
@@ -139,6 +139,7 @@ frontend/locales/{en,de}.json           UI strings
   named series exists only for listed players; place/aggregates count everyone.
 - **Prediction lists use one site-wide grouping** (`Corpus.grouping`, shared with suggestions), publish only
   text 2+ people wrote (`MIN_AUTHORS`), skip late cards, and never lower `minPredictionBingos` per scope.
+- **Season routes** check the `stats` doc's per-bingo `feed`/`season`, not `history` scopes (open-only seasons).
 - **The site roll-up (stats + suggestions + history) is dirty-gated** in `BingoPlugin.rollUp`: add any new input to
   its fingerprint, or the document silently goes stale for up to `ROLL_UP_REFRESH`.
 

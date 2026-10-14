@@ -391,6 +391,9 @@ export interface BingoSummary {
   /** The grid's edge, as the template states it. */
   size?: number | null;
   freeCentre?: boolean | null;
+  /** The episode's feed and season (0.8.0): what the page's season tabs are built from. */
+  feed?: string | null;
+  season?: number | null;
 }
 
 /** Backend-owned, site scope: cumulative standings and the list of bingos, for the plugin's page. */
@@ -440,17 +443,27 @@ export interface PlayerSeries {
   points: HistoryPoint[];
 }
 
-/** Records over the whole history; each names a listed player or an episode, or is absent. */
+export interface CardRecord { author: string; slug: string; fields: number; lines: number; cells: number }
+export interface PlayerCount { author: string; count: number }
+export interface EpisodeRate { slug: string; hitRate: number }
+
+/**
+ * A record's ranking: the holder first, then up to nine runners-up. A `history` document written before 0.8.0
+ * holds the holder alone, as an object — read every record through `rankingOf`.
+ */
+export type Ranked<T> = T[] | T | null;
+
+/** Records within a scope; each row names a listed player or an episode. */
 export interface HistoryRecords {
-  bestCard?: { author: string; slug: string; fields: number; lines: number; cells: number } | null;
-  mostCards?: { author: string; count: number } | null;
-  longestStreak?: { author: string; count: number } | null;
-  mostPredictable?: { slug: string; hitRate: number } | null;
-  leastPredictable?: { slug: string; hitRate: number } | null;
+  bestCard?: Ranked<CardRecord>;
+  mostCards?: Ranked<PlayerCount>;
+  longestStreak?: Ranked<PlayerCount>;
+  mostPredictable?: Ranked<EpisodeRate>;
+  leastPredictable?: Ranked<EpisodeRate>;
   /** Most predictions that came true and that no other card of that bingo had. */
-  loneHits?: { author: string; count: number } | null;
+  loneHits?: Ranked<PlayerCount>;
   /** Most cards without a line that were one square short of one. */
-  nearMisses?: { author: string; count: number } | null;
+  nearMisses?: Ranked<PlayerCount>;
 }
 
 /** One prediction across the bingos of a scope. Only text at least two people wrote is ever published. */
