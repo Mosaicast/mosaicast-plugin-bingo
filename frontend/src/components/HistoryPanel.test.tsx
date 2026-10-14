@@ -8,6 +8,7 @@ import { makeMockCtx } from '@mosaicast/plugin-sdk/testing';
 import { makeI18n } from '../i18n';
 import type { History, HistoryEpisode } from '../types';
 import { EpisodeScores, HistoryPanel } from './HistoryPanel';
+import { RankingPanel } from './RankingPanel';
 
 const ep = (slug: string, season: number, episodeNo: number, extra: Partial<HistoryEpisode> = {}): HistoryEpisode => ({
   slug, feed: 'cast', season, episodeNo, players: 4, ranked: 3, late: 1, avgFields: 4, avgLines: 1,
@@ -31,12 +32,15 @@ const HISTORY: History = {
       ],
       byAverage: [{ author: 'u1', cards: 4, fields: 5, lines: 2 }, { author: 'u2', cards: 3, fields: 4, lines: 1 }],
       records: {
-        bestCard: { author: 'u1', slug: 'e1', fields: 5, lines: 2, cells: 9 },
-        longestStreak: { author: 'u1', count: 4 },
-        mostPredictable: { slug: 'e2', hitRate: 0.8 },
-        leastPredictable: { slug: 'e1', hitRate: 0.4 },
-        loneHits: { author: 'u2', count: 3 },
-        nearMisses: { author: 'u1', count: 2 },
+        bestCard: [
+          { author: 'u1', slug: 'e1', fields: 5, lines: 2, cells: 9 },
+          { author: 'u2', slug: 'e2', fields: 4, lines: 1, cells: 9 },
+        ],
+        longestStreak: [{ author: 'u1', count: 4 }],
+        mostPredictable: [{ slug: 'e2', hitRate: 0.8 }, { slug: 'e1', hitRate: 0.4 }],
+        leastPredictable: [{ slug: 'e1', hitRate: 0.4 }, { slug: 'e2', hitRate: 0.8 }],
+        loneHits: [{ author: 'u2', count: 3 }],
+        nearMisses: [{ author: 'u1', count: 2 }],
       },
       predictions: {
         floor: 3,
@@ -60,6 +64,7 @@ const HISTORY: History = {
       bar: 2, belowBar: 0, bingos: 2,
       byTotal: [{ author: 'u3', fields: 2, lines: 0, cards: 1, cells: 9 }],
       byAverage: [],
+      // The shape a 0.7.x document holds: the holder alone, as an object.
       records: { bestCard: { author: 'u3', slug: 'e3', fields: 2, lines: 0, cells: 9 } },
       predictions: { floor: 3, best: [], worst: [], popular: [{ label: 'Storm', bingos: 2, hits: 1, people: 2, cards: 2 }] },
     },
@@ -86,11 +91,12 @@ describe('<HistoryPanel>', () => {
     u3: { id: 'u3', displayName: 'Bob', avatarUrl: '/c', role: 'fan' as const },
   };
 
-  async function render(history: History | null = HISTORY, user: { id: string } | null = null) {
+  async function render(history: History | null = HISTORY, user: { id: string } | null = null,
+    season: string | null = null) {
     const ctx = makeMockCtx(user ? { user: { ...people.u2, ...user, role: 'fan' } } : {});
     await act(async () => {
       root.render(
-        <HistoryPanel ctx={ctx} i18n={makeI18n(ctx.locale)} history={history} snapshots={{ e1: { title: 'The Pilot', description: '' } as never }} people={people} />,
+        <HistoryPanel ctx={ctx} i18n={makeI18n(ctx.locale)} history={history} season={season} snapshots={{ e1: { title: 'The Pilot', description: '' } as never }} people={people} />,
       );
     });
     return ctx;
@@ -114,12 +120,12 @@ describe('<HistoryPanel>', () => {
     expect(host.textContent).toContain('The Pilot');
   });
 
-  it('filters every part to a season, without repainting anyone', async () => {
+  it("filters every part to the page's season, without repainting anyone", async () => {
     await render();
     const colour = () => lines().map((p) => p.getAttribute('stroke'));
     const before = colour();
 
-    await act(async () => button('Season 2').click());
+    await render(HISTORY, null, 'cast:2');
 
     expect(host.querySelector('.bingo__tiles')?.textContent).toContain('Bingos2');
     expect(colour()).toEqual(before);
@@ -148,7 +154,11 @@ describe('<HistoryPanel>', () => {
   });
 
   it('ranks by total or per card, and counts who is below the bar without naming them', async () => {
-    await render();
+    const ctx = makeMockCtx();
+    await act(async () => {
+      root.render(<RankingPanel i18n={makeI18n(ctx.locale)} stats={HISTORY.scopes!.all} people={people} me={undefined}
+        rankBy="lines" label="Standings" />);
+    });
     const ranking = () => host.querySelector('.bingo__ranking')!.textContent!;
     expect(ranking()).toContain('Ned');
     await act(async () => button('Per card').click());
@@ -156,19 +166,30 @@ describe('<HistoryPanel>', () => {
     expect(ranking()).toContain('1 more player(s) need at least 3 card(s)');
   });
 
-  it('makes the ranking and the records follow the season pill', async () => {
+  it("makes the records follow the page's season, and reads a 0.7.x record as its holder", async () => {
     await render();
-    expect(host.textContent).toContain('Ranking · all seasons');
     expect(host.textContent).toContain('Lone hits');
 
-    await act(async () => button('Season 2').click());
+    await render(HISTORY, null, 'cast:2');
 
-    expect(host.textContent).toContain('Ranking · Season 2');
-    const ranking = host.querySelector('.bingo__ranking')!.textContent!;
-    expect(ranking).toContain('Bob');
-    expect(ranking).not.toContain('Ned');
     expect(host.querySelector('.bingo__records')!.textContent).toContain('· Bob');
     expect(host.textContent).not.toContain('Lone hits');
+    expect(host.textContent).not.toContain('Ranking ('); // one holder: no ranking to open
+  });
+
+  it("opens a record's ranking in a dialog, holder first", async () => {
+    await render(HISTORY, { id: 'u2' });
+    await act(async () => button('Ranking (2)').click());
+
+    const dialog = host.querySelector('dialog')!;
+    expect(dialog.hasAttribute('open')).toBe(true);
+    const rows = [...dialog.querySelectorAll('tbody tr')].map((r) => r.textContent);
+    expect(rows[0]).toContain('Ned');
+    expect(rows[1]).toContain('You');
+    expect(rows[1]).toContain('1 line(s), 4 square(s)');
+
+    await act(async () => dialog.querySelector<HTMLButtonElement>('button[aria-label="Close"]')!.click());
+    expect(dialog.hasAttribute('open')).toBe(false);
   });
 
   it('lists the most and least reliable predictions and what people predict most', async () => {
@@ -189,7 +210,7 @@ describe('<HistoryPanel>', () => {
   it('keeps the chosen list across seasons and says why a short season rates nothing', async () => {
     await render();
     await act(async () => button('Most predicted').click());
-    await act(async () => button('Season 2').click());
+    await render(HISTORY, null, 'cast:2');
     expect(host.querySelector('.bingo__prediction')?.textContent).toContain('“Storm”');
 
     await act(async () => button('Most reliable').click());
@@ -204,7 +225,7 @@ describe('<HistoryPanel>', () => {
     expect(cells[4].getAttribute('aria-label')).toBe('Row 2, column 2: nothing predicted here');
     expect(host.querySelector('.bingo__heat--top')?.textContent).toContain('90%');
 
-    await act(async () => button('Season 2').click());
+    await render(HISTORY, null, 'cast:2');
     expect(host.querySelector('.bingo__heatmap')).toBeNull();
   });
 

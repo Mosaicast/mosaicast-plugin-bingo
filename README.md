@@ -139,11 +139,22 @@ for.
 
 | Path | Shows |
 |---|---|
-| `/p/bingo/` | the site standings and every bingo, with live episode titles |
+| `/p/bingo/` | the site standings, the history and every bingo, with live episode titles |
+| `/p/bingo/season/<n>` | the same page for one season; `season/<n>/<feed>` where two feeds share the number |
 | `/p/bingo/e/<slug>` | one bingo: board, recap (behind the spoiler cover) and a way into the episode |
 | `/p/bingo/e/<slug>/u/<user>` | one player's result, as the published board shows it |
 
-Every other subpath is a real 404 (`PageRouteProvider`). That includes a quiet episode's bingo, and the
+The page is centred at 1080px like the stats page, with its season tabs above one card. A season has its
+tab (and its address) from its first visible bingo on, open ones included; the tabs filter the standings,
+the history and the list together.
+
+**The list** puts open and locked bingos first, as cards with their way in. Past bingos follow, folded by
+season with the newest season open, each row with its episode code, card count and how much came true.
+Past 20 bingos a search narrows it by title or code. The *Played before this site existed?* claim box sits
+closed at the very foot of the page.
+
+Every other subpath is a real 404 (`PageRouteProvider`). That includes a quiet episode's bingo, a season
+with no visible bingo, a short `season/<n>` that two feeds share, and the
 result of a player who opted out or is past the board's cap. Each page has an OpenGraph card
 (`ShareMetadataProvider`) in the site's default language. A card says how many played and how a card
 scored, **never what was predicted or came true**, because a link preview is read in chats by people who
@@ -152,8 +163,9 @@ may not have listened.
 ### How past bingos went
 
 Below the standings, the page charts every **resolved** bingo on an episode everyone may see. It follows
-the stats plugin's design: hand-drawn SVG, season pills, tiles, records, and the same validated player
-palette.
+the stats plugin's design: hand-drawn SVG, tiles, records with their rankings, and the same validated
+player palette. Once a chart has more bingos than fit (28px each), it scrolls sideways inside its own
+frame, starting at the newest, with the y axis pinned; the page never widens.
 
 - **Tiles:** bingos, cards, the average card, cards with a line, and predictions that came true.
 - **Form over the season:** a line per player, in *per episode*, *running total* or *place* mode
@@ -173,7 +185,9 @@ palette.
   count, so a pattern (safe bets in the middle?) is visible. The tint is never the only signal.
 - **Records:** best single card, most bingos played, longest run with a line, the most and least
   predictable episode, *lone hits* (most correct predictions no other card of that bingo had) and *near
-  misses* (most cards without a line that were one square short of one).
+  misses* (most cards without a line that were one square short of one). Each is a ranking of up to ten,
+  holder first; *Ranking (n)* opens the rest in a dialog. Best single card ranks each player's best, so
+  one player cannot fill it.
 
 Late cards count towards none of the prediction stats, because a late card may have been written once the
 answers were known.

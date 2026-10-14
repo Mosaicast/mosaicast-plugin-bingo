@@ -87,9 +87,15 @@ describe('<ClaimBox>', () => {
     expect(host.querySelector('summary')?.textContent).toBe('Played before this site existed?');
   });
 
-  it('opens by itself for someone who saved a code, whose status is why they came back', async () => {
-    await render({ claims: { [HASH]: 'import:x' } }, { 'data/user/me/claim': { codes: [CODE] } });
-    expect(host.querySelector('details')!.open).toBe(true);
+  it('stays closed for someone who saved a code too, and says how it went in its one line', async () => {
+    await render({ claims: { other: 'import:x' } }, { 'data/user/me/claim': { codes: [CODE] } });
+    expect(host.querySelector('details')!.open).toBe(false);
+    expect(host.querySelector('summary')?.textContent).toBe('Played before this site existed? · 1 code(s) saved');
+  });
+
+  it('says in its one line when a code was linked', async () => {
+    await render({ claimed: { [HASH]: { linked: 3, skipped: 0 } } }, { 'data/user/me/claim': { codes: [CODE] } });
+    expect(host.querySelector('summary')?.textContent).toBe('Played before this site existed? · 1 code(s) linked');
   });
 
   it('reads its own result back by hash', async () => {

@@ -10,7 +10,7 @@ in the three files that carry it.
 
 ## [Unreleased]
 
-## [0.8.0] — which predictions come true, and a quieter claim box
+## [0.8.0] — which predictions come true, season tabs, and a page built for a long history
 
 Still built against **`platformApi` 0.19.1**, so it loads on core 0.8.1 and newer; tested on core 0.9.1.
 
@@ -29,8 +29,19 @@ Still built against **`platformApi` 0.19.1**, so it loads on core 0.8.1 and newe
   Late cards, unresolved bingos and unannounced episodes count towards none of the prediction stats.
 - The site-wide grouping of predictions is computed once per roll-up and shared with the suggestions.
 - The *safest prediction* record is gone: the *most reliable* list replaces it and also works per season.
-- The claim box (*Played before this site existed?*) moves to the foot of `/p/bingo/` as one closed line.
-  It opens by itself for someone who has saved a code.
+- The claim box (*Played before this site existed?*) moves to the foot of `/p/bingo/` as one closed line,
+  closed for everybody; someone who saved a code sees how it went in that line.
+- **The page** is centred at 1080px like the stats page, with its title and **season tabs** above one card.
+  `/p/bingo/season/<n>` (or `season/<n>/<feed>` where two feeds share the number) filters the standings,
+  the history and the list together, and exists from a season's first visible bingo on. The history's
+  own season pills and its second ranking are gone: the page-level filter replaces both.
+- **Charts scroll sideways** once a season has more bingos than fit, starting at the newest, with the y
+  axis pinned.
+- **Records are rankings** of up to ten, holder first, with a *Ranking (n)* dialog like the stats plugin's.
+  The `history` document's `records` fields become lists; a document from 0.7.x still renders.
+- **The bingo list** puts open and locked bingos first as cards, folds past ones by season (newest open)
+  and offers a search past 20 bingos.
+- The site `stats` document carries each bingo's `feed` and `season`.
 
 ### Fixed
 - An anonymous visitor on `/p/bingo/` no longer triggers a `401` for `…/data/user/me/claim` (#23): the

@@ -10,10 +10,12 @@ import dev.mosaicast.plugin.api.Scope;
 import dev.mosaicast.plugin.api.UserRef;
 import dev.mosaicast.plugin.api.Users;
 
+import java.util.HashSet;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
 import java.util.Optional;
+import java.util.Set;
 import java.util.UUID;
 import java.util.stream.Stream;
 
@@ -27,6 +29,8 @@ import static dev.mosaicast.plugin.bingo.BingoDocs.*;
  *   <li>{@code ""} - the site page: standings and every bingo there is.</li>
  *   <li>{@code e/<slug>} - one bingo: how it went, and a way into the episode.</li>
  *   <li>{@code e/<slug>/u/<userId>} - one player's published result, the link a player shares.</li>
+ *   <li>{@code season/<n>} and {@code season/<n>/<feed>} - the site page for one season; the short form
+ *       only where no two feeds share the number.</li>
  * </ul>
  *
  * <p>Both questions run on a visitor's request, so each is a few document reads, never a scan. Neither
@@ -52,6 +56,9 @@ final class BingoPages {
         if (parts.isEmpty()) {
             return true; // the site page
         }
+        if (parts.get(0).equals("season")) {
+            return isSeason(parts);
+        }
         if (!parts.get(0).equals("e")) {
             return false;
         }
@@ -64,11 +71,33 @@ final class BingoPages {
         return false;
     }
 
+    /**
+     * Whether {@code season/<n>[/<feed>]} names a season with a bingo anybody may see. One read: the
+     * published {@code stats} carry each listed bingo's feed and season, and list no quiet episode.
+     */
+    private boolean isSeason(List<String> parts) {
+        if (parts.size() < 2 || parts.size() > 3 || !parts.get(1).matches("\\d{1,6}")) {
+            return false;
+        }
+        int season = Integer.parseInt(parts.get(1));
+        Stats stats = ctx.store().get(Scope.site(), KEY_STATS, Stats.class).orElse(null);
+        if (stats == null || stats.bingos() == null) {
+            return false;
+        }
+        Set<String> feeds = new HashSet<>();
+        for (BingoSummary b : stats.bingos()) {
+            if (b.season() != null && b.season() == season && b.feed() != null) {
+                feeds.add(b.feed());
+            }
+        }
+        return parts.size() == 3 ? feeds.contains(parts.get(2)) : feeds.size() == 1;
+    }
+
     /** See {@link dev.mosaicast.plugin.api.ShareMetadataProvider#metaFor}. */
     Optional<OgMeta> metaFor(String subpath) {
         List<String> parts = segments(subpath);
         String locale = language();
-        if (parts.isEmpty()) {
+        if (parts.isEmpty() || (parts.get(0).equals("season") && isSeason(parts))) {
             return Optional.of(new OgMeta("Bingo", text(locale,
                     "Predict what happens in the next episode, and see how everyone's card did.",
                     "Tippe, was in der nächsten Folge passiert, und sieh, wie alle Karten abgeschnitten haben."),

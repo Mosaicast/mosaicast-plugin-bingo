@@ -27,6 +27,8 @@ import {
   type Stats,
   type Template,
 } from '../types';
+import { feedName, pageSeasons, rankingOf, scopeKey, seasonFromRoute, type PageSeason } from '../history';
+import { BingoList } from './BingoList';
 import { Shell, nameOf } from './common';
 import { ClaimBox } from './ClaimBox';
 import { RankingPanel } from './RankingPanel';
@@ -36,7 +38,7 @@ import { Results } from './Results';
 import { ShareButton } from './ShareButton';
 import { readScope, pick, resolvePeople } from './useBingo';
 
-const ROUTES = ['', 'e/:slug', 'e/:slug/u/:user'] as const;
+const ROUTES = ['', 'season/:n', 'season/:n/:feed', 'e/:slug', 'e/:slug/u/:user'] as const;
 
 
 /**
@@ -54,18 +56,31 @@ export function BingoPage({ ctx }: { ctx: PluginContext }) {
 
   const match = matchRoute(ctx.route.path, ROUTES);
   return (
-    <Shell>
-      {match?.pattern === '' && <SiteView ctx={ctx} i18n={i18n} />}
-      {(match?.pattern === 'e/:slug' || match?.pattern === 'e/:slug/u/:user') && (
-        <EpisodeView ctx={ctx} i18n={i18n} slug={match.params.slug} featured={match.params.user} />
+    <Shell page>
+      {(match?.pattern === '' || match?.pattern === 'season/:n' || match?.pattern === 'season/:n/:feed') && (
+        <SiteView ctx={ctx} i18n={i18n} route={match.params} />
       )}
-      {!match && <p className="bingo__note">{i18n.t('page.notFound')}</p>}
+      {(match?.pattern === 'e/:slug' || match?.pattern === 'e/:slug/u/:user') && (
+        <div className="bingo__panel">
+          <EpisodeView ctx={ctx} i18n={i18n} slug={match.params.slug} featured={match.params.user} />
+        </div>
+      )}
+      {!match && <p className="bingo__panel bingo__note">{i18n.t('page.notFound')}</p>}
     </Shell>
   );
 }
 
 /** The site page: who has done best across every bingo, and the bingos themselves. */
-function SiteView({ ctx, i18n }: { ctx: PluginContext; i18n: PluginI18n }) {
+function SiteView({
+  ctx,
+  i18n,
+  route,
+}: {
+  ctx: PluginContext;
+  i18n: PluginI18n;
+  /** `n` (and `feed`) when the route names a season. */
+  route: { n?: string; feed?: string };
+}) {
   const [state, setState] = useState<{
     loading: boolean;
     stats: Stats | null;
@@ -110,71 +125,96 @@ function SiteView({ ctx, i18n }: { ctx: PluginContext; i18n: PluginI18n }) {
     // eslint-disable-next-line react-hooks/exhaustive-deps -- one read per visit to the page
   }, []);
 
-  if (state.loading) return <p className="bingo__note">{i18n.t('common.loading')}</p>;
+  const head = (
+    <header className="bingo__page-head">
+      <h1 className="bingo__page-title">
+        <Icon name="dice" /> {i18n.t('page.title')}
+      </h1>
+      <p className="bingo__hint">{i18n.t('page.hint')}</p>
+    </header>
+  );
+  if (state.loading) {
+    return (
+      <>
+        {head}
+        <p className="bingo__note">{i18n.t('common.loading')}</p>
+      </>
+    );
+  }
 
   // A bingo whose episode the visitor may not see has no snapshot, and is not drawn at all.
   const bingos = (state.stats?.bingos ?? []).filter((b) => state.titles[b.slug]);
+  const seasons = pageSeasons(bingos, state.history);
+  const chosen = route.n !== undefined ? seasonFromRoute(seasons, route.n, route.feed) : undefined;
+  if (route.n !== undefined && !chosen) {
+    return (
+      <>
+        {head}
+        <p className="bingo__panel bingo__note">{i18n.t('page.notFound')}</p>
+      </>
+    );
+  }
+  const season = chosen?.key ?? null;
+  const seasonName = (s: PageSeason) =>
+    s.feed
+      ? i18n.t('history.seasonNFeed', { season: String(s.season), feed: feedName(s.feed) })
+      : i18n.t('history.seasonN', { season: String(s.season) });
+  const standingsLabel = chosen
+    ? i18n.t('stats.titleSeason', { season: seasonName(chosen) })
+    : i18n.t('stats.title');
+  const tab = (path: string, label: string, current: boolean) => (
+    <a
+      key={path || 'all'}
+      className="bingo__tab-link"
+      href={`/p/bingo/${path}`}
+      aria-current={current ? 'page' : undefined}
+      onClick={(event) => {
+        event.preventDefault();
+        ctx.route.navigate(path);
+      }}
+    >
+      {label}
+    </a>
+  );
 
   return (
     <>
-      <div className="bingo__head">
-        <h2 className="bingo__title">
-          <Icon name="dice" /> {i18n.t('page.title')}
-        </h2>
-      </div>
-      <p className="bingo__hint">{i18n.t('page.hint')}</p>
-
-      <p className="bingo__section-title">
-        <Icon name="trophy" /> {i18n.t('stats.title')}
-      </p>
-      {/* All-time, whatever the season pills below show. */}
-      <RankingPanel
-        i18n={i18n}
-        stats={state.history?.scopes?.all}
-        people={state.people}
-        me={ctx.user?.id}
-        rankBy={state.history?.rankBy === 'fields' ? 'fields' : 'lines'}
-        label={i18n.t('stats.title')}
-      />
-
-      <HistoryPanel
-        ctx={ctx}
-        i18n={i18n}
-        history={state.history}
-        snapshots={state.titles}
-        people={state.people}
-      />
-
-      <p className="bingo__section-title">
-        <Icon name="board" /> {i18n.t('page.bingos')}
-      </p>
-      {bingos.length === 0 ? (
-        <p className="bingo__note">{i18n.t('page.noBingos')}</p>
-      ) : (
-        <ul className="bingo__list">
-          {bingos.map((b) => (
-            <li key={b.slug}>
-              <a
-                className="bingo__link"
-                href={`/p/bingo/e/${encodeURIComponent(b.slug)}`}
-                onClick={(event) => {
-                  event.preventDefault();
-                  ctx.route.navigate(`e/${encodeURIComponent(b.slug)}`);
-                }}
-              >
-                {state.titles[b.slug].title}
-              </a>
-              <span className="bingo__note">
-                {' · '}
-                {i18n.t(`phase.${b.phase.toLowerCase()}`)}
-                {typeof b.players === 'number' && ` · ${i18n.t('stats.cards', { count: String(b.players) })}`}
-              </span>
-            </li>
-          ))}
-        </ul>
+      {head}
+      {seasons.length > 0 && (
+        <nav className="bingo__tabs-nav" aria-label={i18n.t('history.season')}>
+          {tab('', i18n.t('history.all'), chosen === undefined)}
+          {seasons.map((s) => tab(s.path, seasonName(s), chosen?.key === s.key))}
+        </nav>
       )}
 
-      <ClaimBox ctx={ctx} i18n={i18n} imports={state.imports} />
+      <div className="bingo__panel">
+        <p className="bingo__section-title">
+          <Icon name="trophy" /> {standingsLabel}
+        </p>
+        <RankingPanel
+          key={season ?? 'all'}
+          i18n={i18n}
+          stats={state.history?.scopes?.[scopeKey(season)]}
+          people={state.people}
+          me={ctx.user?.id}
+          rankBy={state.history?.rankBy === 'fields' ? 'fields' : 'lines'}
+          label={standingsLabel}
+        />
+
+        <HistoryPanel
+          ctx={ctx}
+          i18n={i18n}
+          history={state.history}
+          season={season}
+          snapshots={state.titles}
+          people={state.people}
+        />
+
+        <BingoList ctx={ctx} i18n={i18n} bingos={bingos} snapshots={state.titles} history={state.history}
+          season={season} />
+
+        <ClaimBox ctx={ctx} i18n={i18n} imports={state.imports} />
+      </div>
     </>
   );
 }
@@ -337,8 +377,8 @@ function namedIn(history: History | null): string[] {
   for (const scope of Object.values(history?.scopes ?? {})) {
     for (const r of [...(scope.byTotal ?? []), ...(scope.byAverage ?? [])].slice(0, 100)) out.add(r.author);
     const rec = scope.records;
-    for (const r of [rec?.bestCard, rec?.mostCards, rec?.longestStreak, rec?.loneHits, rec?.nearMisses]) {
-      if (r) out.add(r.author);
+    for (const ranking of [rec?.bestCard, rec?.mostCards, rec?.longestStreak, rec?.loneHits, rec?.nearMisses]) {
+      for (const r of rankingOf<{ author: string }>(ranking)) out.add(r.author);
     }
   }
   return [...out];

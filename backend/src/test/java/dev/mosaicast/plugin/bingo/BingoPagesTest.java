@@ -80,6 +80,30 @@ class BingoPagesTest extends BingoTestSupport {
     }
 
     /** alice fills the top row and stays listed; bob opts out of the board. */
+    @Test
+    void aSeasonPageExistsOnceTheSeasonHasAVisibleBingo() {
+        var plugin = resolved(new dev.mosaicast.plugin.api.DisplaySnapshot("Episode 4", "", "https://example/a.mp3",
+                T0.minus(java.time.Duration.ofDays(1)), null, null, null, null, null, "", "the-cast", 2, 4,
+                EpisodePhase.RELEASED, null));
+
+        var answers = new PageRouteProviderHarness(plugin).check("season/2", "season/2/the-cast",
+                "season/2/other-cast", "season/3", "season/x", "season", "season/2/the-cast/more");
+
+        assertTrue(answers.serves("season/2"), "one feed has a season 2, so the short form is unambiguous");
+        assertTrue(answers.serves("season/2/the-cast"));
+        assertEquals(List.of("season/2/other-cast", "season/3", "season/x", "season", "season/2/the-cast/more"),
+                answers.notFound());
+        var stats = lastCtx.store().get(Scope.site(), BingoDocs.KEY_STATS, BingoDocs.Stats.class).orElseThrow();
+        assertEquals("the-cast", stats.bingos().get(0).feed());
+        assertEquals(2, stats.bingos().get(0).season());
+    }
+
+    @Test
+    void aQuietSeasonHasNoPage() {
+        var plugin = resolved(snapshot(EpisodePhase.PLANNED));
+        assertEquals(List.of("season/1"), new PageRouteProviderHarness(plugin).check("season/1").notFound());
+    }
+
     private FakePluginContext resolvedCtx(dev.mosaicast.plugin.api.DisplaySnapshot snapshot) {
         var ctx = ctx(snapshot);
         ctx.withUsers(new FakeUsers().withUser(alice, "Alice", Role.FAN));
@@ -106,7 +130,7 @@ class BingoPagesTest extends BingoTestSupport {
     void theStatsDocumentListsPublicBingosAndLeavesQuietOnesOut() {
         resolved(published(true));
         var stats = lastCtx.store().get(Scope.site(), BingoDocs.KEY_STATS, BingoDocs.Stats.class).orElseThrow();
-        assertEquals(List.of(new BingoDocs.BingoSummary(EPISODE, "Bingo", "RESOLVED", 2, 3, false)), stats.bingos());
+        assertEquals(List.of(new BingoDocs.BingoSummary(EPISODE, "Bingo", "RESOLVED", 2, 3, false, null, null)), stats.bingos());
 
         resolved(snapshot(EpisodePhase.PLANNED));
         stats = lastCtx.store().get(Scope.site(), BingoDocs.KEY_STATS, BingoDocs.Stats.class).orElseThrow();

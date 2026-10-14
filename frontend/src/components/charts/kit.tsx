@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 // SPDX-FileCopyrightText: 2026 The Mosaicast Authors
 
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useLayoutEffect, useRef, useState } from 'react';
 
 /**
  * Small pieces every chart here shares, adapted from `mosaicast-plugin-stats` so the two plugins' charts
@@ -74,3 +74,75 @@ export function Legend({ items }: { items: LegendItem[] }) {
 
 /** Space reserved around a plot for its axes. */
 export const PAD = { top: 10, right: 12, bottom: 24, left: 36 };
+
+/** The narrowest an x position may get before a chart scrolls sideways instead of squeezing. */
+export const MIN_BAND = 28;
+
+/** The width a chart over `n` x positions needs at least, with `extra` beside the plot (direct labels). */
+export function minChartWidth(n: number, extra = 0): number {
+  return n * MIN_BAND + PAD.left + PAD.right + extra;
+}
+
+/**
+ * The frame a chart draws in. While the chart fits it is just a box; once it is wider than the room it was
+ * given, the frame scrolls sideways — the page itself never widens — and starts at the right-hand end,
+ * where the newest bingos are. A scrolling frame is focusable, so the arrow keys move it too. While it
+ * scrolls, `axis` stays pinned at its left edge, so the values never scroll away from the bars.
+ */
+export function ChartFrame({
+  frameRef,
+  width,
+  scrolls,
+  label,
+  axis,
+  children,
+}: {
+  frameRef: React.RefObject<HTMLDivElement>;
+  /** The width the chart is drawn at. */
+  width: number;
+  scrolls: boolean;
+  /** What the chart shows; the frame adds that it scrolls. */
+  label: string;
+  /** The y axis on its own (see {@link YAxis}), pinned while the chart scrolls. */
+  axis?: React.ReactNode;
+  children: React.ReactNode;
+}) {
+  useLayoutEffect(() => {
+    const el = frameRef.current;
+    if (el && scrolls) el.scrollLeft = el.scrollWidth;
+  }, [frameRef, scrolls, width]);
+  return (
+    <div className="bingo__chart-box">
+      {scrolls && axis && <div className="bingo__chart-axis" aria-hidden="true">{axis}</div>}
+      <div
+        ref={frameRef}
+        className={scrolls ? 'bingo__chart-scroll bingo__chart-scroll--on' : 'bingo__chart-scroll'}
+        tabIndex={scrolls ? 0 : undefined}
+        role={scrolls ? 'group' : undefined}
+        aria-label={scrolls ? label : undefined}
+      >
+        <div className="bingo__chart" style={{ width }}>
+          {children}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+/** The y axis's values alone, as wide as the chart's left padding: what {@link ChartFrame} pins. */
+export function YAxis({ ticks, y, format, height }: {
+  ticks: number[];
+  y: (v: number) => number;
+  format: (v: number) => string;
+  height: number;
+}) {
+  return (
+    <svg width={PAD.left} height={height} viewBox={`0 0 ${PAD.left} ${height}`}>
+      {ticks.map((t) => (
+        <text key={t} className="bingo__axis" x={PAD.left - 6} y={y(t) + 4} textAnchor="end">
+          {format(t)}
+        </text>
+      ))}
+    </svg>
+  );
+}

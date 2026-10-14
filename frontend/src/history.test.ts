@@ -7,7 +7,9 @@ import {
   episodesIn,
   feedName,
   niceTicks,
-  seasonsOf,
+  pageSeasons,
+  rankingOf,
+  seasonFromRoute,
   slotOf,
   standings,
   summary,
@@ -34,19 +36,36 @@ const ALL = [0, 1, 2, 3];
 const [ann, bob, cy] = HISTORY.players!;
 
 describe('history transforms', () => {
-  it('offers each season once, in the order played, and filters to it', () => {
-    expect(seasonsOf(HISTORY)).toEqual([{ key: 'cast:1', season: 1 }, { key: 'cast:2', season: 2 }]);
+  it('offers each season once, open seasons too, and filters to it', () => {
+    const open = [{ feed: 'cast', season: 3 }, { feed: 'cast', season: 1 }, { feed: null, season: null }];
+    expect(pageSeasons(open, HISTORY)).toEqual([
+      { key: 'cast:1', season: 1, path: 'season/1' },
+      { key: 'cast:2', season: 2, path: 'season/2' },
+      { key: 'cast:3', season: 3, path: 'season/3' },
+    ]);
     expect(episodesIn(HISTORY, 'cast:2')).toEqual([2, 3]);
     expect(episodesIn(HISTORY, null)).toEqual(ALL);
   });
 
-  it('names the feed on a season pill only when two feeds would share a label', () => {
-    const two: History = { episodes: [ep('e1', 1), { ...ep('x1', 1), feed: 'game-of-pods' }] };
-    expect(seasonsOf(two)).toEqual([
-      { key: 'cast:1', season: 1, feed: 'cast' },
-      { key: 'game-of-pods:1', season: 1, feed: 'game-of-pods' },
+  it('names the feed, in the tab and its address, only when two feeds share a season number', () => {
+    const two: History = { episodes: [ep('e1', 1), ep('e2', 2), { ...ep('x1', 1), feed: 'game-of-pods' }] };
+    const seasons = pageSeasons([], two);
+    expect(seasons).toEqual([
+      { key: 'cast:1', season: 1, feed: 'cast', path: 'season/1/cast' },
+      { key: 'cast:2', season: 2, feed: 'cast', path: 'season/2' },
+      { key: 'game-of-pods:1', season: 1, feed: 'game-of-pods', path: 'season/1/game-of-pods' },
     ]);
+    expect(seasonFromRoute(seasons, '1', 'game-of-pods')?.key).toBe('game-of-pods:1');
+    expect(seasonFromRoute(seasons, '2')?.key).toBe('cast:2');
+    expect(seasonFromRoute(seasons, '1')).toBeUndefined();
     expect(feedName('game-of-pods')).toBe('Game of pods');
+  });
+
+  it('reads a record as a ranking, whether the document holds a list or a 0.7.x holder alone', () => {
+    expect(rankingOf([{ count: 2 }, { count: 1 }])).toHaveLength(2);
+    expect(rankingOf({ count: 2 })).toEqual([{ count: 2 }]);
+    expect(rankingOf(null)).toEqual([]);
+    expect(rankingOf(undefined)).toEqual([]);
   });
 
   it('leaves a gap per episode and carries the running total across one sat out', () => {

@@ -258,6 +258,10 @@ final class BingoPublish {
         // An archived bingo was never checked against the feed on this pass; a quiet one was left out already.
         List<BingoSummary> listed = bingos.stream()
                 .filter(b -> !Phase.ARCHIVED.name().equals(b.phase()) || corpus.isPublic(b.slug()))
+                .map(b -> {
+                    DisplaySnapshot snapshot = corpus.visible().get(b.slug());
+                    return snapshot == null ? b : b.in(snapshot.feed(), snapshot.season());
+                })
                 .toList();
         ctx.store().put(Scope.site(), KEY_STATS,
                 new Stats(standings, (int) episodes, listed, now().toString()));

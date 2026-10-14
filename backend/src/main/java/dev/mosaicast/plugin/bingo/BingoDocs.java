@@ -361,13 +361,19 @@ final class BingoDocs {
      * @param players    everyone who played, or {@code null} for an archived bingo, which is never read again
      * @param size       the grid's edge, as the template states it
      * @param freeCentre whether the middle square is a gift; the history needs both to find a card's lines
+     * @param feed       the episode's feed, filled in when the site's {@code stats} are published
+     * @param season     its season, likewise: the page's season tabs and routes come from these
      */
     record BingoSummary(String slug, String title, String phase, Integer players, Integer size,
-                        Boolean freeCentre) {
+                        Boolean freeCentre, String feed, Integer season) {
 
         static BingoSummary of(String slug, Template template, String phase, Integer players) {
             return new BingoSummary(slug, template.title(), phase, players, template.gridSize(),
-                    template.hasFreeCentre());
+                    template.hasFreeCentre(), null, null);
+        }
+
+        BingoSummary in(String feed, Integer season) {
+            return new BingoSummary(slug, title, phase, players, size, freeCentre, feed, season);
         }
     }
 
@@ -497,14 +503,16 @@ final class BingoDocs {
     record LineCount(int lines, int cards) {}
 
     /**
-     * The history's records. Each names a listed player or an episode, or is {@code null}.
+     * The history's records, each a ranking of up to {@code BingoHistory.RECORD_DEPTH}: the holder first,
+     * then the runners-up. Each row names a listed player or an episode; an empty list means nobody holds it.
      *
+     * @param bestCard   each player's best single card, best first
      * @param loneHits   most predictions that came true and that no other card of that bingo had
      * @param nearMisses most cards without a line that were one square short of one
      */
-    record HistoryRecords(CardRecord bestCard, PlayerCount mostCards, PlayerCount longestStreak,
-                          EpisodeRate mostPredictable, EpisodeRate leastPredictable, PlayerCount loneHits,
-                          PlayerCount nearMisses) {}
+    record HistoryRecords(List<CardRecord> bestCard, List<PlayerCount> mostCards, List<PlayerCount> longestStreak,
+                          List<EpisodeRate> mostPredictable, List<EpisodeRate> leastPredictable,
+                          List<PlayerCount> loneHits, List<PlayerCount> nearMisses) {}
 
     /** One player's single best card. */
     record CardRecord(String author, String slug, int fields, int lines, int cells) {}
