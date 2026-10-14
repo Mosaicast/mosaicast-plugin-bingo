@@ -10,6 +10,32 @@ in the three files that carry it.
 
 ## [Unreleased]
 
+## [0.8.0] — which predictions come true, and a quieter claim box
+
+Still built against **`platformApi` 0.19.1**, so it loads on core 0.8.1 and newer; tested on core 0.9.1.
+
+### Added
+- **Prediction lists** on the site page, one at a time and per season: *most reliable* (came true in more
+  than half their bingos), *least reliable* (fewer than half) and *most predicted*. Ranked by the Wilson
+  bound of the hit rate, so "18 of 20" ranks above "3 of 3"; the page shows the plain numbers.
+- **Which squares come true**: the grid with each square's hit rate and count.
+- Two **records**: *lone hits* (correct predictions no other card of that bingo had) and *near misses*
+  (cards without a line that were one square short of one). Like every record, listed players only.
+- Setting **`minPredictionBingos`** (default 3, 2–100): how many bingos a prediction must be on before it
+  is rated. Never lowered for a short season, so one lucky hit cannot top the list.
+
+### Changed
+- A prediction's text is published only where at least two people wrote it, the rule suggestions follow.
+  Late cards, unresolved bingos and unannounced episodes count towards none of the prediction stats.
+- The site-wide grouping of predictions is computed once per roll-up and shared with the suggestions.
+- The *safest prediction* record is gone: the *most reliable* list replaces it and also works per season.
+- The claim box (*Played before this site existed?*) moves to the foot of `/p/bingo/` as one closed line.
+  It opens by itself for someone who has saved a code.
+
+### Fixed
+- An anonymous visitor on `/p/bingo/` no longer triggers a `401` for `…/data/user/me/claim` (#23): the
+  claim box reads the viewer's own partition only once somebody is signed in.
+
 ## [0.7.2] — SDK 0.19.1, for core 0.8.2
 
 Built against **`platformApi` 0.19.1**, a patch of 0.19.0. Core matches `major.minor` only, so it loads on core

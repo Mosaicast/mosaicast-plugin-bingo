@@ -17,7 +17,7 @@ Java 21 (Gradle, PF4J extension) · React 18 + Vite (Web Component) · **platfor
 ```
 ./build.sh                                    # -> dist/{plugin.json,bingo.jar,assets/bingo.es.js}
 cd backend  && ./gradlew test                 # 160 tests
-cd frontend && npm test && npm run typecheck  # 167 tests
+cd frontend && npm test && npm run typecheck  # 168 tests
 node --test scripts/*.test.mjs                # import script (also in CI)
 scripts/set-version.sh <x.y.z>                # bumps the plugin version in all three files
 ```
