@@ -26,15 +26,15 @@ describe('<BingoPage>', () => {
 
   const feeds = () =>
     makeMockFeeds()
-      .withDisplay('ep-1', { title: 'The Kraken', description: '' })
-      .withDisplay('ep-2', { title: 'Merch Special', description: '' });
+      .withDisplay('ep-1', { title: 'The Kraken', description: '', feed: 'cast', season: 1, episodeNo: 1 })
+      .withDisplay('ep-2', { title: 'Merch Special', description: '', feed: 'cast', season: 2, episodeNo: 1 });
 
   const STATS = {
     players: [{ author: 'u1', fields: 9, lines: 3, cards: 2, cells: 18 }],
     episodes: 2,
     bingos: [
-      { slug: 'ep-1', title: 'Bingo', phase: 'RESOLVED', players: 4 },
-      { slug: 'ep-2', title: '', phase: 'OPEN', players: 1 },
+      { slug: 'ep-1', title: 'Bingo', phase: 'RESOLVED', players: 4, feed: 'cast', season: 1 },
+      { slug: 'ep-2', title: '', phase: 'OPEN', players: 1, feed: 'cast', season: 2 },
       // Absent from the feeds double, as an episode this visitor may not see is absent from the host.
       { slug: 'hidden', title: '', phase: 'OPEN', players: 2 },
     ],
@@ -64,7 +64,12 @@ describe('<BingoPage>', () => {
 
   /** The all-time standings come from the history's "all" scope, like every other ranking on the page. */
   const HISTORY = {
-    scopes: { all: { bar: 3, belowBar: 0, bingos: 2, byTotal: [{ author: 'u1', fields: 9, lines: 3, cards: 2, cells: 18 }] } },
+    episodes: [{ slug: 'ep-1', feed: 'cast', season: 1, episodeNo: 1, players: 4, ranked: 4, late: 0, avgFields: 4,
+      avgLines: 1, withLine: 0.5, hitRate: 0.5, candidates: 10 }],
+    scopes: {
+      all: { bar: 3, belowBar: 0, bingos: 2, byTotal: [{ author: 'u1', fields: 9, lines: 3, cards: 2, cells: 18 }] },
+      'cast:1': { bar: 1, belowBar: 0, bingos: 1, byTotal: [{ author: 'u1', fields: 4, lines: 1, cards: 1, cells: 9 }] },
+    },
   };
 
   it('lists the standings and every bingo the visitor may see', async () => {
@@ -74,10 +79,36 @@ describe('<BingoPage>', () => {
     expect(host.textContent).toContain('3 line(s), 9 square(s) over 2 card(s)');
     expect(host.textContent).toContain('The Kraken');
     expect(host.textContent).toContain('Merch Special');
-    expect(host.querySelectorAll('.bingo__list li')).toHaveLength(2);
+    expect(host.querySelectorAll('.bingo__open-card')).toHaveLength(1);
+    expect(host.querySelector('.bingo__open-card')!.textContent).toContain('Open');
+    expect(host.querySelectorAll('.bingo__item')).toHaveLength(1);
 
-    await act(async () => (host.querySelector('.bingo__list a') as HTMLAnchorElement).click());
+    await act(async () => host.querySelector<HTMLAnchorElement>('.bingo__item-link')!.click());
     expect(ctx.navigations).toEqual([{ subpath: 'e/ep-1', replace: false }]);
+  });
+
+  it('filters the whole page by season, open seasons included, behind a real address', async () => {
+    const docs = { 'data/site/main/stats': STATS, 'data/site/main/history': HISTORY };
+    const ctx = await render('', docs);
+    const tabs = () => [...host.querySelectorAll<HTMLAnchorElement>('.bingo__tab-link')];
+    expect(tabs().map((t) => t.textContent)).toEqual(['All', 'Season 1', 'Season 2']);
+    expect(tabs()[0].getAttribute('aria-current')).toBe('page');
+    expect(tabs()[1].getAttribute('href')).toBe('/p/bingo/season/1');
+
+    await act(async () => tabs()[1].click());
+    expect(ctx.navigations).toEqual([{ subpath: 'season/1', replace: false }]);
+
+    await render('season/1', docs);
+    expect(host.textContent).toContain('Standings · Season 1');
+    expect(host.textContent).toContain('1 line(s), 4 square(s) over 1 card(s)');
+    expect(host.querySelectorAll('.bingo__item')).toHaveLength(1);
+    expect(host.querySelector('.bingo__open-card')).toBeNull();
+
+    await render('season/2', docs);
+    expect(host.querySelectorAll('.bingo__open-card')).toHaveLength(1); // a season with only an open bingo has a tab
+
+    await render('season/9', docs);
+    expect(host.textContent).toContain('There is no bingo here.');
   });
 
   it('shows one bingo with a way into the episode', async () => {

@@ -23,8 +23,10 @@ export const ICON_NAMES = [
   'board',
   'check',
   'clock',
+  'close',
   'dice',
   'lock',
+  'search',
   'trophy',
   'warning',
 ] as const;

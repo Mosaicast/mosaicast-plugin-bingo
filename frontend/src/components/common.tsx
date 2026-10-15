@@ -6,11 +6,11 @@ import type { PluginI18n } from '../i18n';
 import { BINGO_CSS } from './styles';
 
 /** Wraps content in the plugin's own stylesheet; the host cannot style inside a shadow root for us. */
-export function Shell({ children }: { children: React.ReactNode }) {
+export function Shell({ children, page = false }: { children: React.ReactNode; page?: boolean }) {
   return (
     <>
       <style>{BINGO_CSS}</style>
-      <div className="bingo bingo--tile">{children}</div>
+      <div className={page ? 'bingo bingo--page' : 'bingo bingo--tile'}>{children}</div>
     </>
   );
 }

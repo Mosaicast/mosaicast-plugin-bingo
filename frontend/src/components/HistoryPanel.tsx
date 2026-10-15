@@ -8,10 +8,9 @@ import {
   MAX_SHOWN,
   defaultSelection,
   episodesIn,
-  feedName,
   scopeKey,
   niceTicks,
-  seasonsOf,
+  rankingOf,
   slotOf,
   standings,
   summary,
@@ -20,14 +19,14 @@ import {
 } from '../history';
 import { Icon } from '../icons';
 import { isDark, seriesColor } from '../palette';
-import type { History, HistoryEpisode, Leaderboard, RankBy } from '../types';
+import type { EpisodeRate, History, HistoryEpisode, Leaderboard, PlayerCount, RankBy } from '../types';
 import { BarChart } from './charts/BarChart';
 import { Legend } from './charts/kit';
 import { LineChart, type LineSeries } from './charts/LineChart';
 import { SquareHeatmap } from './charts/SquareHeatmap';
 import { nameOf } from './common';
 import { PredictionsPanel } from './PredictionsPanel';
-import { RankingPanel } from './RankingPanel';
+import { RecordsPanel, type RecordSpec } from './Records';
 
 /**
  * The site page's history: tiles, form over the season, cards per bingo, how predictable each episode was,
@@ -35,19 +34,22 @@ import { RankingPanel } from './RankingPanel';
  * `mosaicast-plugin-stats`.
  *
  * Everything comes from the backend's `history` document: resolved bingos on public episodes only, a named
- * series only for players who allow being listed. A season pill filters every part at once; a player keeps
- * their colour whatever is filtered, because the colour is their place in the whole history.
+ * series only for players who allow being listed. The page's season tabs filter every part at once; a player
+ * keeps their colour whatever is filtered, because the colour is their place in the whole history.
  */
 export function HistoryPanel({
   ctx,
   i18n,
   history,
+  season,
   snapshots,
   people,
 }: {
   ctx: PluginContext;
   i18n: PluginI18n;
   history: History | null;
+  /** The season the page shows, as a `history.scopes` key; `null` for every bingo. */
+  season: string | null;
   /** Live episode snapshots, for titles; an episode the visitor may not see has none. */
   snapshots: Record<string, DisplaySnapshot>;
   people: Record<string, UserRef>;
@@ -58,12 +60,10 @@ export function HistoryPanel({
   const dark = isDark(ctx.theme as ThemeTokens | undefined);
   const viewer = ctx.user?.id;
 
-  const [season, setSeason] = useState<string | null>(null);
   const [mode, setMode] = useState<FormMode>('total');
   const [picked, setPicked] = useState<string[]>(() => defaultSelection(players, viewer));
   const [table, setTable] = useState(false);
 
-  const seasons = seasonsOf(history);
   const kept = episodesIn(history, season);
   const places = useMemo(() => standings(players, kept, rankBy), [players, kept.join(','), rankBy]); // eslint-disable-line react-hooks/exhaustive-deps
 
@@ -115,30 +115,49 @@ export function HistoryPanel({
   // ---- records
   const scope = history?.scopes?.[scopeKey(season)];
   const records = scope?.records;
-  const seasonLabel = seasons.find((x) => x.key === season);
   const bySlug = (slug: string) => episodes.find((e) => e.slug === slug);
+  const where = (slug: string) => titleIfKnown(bySlug(slug), titleOf);
+
+  // ---- records: each a ranking, holder first; the dialog shows the rest
+  const recordSpecs = (): RecordSpec[] => {
+    const most = rankingOf(records?.mostPredictable);
+    const least = rankingOf(records?.leastPredictable);
+    const players = (id: string, label: string, rows: PlayerCount[], value: (r: PlayerCount) => string): RecordSpec => ({
+      id, label, rows: rows.map((r) => ({ id: r.author, value: value(r), who: name(r.author) })),
+    });
+    const episodesBy = (id: string, label: string, rows: EpisodeRate[]): RecordSpec => ({
+      id, label, rows: rows.map((r) => ({ id: r.slug, value: pct(r.hitRate), where: where(r.slug) })),
+    });
+    return [
+      {
+        id: 'bestCard',
+        label: i18n.t('history.bestCard'),
+        rows: rankingOf(records?.bestCard).map((r) => ({
+          id: r.author,
+          value: i18n.t('history.bestCardValue', { lines: String(r.lines), fields: String(r.fields) }),
+          who: name(r.author),
+          where: where(r.slug),
+        })),
+      },
+      players('mostCards', i18n.t('history.mostCards'), rankingOf(records?.mostCards), (r) => String(r.count)),
+      players('longestStreak', i18n.t('history.longestStreak'), rankingOf(records?.longestStreak),
+        (r) => i18n.t('history.inARow', { count: String(r.count) })),
+      episodesBy('mostPredictable', i18n.t('history.mostPredictable'), most),
+      // With a single bingo the most and the least predictable one are the same episode: say it once.
+      episodesBy('leastPredictable', i18n.t('history.leastPredictable'),
+        least.length === 1 && most[0]?.slug === least[0].slug ? [] : least),
+      players('loneHits', i18n.t('history.loneHits'), rankingOf(records?.loneHits),
+        (r) => i18n.t('history.loneHitsValue', { count: String(r.count) })),
+      players('nearMisses', i18n.t('history.nearMisses'), rankingOf(records?.nearMisses),
+        (r) => i18n.t('history.nearMissesValue', { count: String(r.count) })),
+    ];
+  };
 
   return (
     <section className="bingo__history" aria-label={i18n.t('history.title')}>
       <p className="bingo__section-title">
         <Icon name="board" /> {i18n.t('history.title')}
       </p>
-
-      {seasons.length > 1 && (
-        <div className="bingo__pills" role="group" aria-label={i18n.t('history.season')}>
-          <button type="button" className="bingo__pill" aria-pressed={season === null} onClick={() => setSeason(null)}>
-            {i18n.t('history.all')}
-          </button>
-          {seasons.map((x) => (
-            <button key={x.key} type="button" className="bingo__pill" aria-pressed={season === x.key}
-              onClick={() => setSeason(x.key)}>
-              {x.feed
-                ? i18n.t('history.seasonNFeed', { season: String(x.season), feed: feedName(x.feed) })
-                : i18n.t('history.seasonN', { season: String(x.season) })}
-            </button>
-          ))}
-        </div>
-      )}
 
       <div className="bingo__tiles">
         <Tile label={i18n.t('history.tileBingos')} value={String(s.bingos)} />
@@ -149,20 +168,6 @@ export function HistoryPanel({
         <Tile label={i18n.t('history.tileHitRate')} value={pct(s.hitRate)} sub={i18n.t('history.tileHitRateSub')} />
       </div>
 
-      <p className="bingo__section-title">
-        {seasonLabel
-          ? i18n.t('ranking.season', { season: String(seasonLabel.season) })
-          : i18n.t('ranking.allSeasons')}
-      </p>
-      <RankingPanel
-        key={scopeKey(season)}
-        i18n={i18n}
-        stats={scope}
-        people={people}
-        me={viewer}
-        rankBy={rankBy}
-        label={seasonLabel ? i18n.t('ranking.season', { season: String(seasonLabel.season) }) : i18n.t('ranking.allSeasons')}
-      />
 
       {kept.length < 2 ? (
         <p className="bingo__note">{i18n.t('history.needTwo')}</p>
@@ -196,6 +201,7 @@ export function HistoryPanel({
               invert={mode === 'place'}
               format={(v) => (mode === 'place' ? `#${v}` : num(v))}
               label={i18n.t('history.form')}
+              scrollLabel={i18n.t('chart.scrolls', { chart: i18n.t('history.form') })}
               directLabels={series.length <= 4}
             />
           )}
@@ -227,6 +233,7 @@ export function HistoryPanel({
             ticks={niceTicks(Math.max(1, ...shown.map((e) => e.players)))}
             format={(v) => num(v, 0)}
             label={i18n.t('history.cardsPer')}
+            scrollLabel={i18n.t('chart.scrolls', { chart: i18n.t('history.cardsPer') })}
           />
           <Legend items={cardStacks.map((x) => ({ key: x.key, label: x.label, color: x.color }))} />
 
@@ -238,6 +245,7 @@ export function HistoryPanel({
             ticks={[0, 0.25, 0.5, 0.75, 1]}
             format={pct}
             label={i18n.t('history.predictable')}
+            scrollLabel={i18n.t('chart.scrolls', { chart: i18n.t('history.predictable') })}
             reference={{ value: s.hitRate, label: i18n.t('history.average', { value: pct(s.hitRate) }) }}
           />
         </>
@@ -261,44 +269,7 @@ export function HistoryPanel({
       <PredictionsPanel i18n={i18n} stats={scope?.predictions} />
       <SquareHeatmap i18n={i18n} squares={scope?.squares} />
 
-      <h3 className="bingo__chart-title">{i18n.t('history.records')}</h3>
-      <div className="bingo__records">
-        {records?.bestCard && (
-          <Record label={i18n.t('history.bestCard')}
-            value={i18n.t('history.bestCardValue', {
-              lines: String(records.bestCard.lines), fields: String(records.bestCard.fields),
-            })}
-            who={name(records.bestCard.author)}
-            where={titleIfKnown(bySlug(records.bestCard.slug), titleOf)} />
-        )}
-        {records?.mostCards && (
-          <Record label={i18n.t('history.mostCards')} value={String(records.mostCards.count)}
-            who={name(records.mostCards.author)} />
-        )}
-        {records?.longestStreak && (
-          <Record label={i18n.t('history.longestStreak')}
-            value={i18n.t('history.inARow', { count: String(records.longestStreak.count) })}
-            who={name(records.longestStreak.author)} />
-        )}
-        {records?.mostPredictable && (
-          <Record label={i18n.t('history.mostPredictable')} value={pct(records.mostPredictable.hitRate)}
-            where={titleIfKnown(bySlug(records.mostPredictable.slug), titleOf)} />
-        )}
-        {records?.leastPredictable && records.leastPredictable.slug !== records.mostPredictable?.slug && (
-          <Record label={i18n.t('history.leastPredictable')} value={pct(records.leastPredictable.hitRate)}
-            where={titleIfKnown(bySlug(records.leastPredictable.slug), titleOf)} />
-        )}
-        {records?.loneHits && (
-          <Record label={i18n.t('history.loneHits')}
-            value={i18n.t('history.loneHitsValue', { count: String(records.loneHits.count) })}
-            who={name(records.loneHits.author)} />
-        )}
-        {records?.nearMisses && (
-          <Record label={i18n.t('history.nearMisses')}
-            value={i18n.t('history.nearMissesValue', { count: String(records.nearMisses.count) })}
-            who={name(records.nearMisses.author)} />
-        )}
-      </div>
+      <RecordsPanel i18n={i18n} records={recordSpecs()} />
     </section>
   );
 }
@@ -322,19 +293,6 @@ function Tile({ label, value, sub }: { label: string; value: string; sub?: strin
       <div className="bingo__tile-label">{label}</div>
       <div className="bingo__tile-value">{value}</div>
       {sub && <div className="bingo__tile-sub">{sub}</div>}
-    </div>
-  );
-}
-
-function Record({ label, value, who, where }: { label: string; value: string; who?: string; where?: string }) {
-  return (
-    <div className="bingo__record">
-      <div className="bingo__tile-label">{label}</div>
-      <div className="bingo__record-value">
-        {value}
-        {who && <span className="bingo__record-who"> · {who}</span>}
-      </div>
-      {where && <div className="bingo__tile-sub">{where}</div>}
     </div>
   );
 }

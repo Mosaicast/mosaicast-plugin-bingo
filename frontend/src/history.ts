@@ -1,38 +1,64 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 // SPDX-FileCopyrightText: 2026 The Mosaicast Authors
 
-import type { History, HistoryEpisode, HistoryPoint, PlayerSeries, RankBy } from './types';
+import type { History, HistoryEpisode, HistoryPoint, PlayerSeries, RankBy, Ranked } from './types';
 
 /**
  * Pure transforms over the backend's `history` document, for the site page's charts. No React, no `ctx`:
  * what a chart draws is decided here and tested here.
  */
 
+/** A record's ranking as a list, whichever shape the document holds it in; empty when nobody holds it. */
+export function rankingOf<T>(value: Ranked<T> | undefined): T[] {
+  if (value == null) return [];
+  return Array.isArray(value) ? value : [value];
+}
+
 /** How the form chart reads a player's cards. */
 export type FormMode = 'episode' | 'total' | 'place';
 
-/** A season the filter pills offer: its key, and the number to show. */
-export interface SeasonKey {
+/** One tab of the page's season filter. */
+export interface PageSeason {
+  /** The `history.scopes` key: `<feed>:<season>`. */
   key: string;
   season: number;
-  /** The feed's slug, set only when the history spans more than one feed — "Season 1" alone would be two pills. */
+  /** The feed's slug, set only when the site has more than one feed. */
   feed?: string;
+  /** Where the tab leads, under `/p/bingo/`: `season/<n>`, or `season/<n>/<feed>` where two feeds share the number. */
+  path: string;
 }
 
-/** The seasons present in the history, in the order they were first played. Unnumbered episodes have none. */
-export function seasonsOf(history: History | null): SeasonKey[] {
-  const out: SeasonKey[] = [];
-  const seen = new Set<string>();
-  for (const e of history?.episodes ?? []) {
-    if (e.season == null) continue;
-    const key = seasonKey(e);
-    if (!seen.has(key)) {
-      seen.add(key);
-      out.push({ key, season: e.season, feed: e.feed ?? undefined });
-    }
-  }
-  const feeds = new Set(out.map((s) => s.feed));
-  return feeds.size > 1 ? out : out.map(({ key, season }) => ({ key, season }));
+/**
+ * The seasons the page filters by: every season with a bingo anybody may see — open ones included, so a
+ * new season has its tab from its first bingo on, before anything in it is resolved. Ordered by feed, then
+ * season. The paths match what `BingoPages.hasRoute` accepts.
+ */
+export function pageSeasons(
+  bingos: { feed?: string | null; season?: number | null }[],
+  history: History | null,
+): PageSeason[] {
+  const found = new Map<string, { feed: string; season: number }>();
+  const add = (feed: string | null | undefined, season: number | null | undefined) => {
+    if (season == null) return;
+    found.set(`${feed ?? ''}:${season}`, { feed: feed ?? '', season });
+  };
+  bingos.forEach((b) => add(b.feed, b.season));
+  (history?.episodes ?? []).forEach((e) => add(e.feed, e.season));
+  const all = [...found.entries()].sort(([, a], [, b]) => a.feed.localeCompare(b.feed) || a.season - b.season);
+  const feeds = new Set(all.map(([, v]) => v.feed));
+  const sharing = (n: number) => all.filter(([, v]) => v.season === n).length > 1;
+  return all.map(([key, v]) => ({
+    key,
+    season: v.season,
+    feed: feeds.size > 1 ? v.feed : undefined,
+    path: sharing(v.season) ? `season/${v.season}/${encodeURIComponent(v.feed)}` : `season/${v.season}`,
+  }));
+}
+
+/** The tab a `season/:n[/:feed]` route names, if there is one. */
+export function seasonFromRoute(seasons: PageSeason[], n: string, feed?: string): PageSeason | undefined {
+  const path = feed ? `season/${n}/${encodeURIComponent(feed)}` : `season/${n}`;
+  return seasons.find((s) => s.path === path);
 }
 
 /** A feed slug, readable: "game-of-pods" → "Game of pods". The SDK hands a plugin no feed titles. */

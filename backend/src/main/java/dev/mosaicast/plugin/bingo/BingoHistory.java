@@ -223,7 +223,7 @@ final class BingoHistory {
         Comparator<BingoScore.Score> ordering = BingoScore.ordering(rankBy);
         List<StandingRow> totals = new ArrayList<>();
         Map<String, List<Point>> inScope = new LinkedHashMap<>();
-        CardRecord best = null;
+        List<CardRecord> bestCards = new ArrayList<>();
         for (Map.Entry<String, List<Point>> e : pointsBy.entrySet()) {
             List<Point> mine = e.getValue().stream().filter(p -> position.containsKey(p.e())).toList();
             if (mine.isEmpty()) {
@@ -233,6 +233,7 @@ final class BingoHistory {
             int f = 0;
             int l = 0;
             int c = 0;
+            CardRecord best = null;
             for (Point p : mine) {
                 f += p.f();
                 l += p.l();
@@ -242,8 +243,12 @@ final class BingoHistory {
                     best = new CardRecord(e.getKey(), episodes.get(p.e()).slug(), p.f(), p.l(), cells[p.e()]);
                 }
             }
+            bestCards.add(best);
             totals.add(new StandingRow(e.getKey(), f, l, mine.size(), c));
         }
+        // Each player's own best card, so the ranking is of players: one lucky season cannot fill it alone.
+        bestCards.sort(((Comparator<CardRecord>) (a, b) -> ordering.compare(scoreOf(a), scoreOf(b)))
+                .thenComparing(CardRecord::author));
 
         List<StandingRow> byTotal = totals.stream()
                 .sorted(((Comparator<StandingRow>) (a, b) -> ordering.compare(a.asScore(), b.asScore()))
@@ -272,61 +277,55 @@ final class BingoHistory {
         Map<String, Input> inputs = new HashMap<>();
         indices.forEach(i -> inputs.put(insights.ordered().get(i).slug(), insights.ordered().get(i)));
         Function<String, Integer> sizeOf = slug -> inputs.get(slug).gridSize();
-        HistoryRecords records = records(scoped, inScope, position, best,
-                mostOf(BingoInsights.loneHits(ranked), insights.listed()),
-                mostOf(BingoInsights.nearMisses(ranked, sizeOf, slug -> inputs.get(slug).hasFreeCentre()),
+        HistoryRecords records = records(scoped, inScope, position, top(bestCards),
+                topOf(BingoInsights.loneHits(ranked), insights.listed()),
+                topOf(BingoInsights.nearMisses(ranked, sizeOf, slug -> inputs.get(slug).hasFreeCentre()),
                         insights.listed()));
         return new ScopeStats(byTotal, byAverage, bar, belowBar, records, indices.size(),
                 BingoInsights.predictions(ranked, insights.sites(), insights.floor()),
                 BingoInsights.squares(ranked, sizeOf));
     }
 
-    /** The listed player with the highest count, ties to the first author; {@code null} if nobody has one. */
-    private static PlayerCount mostOf(Map<String, Integer> counts, Predicate<String> listed) {
-        PlayerCount most = null;
-        for (Map.Entry<String, Integer> e : counts.entrySet()) {
-            if (!listed.test(e.getKey()) || e.getValue() <= 0) {
-                continue;
-            }
-            if (most == null || e.getValue() > most.count()
-                    || (e.getValue() == most.count() && e.getKey().compareTo(most.author()) < 0)) {
-                most = new PlayerCount(e.getKey(), e.getValue());
-            }
-        }
-        return most;
+    /** How deep each record's ranking goes: the holder and the runners-up behind them. */
+    static final int RECORD_DEPTH = 10;
+
+    /**
+     * The listed players with the highest counts, best first, ties to the first author; nobody without one.
+     */
+    private static List<PlayerCount> topOf(Map<String, Integer> counts, Predicate<String> listed) {
+        return top(counts.entrySet().stream()
+                .filter(e -> listed.test(e.getKey()) && e.getValue() > 0)
+                .map(e -> new PlayerCount(e.getKey(), e.getValue()))
+                .sorted(Comparator.comparingInt(PlayerCount::count).reversed().thenComparing(PlayerCount::author))
+                .toList());
+    }
+
+    private static <T> List<T> top(List<T> ranked) {
+        return List.copyOf(ranked.subList(0, Math.min(RECORD_DEPTH, ranked.size())));
     }
 
     private static HistoryRecords records(List<HistoryEpisode> episodes, Map<String, List<Point>> pointsBy,
-                                          Map<Integer, Integer> position, CardRecord best, PlayerCount loneHits,
-                                          PlayerCount nearMisses) {
-        PlayerCount mostCards = null;
-        PlayerCount longestStreak = null;
+                                          Map<Integer, Integer> position, List<CardRecord> bestCards,
+                                          List<PlayerCount> loneHits, List<PlayerCount> nearMisses) {
+        Map<String, Integer> cards = new HashMap<>();
+        Map<String, Integer> streaks = new HashMap<>();
         for (Map.Entry<String, List<Point>> e : pointsBy.entrySet()) {
-            int cards = e.getValue().size();
-            if (mostCards == null || cards > mostCards.count()
-                    || (cards == mostCards.count() && e.getKey().compareTo(mostCards.author()) < 0)) {
-                mostCards = new PlayerCount(e.getKey(), cards);
-            }
-            int streak = streakOf(e.getValue(), position);
-            if (streak > 0 && (longestStreak == null || streak > longestStreak.count()
-                    || (streak == longestStreak.count() && e.getKey().compareTo(longestStreak.author()) < 0))) {
-                longestStreak = new PlayerCount(e.getKey(), streak);
-            }
+            cards.put(e.getKey(), e.getValue().size());
+            streaks.put(e.getKey(), streakOf(e.getValue(), position));
         }
-        EpisodeRate most = null;
-        EpisodeRate least = null;
-        for (HistoryEpisode ep : episodes) {
-            if (ep.candidates() == 0) {
-                continue;
-            }
-            if (most == null || ep.hitRate() > most.hitRate()) {
-                most = new EpisodeRate(ep.slug(), ep.hitRate());
-            }
-            if (least == null || ep.hitRate() < least.hitRate()) {
-                least = new EpisodeRate(ep.slug(), ep.hitRate());
-            }
-        }
-        return new HistoryRecords(best, mostCards, longestStreak, most, least, loneHits, nearMisses);
+        // pointsBy holds listed players only, so every name here may be shown.
+        List<EpisodeRate> rates = episodes.stream()
+                .filter(ep -> ep.candidates() > 0)
+                .map(ep -> new EpisodeRate(ep.slug(), ep.hitRate()))
+                .toList();
+        List<EpisodeRate> most = rates.stream()
+                .sorted(Comparator.comparingDouble(EpisodeRate::hitRate).reversed().thenComparing(EpisodeRate::slug))
+                .toList();
+        List<EpisodeRate> least = rates.stream()
+                .sorted(Comparator.comparingDouble(EpisodeRate::hitRate).thenComparing(EpisodeRate::slug))
+                .toList();
+        return new HistoryRecords(bestCards, topOf(cards, a -> true), topOf(streaks, a -> true), top(most),
+                top(least), loneHits, nearMisses);
     }
 
     /**

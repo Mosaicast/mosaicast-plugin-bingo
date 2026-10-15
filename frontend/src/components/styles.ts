@@ -34,6 +34,24 @@ export const BINGO_CSS =
   }
   .bingo *, .bingo *::before, .bingo *::after { box-sizing: border-box; }
 
+  /* The /p/bingo/ page: centred like the stats page, its title and season tabs above one card. */
+  .bingo--page { box-sizing: border-box; max-width: 1080px; margin: 0 auto; padding: 24px 16px 48px; }
+  .bingo__page-head { margin-bottom: .75rem; }
+  .bingo__page-title { font-size: 1.6rem; margin: 0 0 .25rem; display: flex; align-items: center; gap: .5rem; }
+  .bingo__panel {
+    background: var(--mc-surface); border: 1px solid var(--mc-border); border-radius: .75rem; padding: 1.25rem;
+  }
+  .bingo__tabs-nav { display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: .75rem; }
+  .bingo__tab-link {
+    display: inline-flex; align-items: center; min-height: 32px; padding: 3px 12px; border-radius: 999px;
+    border: 1px solid var(--mc-border); color: var(--mc-text); text-decoration: none; font-size: .875rem;
+  }
+  .bingo__tab-link:hover { border-color: var(--mc-accent-text); }
+  .bingo__tab-link[aria-current="page"] {
+    background: var(--mc-accent); color: var(--mc-accent-contrast); border-color: var(--mc-accent);
+  }
+  .bingo__tab-link:focus-visible { outline: 2px solid var(--mc-accent-text); outline-offset: 1px; }
+
   .bingo__head { display: flex; flex-wrap: wrap; align-items: baseline; gap: .5rem; margin-bottom: .75rem; }
   .bingo__title { font-weight: 600; margin: 0; }
   .bingo__phase {
@@ -236,6 +254,17 @@ export const BINGO_CSS =
   .bingo__chart-title { font-size: 1rem; margin: .75rem 0 .25rem; }
   .bingo__chart-head .bingo__chart-title { margin: 0; }
   .bingo__chart { position: relative; }
+  /* width 0 + min-width 100%: a wide chart scrolls inside its frame instead of widening the page. Only a
+     frame whose chart overflows scrolls, so a chart that fits keeps its tooltips unclipped. */
+  .bingo__chart-box { position: relative; }
+  .bingo__chart-axis {
+    position: absolute; left: 0; top: 0; z-index: 1; pointer-events: none;
+    background: linear-gradient(to right, var(--mc-surface) 85%, transparent);
+  }
+  .bingo__chart-axis svg { display: block; overflow: visible; }
+  .bingo__chart-scroll { width: 0; min-width: 100%; }
+  .bingo__chart-scroll--on { overflow-x: auto; scrollbar-width: thin; padding-bottom: 4px; }
+  .bingo__chart-scroll:focus-visible { outline: 2px solid var(--mc-accent-text); outline-offset: 2px; }
   .bingo__chart svg { display: block; width: 100%; height: auto; overflow: visible; }
   .bingo__grid-line { stroke: var(--mc-border); stroke-width: 1; }
   .bingo__axis { fill: var(--mc-text-muted); font-size: 11px; font-variant-numeric: tabular-nums; }
@@ -276,6 +305,65 @@ export const BINGO_CSS =
   .bingo__heat--top { border: 2px solid var(--mc-accent-text); }
   .bingo__heat-value { font-weight: 600; font-variant-numeric: tabular-nums; }
   .bingo__heat-sub { font-size: .72rem; color: var(--mc-text-muted); }
+  /* The bingo list: open ones as cards, past ones by season. */
+  .bingo__bingos { display: flex; flex-direction: column; gap: .5rem; margin-top: 1rem; }
+  .bingo__search { display: flex; align-items: center; gap: .4rem; max-width: 24rem; color: var(--mc-text-muted); }
+  .bingo__search .bingo__input { flex: 1; min-width: 0; }
+  .bingo__open { list-style: none; margin: 0; padding: 0; display: grid; gap: 10px;
+    grid-template-columns: repeat(auto-fill, minmax(min(100%, 15rem), 1fr)); }
+  .bingo__open-card {
+    display: flex; flex-direction: column; gap: .3rem; padding: .75rem; min-width: 0;
+    border: 1px solid var(--mc-border); border-radius: .6rem; background: var(--mc-bg);
+  }
+  .bingo__open-card .bingo__btn { align-self: flex-start; margin-top: auto; text-decoration: none; }
+  .bingo__open-top { display: flex; align-items: center; justify-content: space-between; gap: .5rem; }
+  .bingo__chip-state {
+    display: inline-flex; align-items: center; gap: .3rem; font-size: .75rem; padding: 1px 8px; white-space: nowrap;
+    border-radius: 999px; border: 1px solid var(--mc-border); color: var(--mc-text-muted);
+  }
+  .bingo__chip-state--open { border-color: var(--mc-accent-text); color: var(--mc-accent-text); }
+  .bingo__items { list-style: none; margin: 0; padding: 0; }
+  .bingo__item {
+    display: flex; flex-wrap: wrap; align-items: baseline; justify-content: space-between; gap: 2px 12px;
+    padding: .4rem 0; border-bottom: 1px solid var(--mc-border); min-width: 0;
+  }
+  .bingo__item:last-child { border-bottom: 0; }
+  .bingo__item-link { display: inline-flex; align-items: baseline; gap: .5rem; color: var(--mc-text); min-width: 0;
+    text-decoration: none; }
+  .bingo__item-link:hover .bingo__item-title { color: var(--mc-accent-text); text-decoration: underline; }
+  .bingo__item-link:focus-visible { outline: 2px solid var(--mc-accent-text); outline-offset: 2px; }
+  .bingo__item-title { overflow-wrap: anywhere; }
+  .bingo__item-meta { font-size: .8125rem; color: var(--mc-text-muted); }
+  .bingo__code { font-size: .75rem; font-variant-numeric: tabular-nums; color: var(--mc-text-muted); white-space: nowrap; }
+  .bingo__group { border: 1px solid var(--mc-border); border-radius: .6rem; padding: 0 .75rem; }
+  .bingo__group-summary {
+    display: flex; flex-wrap: wrap; align-items: baseline; gap: 4px 12px; cursor: pointer; padding: .55rem 0;
+    list-style: none;
+  }
+  .bingo__group-summary::-webkit-details-marker { display: none; }
+  /* A flex summary loses the browser's own marker, so it draws one: right while folded, down while open. */
+  .bingo__group-summary::before {
+    content: ''; align-self: center; width: .45rem; height: .45rem; margin-right: .1rem;
+    border-right: 2px solid var(--mc-text-muted); border-bottom: 2px solid var(--mc-text-muted);
+    transform: rotate(-45deg); transition: transform .15s;
+  }
+  .bingo__group[open] > .bingo__group-summary::before { transform: rotate(45deg); }
+  @media (prefers-reduced-motion: reduce) { .bingo__group-summary::before { transition: none; } }
+  .bingo__group-summary:focus-visible { outline: 2px solid var(--mc-accent-text); outline-offset: 2px; }
+  .bingo__group-title { font-weight: 600; }
+  .bingo__group[open] .bingo__group-summary { border-bottom: 1px solid var(--mc-border); }
+
+  /* A record's ranking, as a modal dialog. */
+  .bingo__dialog {
+    border: 1px solid var(--mc-border); border-radius: .75rem; padding: 0; background: var(--mc-surface);
+    color: var(--mc-text); width: min(36rem, calc(100vw - 32px)); max-height: calc(100vh - 64px);
+  }
+  .bingo__dialog::backdrop { background: rgb(0 0 0 / .45); }
+  .bingo__dialog-body { padding: 1rem 1.1rem 1.1rem; }
+  .bingo__dialog-head { display: flex; align-items: center; justify-content: space-between; gap: .5rem; }
+  .bingo__dialog-head .bingo__chart-title { margin: 0; }
+  .bingo__table-first td, .bingo__table-first th { background: color-mix(in srgb, var(--mc-accent) 8%, transparent); }
+  .bingo__table th[scope="row"], .bingo__table .bingo__table-text { text-align: left; white-space: normal; }
   .bingo__table-wrap { overflow-x: auto; }
   .bingo__table { border-collapse: collapse; font-size: .85rem; width: 100%; }
   .bingo__table th, .bingo__table td { padding: 4px 8px; border-bottom: 1px solid var(--mc-border); text-align: right; white-space: nowrap; }

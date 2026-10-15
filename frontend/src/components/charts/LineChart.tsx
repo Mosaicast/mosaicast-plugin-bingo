@@ -2,7 +2,7 @@
 // SPDX-FileCopyrightText: 2026 The Mosaicast Authors
 
 import { useState } from 'react';
-import { PAD, tipBeside, useWidth } from './kit';
+import { ChartFrame, PAD, YAxis, minChartWidth, tipBeside, useWidth } from './kit';
 
 /** One line on the chart. `values` is aligned with the chart's x positions; `null` leaves a gap. */
 export interface LineSeries {
@@ -32,6 +32,7 @@ export function LineChart({
   invert = false,
   label,
   directLabels,
+  scrollLabel,
 }: {
   xLabels: string[];
   /** The full name of each x position, for the tooltip and keyboard focus. */
@@ -44,15 +45,18 @@ export function LineChart({
   label: string;
   /** Names at the line ends; worth it for a few lines, noise past four. */
   directLabels: boolean;
+  /** What the frame says once it scrolls sideways; `label` when left out. */
+  scrollLabel?: string;
 }) {
-  const [ref, width] = useWidth<HTMLDivElement>();
+  const [ref, room] = useWidth<HTMLDivElement>();
   const [hover, setHover] = useState<number | null>(null);
   const n = xLabels.length;
   if (n === 0) return null;
 
   // A phone has no room for names beside the plot; the legend below carries them there.
-  const wantLabels = directLabels && width >= 480;
+  const wantLabels = directLabels && room >= 480;
   const right = PAD.right + (wantLabels ? 96 : 0);
+  const width = Math.max(room, minChartWidth(n, wantLabels ? 96 : 0));
   const plotW = Math.max(80, width - PAD.left - right);
   const plotH = HEIGHT - PAD.top - PAD.bottom;
   const band = plotW / n;
@@ -94,7 +98,8 @@ export function LineChart({
   const labelled = wantLabels && apart;
 
   return (
-    <div className="bingo__chart" ref={ref}>
+    <ChartFrame frameRef={ref} width={width} scrolls={width > room} label={scrollLabel ?? label}
+      axis={<YAxis ticks={ticks} y={y} format={format} height={HEIGHT} />}>
       <svg viewBox={`0 0 ${width} ${HEIGHT}`} role="img" aria-label={label}>
         {ticks.map((t) => (
           <g key={t}>
@@ -165,6 +170,6 @@ export function LineChart({
             ))}
         </div>
       )}
-    </div>
+    </ChartFrame>
   );
 }

@@ -2,7 +2,7 @@
 // SPDX-FileCopyrightText: 2026 The Mosaicast Authors
 
 import { useState } from 'react';
-import { PAD, roundedTop, tipBeside, useWidth } from './kit';
+import { ChartFrame, PAD, YAxis, minChartWidth, roundedTop, tipBeside, useWidth } from './kit';
 
 /** One layer of the bars: drawn bottom up in the order given. */
 export interface BarStack {
@@ -29,6 +29,7 @@ export function BarChart({
   format,
   label,
   reference,
+  scrollLabel,
 }: {
   xLabels: string[];
   xTitles: string[];
@@ -38,11 +39,14 @@ export function BarChart({
   label: string;
   /** A horizontal line across the plot, e.g. the average, with its own label. */
   reference?: { value: number; label: string };
+  /** What the frame says once it scrolls sideways; `label` when left out. */
+  scrollLabel?: string;
 }) {
-  const [ref, width] = useWidth<HTMLDivElement>();
+  const [ref, room] = useWidth<HTMLDivElement>();
   const [hover, setHover] = useState<number | null>(null);
   const n = xLabels.length;
   if (n === 0) return null;
+  const width = Math.max(room, minChartWidth(n));
 
   const plotW = Math.max(80, width - PAD.left - PAD.right);
   const plotH = HEIGHT - PAD.top - PAD.bottom;
@@ -53,7 +57,8 @@ export function BarChart({
   const labelEvery = Math.max(1, Math.ceil(40 / band));
 
   return (
-    <div className="bingo__chart" ref={ref}>
+    <ChartFrame frameRef={ref} width={width} scrolls={width > room} label={scrollLabel ?? label}
+      axis={<YAxis ticks={ticks} y={y} format={format} height={HEIGHT} />}>
       <svg viewBox={`0 0 ${width} ${HEIGHT}`} role="img" aria-label={label}>
         {ticks.map((t) => (
           <g key={t}>
@@ -133,6 +138,6 @@ export function BarChart({
           ))}
         </div>
       )}
-    </div>
+    </ChartFrame>
   );
 }
