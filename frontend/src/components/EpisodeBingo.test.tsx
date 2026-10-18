@@ -78,7 +78,7 @@ describe('<EpisodeBingo>', () => {
       ),
     );
 
-    expect(host.textContent).toContain('applied on the next pass');
+    expect(host.textContent).toContain('on the next update');
     const lock = [...host.querySelectorAll('button')].find((b) => b.textContent?.includes('Closing'));
     expect(lock).toBeDefined();
     expect((lock as HTMLButtonElement).disabled).toBe(true);
@@ -618,7 +618,7 @@ describe('<EpisodeBingo>', () => {
       ),
     );
 
-    expect(host.textContent).toContain('will not count towards the leaderboard');
+    expect(host.textContent).toContain("won't count for the leaderboard");
   });
 
   it('stops offering an edit once the card is frozen', async () => {
@@ -636,7 +636,7 @@ describe('<EpisodeBingo>', () => {
     );
 
     expect(host.querySelector('textarea')).toBeNull();
-    expect(host.textContent).toContain('Your card is frozen');
+    expect(host.textContent).toContain('your card counts as it is');
   });
 
   it('lets a latecomer hand a card in exactly once, and says it is final', async () => {
@@ -652,7 +652,7 @@ describe('<EpisodeBingo>', () => {
 
     expect(host.querySelector('textarea')).not.toBeNull();
     expect(host.textContent).toContain('Hand in my bingo');
-    expect(host.textContent).toContain('cannot be changed afterwards');
+    expect(host.textContent).toContain("you can't change it afterwards");
   });
 
   it('offers no card at all to a latecomer when late entries are off', async () => {
@@ -753,7 +753,7 @@ describe('<EpisodeBingo>', () => {
     await render(ctxWith(BOARD, { ...heardIt, users: makeMockUsers({ u2: 'Alice' }) }));
 
     expect(host.textContent).toContain('Alice');
-    expect(host.textContent).toContain('Former listener');
+    expect(host.textContent).toContain('Former player');
     expect(host.textContent).toContain('7/9 fields');
   });
 
@@ -824,7 +824,7 @@ describe('<EpisodeBingo>', () => {
     expect(mine, 'their own row is drawn even though the board never published it').toBeDefined();
     // The directory was never asked about them — their id is on no published row — but `ctx.user` says.
     expect(mine?.textContent).toContain('Ned');
-    expect(mine?.textContent).not.toContain('Former listener');
+    expect(mine?.textContent).not.toContain('Former player');
   });
 
   it('does not place a reader who never handed a card in', async () => {
@@ -849,7 +849,7 @@ describe('<EpisodeBingo>', () => {
     // `ctx.users` is null unless the manifest declares an identity block, and null in the mock by default.
     await render(ctxWith(BOARD, heardIt));
 
-    expect(host.textContent).toContain('Former listener');
+    expect(host.textContent).toContain('Former player');
     expect(host.textContent).toContain('6/9 fields');
   });
 

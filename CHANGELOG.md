@@ -10,6 +10,16 @@ in the three files that carry it.
 
 ## [Unreleased]
 
+## [0.9.1] — wording
+
+Still built against **`platformApi` 0.19.1**.
+
+### Changed
+- **Every player and podcaster text follows the suite's writing guide.** Shorter, plainer English and German,
+  no dashes between clauses, no explanations a player doesn't act on, contractions in English, neutral
+  German words where the text was gendered. The settings descriptions in `plugin.json` too. Keys and
+  placeholders are unchanged.
+
 ## [0.9.0] — season tabs, and a page built for a long history
 
 Still built against **`platformApi` 0.19.1**, so it loads on core 0.8.1 and newer; tested on core 0.9.1.

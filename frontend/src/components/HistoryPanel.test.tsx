@@ -134,7 +134,7 @@ describe('<HistoryPanel>', () => {
   it('switches between per episode, running total and place, and offers a table', async () => {
     await render();
     await act(async () => button('Place').click());
-    expect(host.textContent).toContain('Standing after each bingo');
+    expect(host.textContent).toContain('Place after each bingo');
 
     await act(async () => button('Show as table').click());
     const rows = [...host.querySelectorAll('.bingo__table tbody tr')];
