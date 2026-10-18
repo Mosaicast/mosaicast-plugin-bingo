@@ -1,6 +1,6 @@
 {
   "id": "bingo",
-  "version": "0.9.0",
+  "version": "0.9.1",
   "platformApi": "0.19.1",
   "name": "Bingo",
   "license": "AGPL-3.0-or-later",
@@ -118,8 +118,8 @@
       "step": 1,
       "label": { "en": "Update interval (seconds)", "de": "Aktualisierungsintervall (Sekunden)" },
       "description": {
-        "en": "How often cards are collected and scores recomputed, from 10 to 3600. A saved change applies within one old interval.",
-        "de": "Wie oft Karten eingesammelt und Punkte neu berechnet werden, von 10 bis 3600. Eine gespeicherte Änderung greift innerhalb eines alten Intervalls."
+        "en": "How often cards are collected and scores recomputed, from 10 to 3600. Changes apply within one interval.",
+        "de": "Wie oft Karten eingesammelt und Punkte neu berechnet werden, von 10 bis 3600. Änderungen greifen innerhalb eines Intervalls."
       }
     },
     "fuzzyThreshold": {
@@ -141,7 +141,7 @@
       "editableBy": "podcaster",
       "label": { "en": "Default grid", "de": "Standard-Raster" },
       "description": {
-        "en": "Used for a bingo whose template does not state a size.",
+        "en": "Used for a bingo whose template doesn't set a size.",
         "de": "Gilt für ein Bingo, dessen Vorlage keine Größe angibt."
       },
       "options": [
@@ -182,8 +182,8 @@
       "step": 1,
       "label": { "en": "Cards for the per-card ranking", "de": "Karten für die Wertung pro Karte" },
       "description": {
-        "en": "How many cards someone needs before the per-card ranking places them, so one lucky card cannot lead for good. A season with fewer bingos asks for all of them.",
-        "de": "Wie viele Karten jemand braucht, bevor die Wertung pro Karte ihn platziert, damit nicht eine einzige Glückskarte dauerhaft führt. Eine Staffel mit weniger Bingos verlangt alle."
+        "en": "How many cards someone needs to be ranked per card, so one lucky card can't lead for good. In a season with fewer bingos, they need all of them.",
+        "de": "Wie viele Karten jemand für die Wertung pro Karte braucht, damit keine einzelne Glückskarte dauerhaft führt. In einer Staffel mit weniger Bingos braucht es alle."
       }
     },
     "minPredictionBingos": {
@@ -195,8 +195,8 @@
       "step": 1,
       "label": { "en": "Bingos before a prediction is rated", "de": "Bingos, bevor eine Vorhersage bewertet wird" },
       "description": {
-        "en": "How many bingos a prediction must appear on before the site page lists it as reliable or unreliable, so one lucky hit cannot top the list. It must also have been written by at least two people.",
-        "de": "Auf wie vielen Bingos eine Vorhersage stehen muss, bevor die Seite sie als zuverlässig oder unzuverlässig führt, damit ein einzelner Glückstreffer nicht die Liste anführt. Außerdem müssen sie mindestens zwei Personen geschrieben haben."
+        "en": "How many bingos a prediction must be on before it's rated reliable or unreliable. At least two people must have written it, too.",
+        "de": "Auf wie vielen Bingos eine Vorhersage stehen muss, bevor sie als zuverlässig oder unzuverlässig gilt. Außerdem müssen sie mindestens zwei Personen geschrieben haben."
       }
     },
     "rankBy": {
