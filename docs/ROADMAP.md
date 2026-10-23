@@ -10,13 +10,6 @@ specs. This file is repo-local and is updated as items move.
 
 ## Waiting on the platform
 
-### Personal history ("your last bingos")
-The only path today is a browser schema read filtered by the viewer's own author id, which works only
-*because* of the leak above. The backend also can't write into a `USER` partition (`DocStore` throws on
-that scope). So there is nowhere private to publish a person's own history to them.
-- Needs either a backend-writable, owner-readable per-user document, or schema reads that core filters by
-  row owner.
-
 ### A "closes on …" deadline on the feed badge
 The badge now says "Predict before it airs" for an announced episode, but it can't give a date. The SDK
 carries `announceAt` and no scheduled release instant: a release happens when the feed item arrives.
@@ -24,10 +17,17 @@ carries `announceAt` and no scheduled release instant: a release happens when th
 
 ## Not needed yet
 
+### Personal history ("your last bingos")
+Possible since `platformApi` 0.20.0: an action answers for its caller only, so a `my-history` action could
+read the caller's own rows and return them, with nothing published anywhere. Before that there was nowhere
+private to put a person's own history.
+- Cost: one action, a panel on the site page, and tests for "only your own rows".
+
 ### Live tick-off
-While a podcaster ticks answers off, viewers see the result only on their next read. Live updates would
-need polling or a push channel, and they would have to respect the spoiler cover (`ctx.progress` is
-per-device). Not needed for now.
+While a podcaster ticks answers off, viewers see the result only on their next read. Draft rounds brought
+channels (`platformApi` 0.20.0), so the push side exists now; it would still have to respect the spoiler
+cover (`ctx.progress` is per-device) and stay within the rule that nothing public reflects an unresolved
+score. Not needed for now.
 
 ### Backend enforcement of duplicate squares
 The card editor stops a player saving the same prediction twice, but only in the browser. A direct write

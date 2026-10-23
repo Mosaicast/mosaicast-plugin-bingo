@@ -103,3 +103,21 @@ export const KEY_IMPORTS = 'imports';
 
 /** A player's claim codes for imported bingos, in their own partition. */
 export const KEY_CLAIM = 'claim';
+
+/**
+ * Which draft round a player sits in for an episode, in their own partition: `seat:<episodeSlug>`.
+ *
+ * The `draft-join` action writes it for the player's tile, which then shows the round's card instead of the
+ * editor. Only a hint: the backend never reads it, and the tile drops it once the round is cancelled.
+ */
+export function seatKey(episodeSlug: string): string {
+  return `seat:${episodeSlug}`;
+}
+
+/** The site-scope channel that brings a signed-in person their invites as they happen. */
+export const CHANNEL_INBOX = 'inbox';
+
+/** One draft round's channel, in the site scope. Members only, by the backend's authorizer. */
+export function draftChannel(id: string): string {
+  return `draft:${id}`;
+}

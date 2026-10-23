@@ -1,7 +1,7 @@
 {
   "id": "bingo",
-  "version": "0.9.1",
-  "platformApi": "0.19.1",
+  "version": "0.10.0",
+  "platformApi": "0.20.0",
   "name": "Bingo",
   "license": "AGPL-3.0-or-later",
   "author": "The Mosaicast Authors",
@@ -95,7 +95,29 @@
       "notified",
       "participants",
       "showcased"
-    ]
+    ],
+    "backendPrivate": ["draft:*"]
+  },
+  "actions": {
+    "callableBy": "fan",
+    "names": {
+      "draft-create": { "callableBy": "podcaster" },
+      "draft-setup": { "callableBy": "podcaster" },
+      "draft-players": { "callableBy": "podcaster" },
+      "draft-invite": { "callableBy": "podcaster" },
+      "draft-start": { "callableBy": "podcaster" },
+      "draft-cancel": { "callableBy": "podcaster" },
+      "draft-end": { "callableBy": "podcaster" },
+      "draft-join": {},
+      "draft-decline": {},
+      "draft-state": {},
+      "draft-move": {},
+      "draft-vote": {},
+      "draft-inbox": {}
+    }
+  },
+  "channels": {
+    "subscribableBy": "fan"
   },
   "tags": {
     "readsVocabulary": true,

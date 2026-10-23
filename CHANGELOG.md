@@ -10,6 +10,33 @@ in the three files that carry it.
 
 ## [Unreleased]
 
+## [0.10.0] — draft rounds
+
+Built against **`platformApi` 0.20.0**, so it needs **core 0.10.0 or newer**. Core matches `major.minor`, so a
+0.19 core rejects this build, and this plugin's 0.9.x builds don't load on core 0.10. Tested on core 0.11.1.
+
+### Added
+- **Draft rounds**: a podcaster or admin opens a round on an episode, invites people of any role, and the
+  players fill their cards one square per turn while everyone watches. Each square reaches everyone within
+  a second. The round's page is `/p/bingo/draft/<id>`, the reader's rounds are on `/p/bingo/draft`, and the
+  bingo page shows a box only to people who have one. See the README's *Draft rounds*.
+  - Turn order by drag and drop, and an optional chess clock: a limit per turn, a time bank, and time added
+    per square. A skipped turn is made up at the end; a player out of bank finishes alone, or in an
+    overtime with the others who ran out.
+  - Duplicate check, on by default: a square close to one on another card goes to a 30 second vote.
+  - Invites by notification to people who have played bingo here, and an invite link for everyone else.
+    A quiet episode's round takes podcasters and admins only.
+  - Finished cards are ordinary cards on the episode. While someone sits in a round, their tile shows that
+    card with no editor.
+- `data.backendPrivate` (`draft:*`), the `actions` block (13 names, the ones that run a round floored to
+  podcaster) and the `channels` block in `plugin.json`.
+
+### Changed
+- **SDK 0.20.0** in all four places CI compares.
+- The Java SDK comes from **Maven Central**. The GitHub Packages repository, and the token CI passed to it,
+  are gone.
+- `docs/ARCHITECTURE.md` is core 0.11.1's copy, which adds §7.9 (realtime actions and channels).
+
 ## [0.9.1] — wording
 
 Still built against **`platformApi` 0.19.1**.

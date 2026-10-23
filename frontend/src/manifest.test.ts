@@ -158,4 +158,20 @@ describe('plugin.json', () => {
     }
     expect(config.minCardsPerCard).toMatchObject({ default: 3, min: 1, editableBy: 'podcaster' });
   });
+
+  it('keeps draft rounds from every client, and starts them from podcasters only', () => {
+    // A round in progress holds every card and the invite code: no client reads it raw, admins included.
+    expect(manifest.data.backendPrivate).toEqual(['draft:*']);
+    // A seat lives in a player's own partition, where no per-key rule applies; nothing to reserve there.
+    expect(manifest.data.backendOwned).not.toContain('seat:*');
+    const names = manifest.actions.names as Record<string, { callableBy?: string }>;
+    expect(manifest.actions.callableBy).toBe('fan');
+    for (const name of ['draft-create', 'draft-setup', 'draft-players', 'draft-invite', 'draft-start', 'draft-cancel', 'draft-end']) {
+      expect(names[name]?.callableBy, name).toBe('podcaster');
+    }
+    for (const name of ['draft-join', 'draft-decline', 'draft-state', 'draft-move', 'draft-vote', 'draft-inbox']) {
+      expect(names[name], name).toEqual({});
+    }
+    expect(manifest.channels.subscribableBy).toBe('fan');
+  });
 });

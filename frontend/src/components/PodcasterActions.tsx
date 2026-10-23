@@ -17,6 +17,8 @@ export function PodcasterActions({
   pending,
   onOpen,
   onMove,
+  onDraft,
+  drafting = false,
 }: {
   i18n: PluginI18n;
   phase: Phase;
@@ -25,6 +27,9 @@ export function PodcasterActions({
   pending: number;
   onOpen: (mode: 'resolve' | 'catchup' | 'feature') => void;
   onMove: (to: Phase) => void;
+  /** Opens a draft round on this episode; absent where the host offers no realtime actions. */
+  onDraft?: () => void;
+  drafting?: boolean;
 }) {
   return (
     <div className="bingo__actions">
@@ -36,6 +41,11 @@ export function PodcasterActions({
           onClick={() => onMove('LOCKED')}
         >
           {awaiting === 'LOCKED' ? i18n.t('board.locking') : i18n.t('board.lock')}
+        </button>
+      )}
+      {phase === 'OPEN' && onDraft && (
+        <button type="button" className="bingo__btn bingo__btn--quiet" disabled={drafting} onClick={onDraft}>
+          {drafting ? i18n.t('draft.starting') : i18n.t('draft.start')}
         </button>
       )}
       {(phase === 'OPEN' || phase === 'LOCKED') && (

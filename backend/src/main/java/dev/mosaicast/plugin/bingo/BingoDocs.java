@@ -78,6 +78,13 @@ final class BingoDocs {
 
     /** A player's own card, in their own partition: {@code card:<episodeSlug>}. */
     static final String CARD_PREFIX = "card:";
+    /** A draft round, in the site scope: {@code draft:<uuid>}. Backend-private: no browser reads it raw. */
+    static final String DRAFT_PREFIX = "draft:";
+    /**
+     * Which draft round a person sits in for an episode, in their own partition: {@code seat:<episodeSlug>}.
+     * Written by the {@code draft-join} action for that person's tile, and never read as the truth.
+     */
+    static final String SEAT_PREFIX = "seat:";
     /** A player's standing visibility choice, in their own partition. Not per episode, on purpose. */
     static final String KEY_PREFS = "prefs";
 

@@ -42,9 +42,6 @@ jobs:
 
       # The plugin's own build, unchanged — whatever produces dist/ locally produces it here.
       - name: Build
-        env:
-          GITHUB_ACTOR: ${{ github.actor }}
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: ./build.sh
 
       - name: Package dist/ as plugin.tgz

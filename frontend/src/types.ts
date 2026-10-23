@@ -561,3 +561,119 @@ export interface ClaimDoc {
   codes?: string[];
   savedAt?: Record<string, string>;
 }
+
+// ---------------------------------------------------------------- draft rounds (BingoDraft / BingoDrafts)
+
+/** What the person running a draft round chose. Seconds; `null` means no limit. */
+export interface DraftSettings {
+  clock: boolean;
+  turnSeconds: number | null;
+  bankSeconds: number | null;
+  incrementSeconds: number | null;
+  duplicateCheck: boolean;
+}
+
+export type DraftStatus = 'LOBBY' | 'RUNNING' | 'FINISHED' | 'CANCELLED';
+export type DraftStage = 'REGULAR' | 'MAKEUP' | 'SOLO';
+
+/** One player in a running round. `cells` only comes with `draft-state`; an update leaves it out. */
+export interface DraftSeat {
+  userId: string;
+  bankMs: number | null;
+  out: boolean;
+  done: boolean;
+  skipped: number;
+  filled: number;
+  cells?: string[];
+}
+
+/** A square on somebody else's card that a new one came close to. */
+export interface DraftMatch {
+  userId: string;
+  cell: number;
+  text: string;
+}
+
+/** A square waiting on the other players. Who voted is public, how they voted never is. */
+export interface DraftVote {
+  by: string;
+  cell: number;
+  text: string;
+  matches: DraftMatch[];
+  voters: string[];
+  voted: string[];
+  deadline: number | null;
+  awaitingHost: boolean;
+}
+
+/** The turn, the clocks, the vote. Times are the server's epoch milliseconds. */
+export interface DraftGame {
+  stage: DraftStage | null;
+  overtime: number;
+  current: string | null;
+  turnStartedAt: number;
+  usedMs: number;
+  turnLimitMs: number | null;
+  deadline: number | null;
+  seats: DraftSeat[];
+  vote?: DraftVote;
+  turnedDown?: { by: string; text: string };
+}
+
+/** One round as a member sees it, through `draft-state`. */
+export interface DraftView {
+  id: string;
+  version: number;
+  /** The server's clock when this was sent, so countdowns don't depend on the device's clock. */
+  now: number;
+  status: DraftStatus;
+  /** Absent while the episode is quiet and the reader is a fan. */
+  episode?: string;
+  host: string;
+  size: number;
+  freeCentre: boolean;
+  /** The site's fuzzy threshold when the round was made, for the browser's own hint. */
+  threshold: number;
+  settings: DraftSettings;
+  invited: string[];
+  order: string[];
+  createdAt: number;
+  endedAt?: number;
+  game?: DraftGame;
+  quiet?: boolean;
+  /** For podcasters and admins: the episode isn't announced, so only they can join. */
+  quietEpisode?: boolean;
+  /** The invite link's secret: for the host only. */
+  code?: string;
+  /** Who has the round open right now. */
+  online?: string[];
+}
+
+/** One `update` event: a whole view without the cards, plus the one square written, if any. */
+export interface DraftUpdate extends Omit<DraftView, 'code' | 'online' | 'quiet' | 'quietEpisode'> {
+  written?: { userId: string; cell: number; text: string };
+}
+
+/** What somebody holding the link's code sees before joining. */
+export interface DraftPreview {
+  id: string;
+  preview: true;
+  status: DraftStatus;
+  host: string;
+  players: number;
+  quiet: boolean;
+  episode?: string;
+}
+
+/** One of the reader's rounds, as `draft-inbox` lists them. */
+export interface DraftInboxItem {
+  id: string;
+  status: DraftStatus;
+  host: string;
+  role: 'host' | 'player' | 'invited';
+  players: number;
+  yourTurn: boolean;
+  createdAt: number;
+  endedAt?: number;
+  episode?: string;
+}

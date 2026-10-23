@@ -20,6 +20,7 @@ import {
   KEY_TEMPLATE,
   CARD_PREFIX,
   cardKey,
+  seatKey,
 } from '../keys';
 import type {
   Candidate,
@@ -76,6 +77,11 @@ export interface BingoData {
   /** Whom the podcaster has currently picked. */
   showcasePick: string[];
   myCard: Card | null;
+  /**
+   * The draft round the viewer plays this episode's card in, if any. A hint the `draft-join` action left in
+   * their partition; the round itself says whether it still stands.
+   */
+  mySeat: { draftId: string } | null;
   /** The viewer's own standing choices. Their partition, so nobody else's is readable. */
   myPrefs: Prefs | null;
   /** The site's shared tag vocabulary, or empty when the host offers none. */
@@ -105,6 +111,7 @@ const EMPTY: Omit<BingoData, 'reload'> = {
   participants: [],
   showcasePick: [],
   myCard: null,
+  mySeat: null,
   myPrefs: null,
   vocabulary: [],
   suggestions: [],
@@ -141,7 +148,7 @@ export function useBingo(ctx: PluginContext): BingoData {
     const ctx = latest.current;
 
     const load = async () => {
-      const [episode, mine, myPrefs, vocabulary, suggestions] = await Promise.all([
+      const [episode, mine, myPrefs, vocabulary, suggestions, mySeat] = await Promise.all([
         readScope(ctx, scope, TILE_KEYS),
         // The viewer's own partition changes only through this client, whose writes forget the miss they
         // replace, so the host's remembered misses are right here and worth keeping.
@@ -154,6 +161,11 @@ export function useBingo(ctx: PluginContext): BingoData {
         // while. Optional all the way — a failure here must not cost anyone their card.
         signedIn
           ? ctx.docs.get<Suggestions>('site', KEY_SUGGESTIONS).catch(() => null)
+          : Promise.resolve(null),
+        // Written by a draft round's action, on another page: a miss remembered here never outlives the
+        // navigation that brings the player back. Optional, like the chips.
+        signedIn
+          ? ctx.docs.get<{ draftId: string }>('self', seatKey(scope.id)).catch(() => null)
           : Promise.resolve(null),
       ]);
       const template = pick<Template>(episode, KEY_TEMPLATE);
@@ -187,6 +199,7 @@ export function useBingo(ctx: PluginContext): BingoData {
         participants: (participants?.items ?? []).map((p) => p.userId),
         showcasePick: showcasePick?.userIds ?? [],
         myCard: mine,
+        mySeat: mySeat?.draftId ? mySeat : null,
         myPrefs,
         vocabulary: vocabulary.map((t) => t.label),
         suggestions: suggestions?.items ?? [],

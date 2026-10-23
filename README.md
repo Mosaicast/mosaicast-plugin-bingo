@@ -81,6 +81,56 @@ one person's own words are never offered to anybody else. A "came true" count is
 resolved bingos. A *Show suggestions* switch turns the chips off. It's saved to the player's own `prefs`
 the moment it's flipped, and the backend never reads it.
 
+## Draft rounds
+
+A draft round is a bingo played together and in turns. A podcaster or admin opens one on an episode, invites
+people, and every player fills their own card one square per turn while everyone watches. It suits a show
+whose hosts predict the next episode on air, with a rule that no two of them write the same thing.
+
+**Starting one.** *Start draft round* sits next to the other podcaster buttons on a tile whose predictions
+are open, and *Create and start a draft round* next to *Create the bingo* on an episode with none yet. It
+opens the round's own page, `/p/bingo/draft/<id>`, where the person running it:
+
+- **invites people.** The picker lists everyone who has played bingo on the site and has no card on this
+  episode yet; each gets a notification and, with the page open, sees the invite at once. The **invite link**
+  works for anyone signed in, which is the only way to reach somebody with no bingo history (the host
+  notifies only people a plugin already holds data for). On a **quiet** episode only podcasters and admins
+  can join, so nothing about it reaches a fan.
+- **sets the turn order** by dragging names, or with the arrow buttons on a phone or keyboard.
+- **sets the clock**: a limit per turn, a total time bank, and time added per square, each optional. Off
+  means everyone takes as long as they like.
+- **chooses whether to play** (*I'm playing*), and starts with at least 2 and at most 8 players.
+
+**Turns.** On your turn you pick an empty square and write. Everyone sees it the moment it's placed.
+
+- A turn that runs out is **skipped** and made up after the last regular round. Without a bank, missing a
+  make-up turn ends your card where it is.
+- A player whose **bank runs out is out**. When everyone else is done, a single player out finishes alone
+  with no clock; two or more play an **overtime** on reset clocks over their empty squares, until one or
+  none is left. An overtime in which nobody writes anything ends the round.
+- **Duplicates** (on by default): a square close to one on another player's card, by the site's
+  `fuzzyThreshold`, goes to a 30 second **vote** by the other players while the writer's clock is paused.
+  Anyone who doesn't vote doesn't count; a tie or no votes turns it down, and the writer goes again. When
+  one player finishes alone and nobody votes, the person running the round decides. Repeating your own
+  square is refused outright.
+
+**After.** A finished round's cards are ordinary cards on the episode: the next tick records them like any
+other, ranked while predictions are open, and they score, can be featured and freeze at the lock. A
+cancelled round records nothing. While someone sits in a round, the episode's tile shows that card and no
+editor, because the backend reads only the round's card for them. Somebody with a card on an episode
+can't join a round there, so everyone has one card per episode.
+
+**How it stays live.** Draft rounds use the realtime contract of `platformApi` 0.20.0. Every move is an
+**action** the backend checks the moment it arrives (`draft-move`, `draft-vote`, …), with the caller
+resolved by the host. Each change goes out on the round's **channel** as one small `update` event with a
+version number, and a personal `inbox` channel carries invites. A browser subscribes first, then fetches
+the round (`draft-state`), then applies events in order; a missing version, or the host saying it can't
+replay, means fetching again. So a closed tab or a reload rejoins with everything in place. The round
+itself lives in one backend-private document (`data.backendPrivate`), saved on every change, and the turn
+and vote clocks are timers re-armed from it when the backend starts, so a restart costs the player on
+turn nothing but a fresh turn. Finished rounds are kept until the episode's predictions close (30 days at
+least), cancelled ones for 30 days, and a lobby nobody started for 14.
+
 ## Scoring
 
 Two quantities, both always counted:
@@ -343,7 +393,7 @@ $C --name bingo down
 re-copies it and restarts only the app, keeping the database (add `--core origin/master` to move core too). Without it
 (or `--plugins`) no plugin loads and the tile is simply absent.
 
-Requires **core 0.8.1 or newer** (`platformApi` 0.19.1). Core matches that version on `major.minor` exactly,
+Requires **core 0.10.0 or newer** (`platformApi` 0.20.0). Core matches that version on `major.minor` exactly,
 so an older core rejects this build at load and a newer minor rejects it too.
 
 If the tile does not appear, the reason is in the admin log viewer at `/admin/logs` — a rejected manifest
@@ -365,6 +415,8 @@ backend/                 Java 21, PF4J extension, depends only on the SDK
     BingoInsights.java   pure: prediction lists, the square heatmap, lone hits and near misses
     BingoImport.java     past bingos taken in from import documents, and claims
     BingoExport.java     a person's own cards as mosaicast-bingo/1
+    BingoDraft.java      pure: one draft round's rules (turns, clocks, votes)
+    BingoDrafts.java     draft rounds on the host: actions, channels, timers, the store
 scripts/bingo-import.mjs the importer (dry run, --apply, unclaim); docs/import-format.md
     BingoFuzzy.java      pure entry grouping — no ctx, no clock, no I/O
 frontend/                React 18 + Vite, bundled as one ES module
@@ -372,8 +424,9 @@ frontend/                React 18 + Vite, bundled as one ES module
   src/fuzzy.ts           the browser's advisory copy of the comparison rules
   src/regroup.ts         pins for the podcaster's split/merge corrections
   src/history.ts         pure transforms for the history charts; src/palette.ts the player colours
+  src/draft.ts           pure helpers for a draft round: events in order, clocks, the turn order
   src/components/charts/ hand-drawn SVG line and bar charts, and the square heatmap
-  src/components/        the tile, the feed badge, the page, the resolve dialog
+  src/components/        the tile, the feed badge, the page, the resolve dialog, the draft round page
 shared/fuzzy-vectors.json  one answer key for the Java and TypeScript comparison rules
 docs/ROADMAP.md          ideas recorded but not built, and what each is waiting on
   locales/{en,de}.json   UI strings
@@ -435,6 +488,11 @@ everything public is published by the backend. Raw material stays behind higher 
   the backend copies out of it only once the bingo is resolved, so a half-ticked list never leaks how the
   episode went. The podcaster sees their own ticks on the cards as they make them; fans see the hits
   appear at RESOLVED, together with the leaderboard.
+
+- **Draft rounds** (`draft:*`): nobody, admins included (`data.backendPrivate`). A round holds every card
+  and the invite code, and reaches a browser only through what the `draft-state` action answers: members
+  get the round, someone holding the code a short preview, anyone else nothing. A player's `seat:<slug>`
+  in their own partition only tells their tile which round to ask about.
 
 When a podcaster sends an announced episode back to quiet, or cancels it, the backend runs a pass at once
 (`onEpisodePhaseChanged`), so the site documents stop naming it right away instead of on the next tick.

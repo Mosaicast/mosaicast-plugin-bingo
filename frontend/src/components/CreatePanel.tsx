@@ -5,6 +5,8 @@ import { useState } from 'react';
 import { isPluginApiError, type PluginContext } from '@mosaicast/plugin-sdk';
 import type { PluginI18n } from '../i18n';
 import { KEY_TEMPLATE } from '../keys';
+import { draftErrorKey } from '../draft';
+import { startDraft } from './startDraft';
 
 /** Grids a podcaster can pick when creating one. Odd sizes get a free centre. */
 const SIZES = [3, 4, 5];
@@ -36,14 +38,22 @@ export function CreatePanel({
   const hasCentre = size % 2 === 1;
   const givesCentreAway = hasCentre && freeCentre;
 
-  const create = async () => {
+  const [failure, setFailure] = useState<string | null>(null);
+
+  /** Creates the bingo, and with `draft` opens a draft round on it straight away. */
+  const create = async (draft = false) => {
     setBusy(true);
+    setFailure(null);
     try {
       await ctx.docs.put(ctx.scope, KEY_TEMPLATE, {
         size,
         title: title.trim(),
         freeCentre: givesCentreAway,
       });
+      if (draft) {
+        const refused = await startDraft(ctx);
+        if (refused) setFailure(refused);
+      }
       onCreated();
     } catch (error) {
       ctx.log(
@@ -82,9 +92,14 @@ export function CreatePanel({
             onChange={(e) => setTitle(e.target.value)}
           />
         </label>
-        <button type="button" className="bingo__btn" onClick={create} disabled={busy}>
+        <button type="button" className="bingo__btn" onClick={() => void create()} disabled={busy}>
           {i18n.t('create.button')}
         </button>
+        {ctx.actions && (
+          <button type="button" className="bingo__btn bingo__btn--quiet" onClick={() => void create(true)} disabled={busy}>
+            {i18n.t('draft.createAndStart')}
+          </button>
+        )}
       </div>
       <label className="bingo__check">
         <input
@@ -96,6 +111,7 @@ export function CreatePanel({
         {i18n.t('create.freeCentre')}
       </label>
       <p className="bingo__note">{i18n.t('create.hint')}</p>
+      {failure && <p className="bingo__warn">{i18n.t(draftErrorKey(failure))}</p>}
     </div>
   );
 }
