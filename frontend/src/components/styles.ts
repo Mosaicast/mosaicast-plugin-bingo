@@ -370,6 +370,70 @@ export const BINGO_CSS =
   .bingo__table th[scope="row"], .bingo__table thead th:first-child { text-align: left; font-weight: 400; }
   .bingo__table td { font-variant-numeric: tabular-nums; }
 
+  /* Draft rounds. */
+  .bingo__sr { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
+  .bingo__draft { display: flex; flex-direction: column; gap: .75rem; }
+  .bingo__lobby, .bingo__draft-game { display: flex; flex-direction: column; gap: .5rem; min-width: 0; }
+  .bingo__dot {
+    display: inline-block; width: .5rem; height: .5rem; border-radius: 50%; flex: none;
+    border: 1px solid var(--mc-text-muted);
+  }
+  .bingo__dot--on { background: var(--mc-accent); border-color: var(--mc-accent-text); }
+  .bingo__order { list-style: none; margin: 0; padding: 0; }
+  .bingo__order-item {
+    display: flex; align-items: center; gap: .5rem; padding: .35rem .25rem; min-width: 0;
+    border-bottom: 1px solid var(--mc-border);
+  }
+  .bingo__order-item[draggable="true"] { cursor: grab; }
+  .bingo__order-item--dragging { opacity: .5; }
+  .bingo__order-item--over { border-bottom: 2px solid var(--mc-accent-text); }
+  .bingo__order-name { flex: 1; min-width: 0; overflow-wrap: anywhere; }
+  .bingo__order-moves { display: inline-flex; gap: .25rem; }
+  .bingo__btn--small { min-height: 2rem; padding: .2rem .6rem; }
+  .bingo__rules { border: 0; padding: 0; margin: 0; display: flex; flex-direction: column; gap: .4rem; min-width: 0; }
+  .bingo__rules-numbers { display: flex; flex-wrap: wrap; gap: .5rem; }
+  .bingo__rules-numbers .bingo__input { width: 7rem; }
+  .bingo__invite { display: flex; flex-direction: column; gap: .5rem; }
+  .bingo__invite .bingo__code { flex: 1; min-width: 0; width: 100%; }
+  .bingo__invite-list { max-height: 50vh; overflow: auto; margin: .5rem 0; }
+  .bingo__turn {
+    display: flex; flex-wrap: wrap; align-items: baseline; gap: .25rem .75rem;
+    padding: .6rem .75rem; border-radius: .5rem; border: 1px solid var(--mc-border); background: var(--mc-bg);
+  }
+  .bingo__turn--mine { border-color: var(--mc-accent-text); }
+  .bingo__turn-who { font-weight: 600; }
+  .bingo__turn--mine .bingo__turn-who { color: var(--mc-accent-text); }
+  .bingo__turn-clock, .bingo__seat-clock { font-variant-numeric: tabular-nums; margin-left: auto; }
+  .bingo__seats { list-style: none; margin: 0; padding: 0; }
+  .bingo__seat {
+    display: flex; flex-wrap: wrap; align-items: center; gap: .25rem .5rem; padding: .3rem .25rem;
+    border-bottom: 1px solid var(--mc-border); min-width: 0;
+  }
+  .bingo__seat--current { border-left: 3px solid var(--mc-accent-text); padding-left: .5rem; }
+  .bingo__seat-name { min-width: 0; overflow-wrap: anywhere; }
+  .bingo__vote {
+    border: 1px solid var(--mc-accent-text); border-radius: .5rem; padding: .75rem;
+    display: flex; flex-direction: column; gap: .4rem;
+  }
+  .bingo__vote p { margin: 0; }
+  .bingo__vote-matches { margin: 0; padding-left: 1.1rem; }
+  .bingo__cell--pick { font: inherit; color: inherit; cursor: pointer; border-style: dashed; }
+  .bingo__cell--pick:hover { border-color: var(--mc-accent-text); }
+  .bingo__cell--pick:focus-visible { outline: 2px solid var(--mc-accent-text); outline-offset: 1px; }
+  .bingo__cell--picked { border: 2px solid var(--mc-accent-text); border-style: solid; }
+  .bingo__draft-entry { display: flex; flex-wrap: wrap; align-items: flex-end; gap: .5rem; margin-top: .5rem; }
+  .bingo__draft-entry .bingo__field { flex: 1 1 14rem; min-width: 0; }
+  .bingo__draft-entry .bingo__input { width: 100%; }
+  .bingo__draft-entry > p { flex-basis: 100%; }
+  .bingo__draft-others {
+    display: grid; gap: .75rem; grid-template-columns: repeat(auto-fill, minmax(min(100%, 15rem), 1fr));
+  }
+  .bingo__draft-card .bingo__cell { min-height: 2.75rem; font-size: .6875rem; padding: .25rem; }
+  .bingo__draft-card .bingo__grid { gap: .2rem; }
+  .bingo__drafts { margin-bottom: .75rem; }
+  .bingo__drafts .bingo__section-title { margin-top: 0; }
+  .bingo__drafts .bingo__items { margin-bottom: .5rem; }
+
   @container (max-width: 22rem) {
     .bingo__cell { min-height: 3.25rem; font-size: .75rem; }
     .bingo__grid { gap: .25rem; }

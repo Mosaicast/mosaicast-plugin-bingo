@@ -4,7 +4,13 @@
 import { act } from 'react';
 import { createRoot, type Root } from 'react-dom/client';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
-import { makeMockDocs, makeMockEpisode, makeMockTags, makeMockUsers } from '@mosaicast/plugin-sdk/testing';
+import {
+  makeMockActions,
+  makeMockDocs,
+  makeMockEpisode,
+  makeMockTags,
+  makeMockUsers,
+} from '@mosaicast/plugin-sdk/testing';
 import { EpisodeBingo } from './EpisodeBingo';
 import { flush, makeBingoCtx } from '../test-utils';
 
@@ -441,10 +447,11 @@ describe('<EpisodeBingo>', () => {
           'leaderboard,showcased,participants,showcase,grouping,recap',
       },
     ]);
-    // Plus the site-wide suggestions, the one shared document a remembered miss cannot hurt.
+    // Plus the site-wide suggestions, the one shared document a remembered miss cannot hurt, and the
+    // viewer's draft round seat, which is theirs too.
     expect(
       docs.calls.filter((c) => c.method === 'get').flatMap((c) => c.partitions),
-    ).toEqual(['data/user/me', 'data/user/me', 'data/site/main']);
+    ).toEqual(['data/user/me', 'data/user/me', 'data/site/main', 'data/user/me']);
   });
 
   it('lets a signed-in fan edit and save into their own partition', async () => {
@@ -988,5 +995,84 @@ describe('<EpisodeBingo>', () => {
     expect(rows[5].textContent).toContain('Player 7');
     expect(rows[5].querySelector('.bingo__place')?.textContent).toBe('8');
     expect(host.textContent).toContain('and 3 more');
+  });
+
+  describe('draft rounds', () => {
+    const round = (status: string) => ({
+      id: 'r1', version: 3, now: Date.now(), status, episode: EPISODE, host: 'p1', size: 3, freeCentre: false,
+      threshold: 0.85, settings: { clock: false, turnSeconds: null, bankSeconds: null, incrementSeconds: 0, duplicateCheck: true },
+      invited: [], order: ['p1', 'u1'], createdAt: 0,
+      game: {
+        stage: 'REGULAR', overtime: 0, current: 'p1', turnStartedAt: 0, usedMs: 0, turnLimitMs: null, deadline: null,
+        seats: [
+          { userId: 'p1', bankMs: null, out: false, done: false, skipped: 0, filled: 0, cells: Array(9).fill('') },
+          { userId: 'u1', bankMs: null, out: false, done: false, skipped: 0, filled: 1,
+            cells: ['From the round', '', '', '', '', '', '', '', ''] },
+        ],
+      },
+    });
+
+    it('shows a player their card from the round, with no editor', async () => {
+      const actions = makeMockActions({ 'draft-state': () => round('RUNNING') });
+      await render(ctxWith(
+        {
+          [docPath('template')]: { size: 3 },
+          [`data/user/me/seat:${EPISODE}`]: { draftId: 'r1' },
+        },
+        { user: fan, actions },
+      ));
+      await flush();
+
+      expect(actions.calls[0]).toMatchObject({ name: 'draft-state', payload: { id: 'r1' } });
+      expect(host.textContent).toContain('You\'re playing this card in a draft round.');
+      expect(host.textContent).toContain('From the round');
+      expect(host.querySelector('textarea')).toBeNull();
+    });
+
+    it('keeps a finished round\'s card in the player\'s own partition', async () => {
+      const docs = makeMockDocs({
+        [docPath('template')]: { size: 3 },
+        [`data/user/me/seat:${EPISODE}`]: { draftId: 'r1' },
+      });
+      const actions = makeMockActions({ 'draft-state': () => round('FINISHED') });
+      await render(makeBingoCtx({ scope, docs, user: fan, actions }));
+      await flush();
+
+      expect(docs.stored[`data/user/me/card:${EPISODE}`]).toEqual({
+        entries: ['From the round', '', '', '', '', '', '', '', ''],
+      });
+    });
+
+    it('drops a seat whose round was cancelled and goes back to the editor', async () => {
+      const docs = makeMockDocs({
+        [docPath('template')]: { size: 3 },
+        [`data/user/me/seat:${EPISODE}`]: { draftId: 'r1' },
+      });
+      const actions = makeMockActions({ 'draft-state': () => round('CANCELLED') });
+      await render(makeBingoCtx({ scope, docs, user: fan, actions }));
+      await flush();
+
+      expect(docs.stored[`data/user/me/seat:${EPISODE}`]).toBeUndefined();
+      expect(host.querySelector('textarea')).not.toBeNull();
+    });
+
+    it('offers a podcaster a draft round while predictions are open', async () => {
+      const actions = makeMockActions({ 'draft-create': () => ({ id: 'r9' }) });
+      const assign = window.location.assign;
+      const went: string[] = [];
+      Object.defineProperty(window, 'location', { value: { ...window.location, assign: (u: string) => went.push(u) }, configurable: true });
+      try {
+        await render(ctxWith(
+          { [docPath('template')]: { size: 3 }, [docPath('phase')]: { phase: 'OPEN', suggested: 'OPEN' } },
+          { user: podcaster, actions },
+        ));
+        const start = [...host.querySelectorAll('button')].find((b) => b.textContent === 'Start draft round')!;
+        await act(async () => start.click());
+        expect(actions.calls[0]).toMatchObject({ name: 'draft-create', scope });
+        expect(went).toEqual(['/p/bingo/draft/r9']);
+      } finally {
+        Object.defineProperty(window, 'location', { value: { ...window.location, assign }, configurable: true });
+      }
+    });
   });
 });

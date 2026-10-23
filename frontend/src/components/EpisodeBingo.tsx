@@ -38,6 +38,9 @@ import { FeatureModal } from './FeatureModal';
 import { ResolveModal, undecided } from './ResolveModal';
 import { pick, readScope, useBingo, type BingoData } from './useBingo';
 import { copyClaimedCards } from '../claimCards';
+import { draftErrorKey, seatOf } from '../draft';
+import { startDraft } from './startDraft';
+import { useDraftSeat } from './useDraftRound';
 
 
 const PHASE_ICON: Record<Phase, 'clock' | 'lock' | 'check' | 'board'> = {
@@ -62,6 +65,11 @@ export function EpisodeBingo({ ctx }: { ctx: PluginContext }) {
   useEffect(() => () => i18n.dispose(), [i18n]);
 
   const data = useBingo(ctx);
+  // A player in a draft round plays this episode's card there: the tile shows that card and no editor.
+  const seat = useDraftSeat(ctx, data.mySeat?.draftId ?? null, ctx.scope.id);
+  const seatCells = seat && ctx.user ? seatOf(seat, ctx.user.id)?.cells ?? [] : null;
+  const [drafting, setDrafting] = useState(false);
+  const [draftFailure, setDraftFailure] = useState<string | null>(null);
   const [tab, setTab] = useState<string>('me');
   const [draft, setDraft] = useState<string[] | null>(null);
   const [listed, setListed] = useState(true);
@@ -105,12 +113,26 @@ export function EpisodeBingo({ ctx }: { ctx: PluginContext }) {
 
   useEffect(() => {
     if (data.loading) return;
-    setDraft(normalise(data.myCard?.entries ?? [], fillableCells(size, freeCentre)));
+    setDraft(normalise(seatCells ?? data.myCard?.entries ?? [], fillableCells(size, freeCentre)));
     // Prefilled with whatever they decided last time, so the question is asked once and then remembered.
     setListed(prefOrDefault(data.myPrefs?.listed));
     setShowcasable(prefOrDefault(data.myPrefs?.showcasable));
     setShowSuggestions(prefOrDefault(data.myPrefs?.suggestions));
-  }, [data.loading, data.myCard, data.myPrefs, size, freeCentre]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- the seat's cards, by value
+  }, [data.loading, data.myCard, data.myPrefs, size, freeCentre, (seatCells ?? []).join('\u0000')]);
+
+  // A finished round's card is copied into the player's own partition, so the tile still has it once the
+  // round itself is gone. The backend reads the round's card, not this copy, for as long as the round exists,
+  // and drops a finished round only after predictions close, when the rows are the record.
+  const finishedCells = seat?.status === 'FINISHED' ? seatCells : null;
+  useEffect(() => {
+    if (!finishedCells || !ctx.user) return;
+    if (JSON.stringify(data.myCard?.entries ?? []) === JSON.stringify(finishedCells)) return;
+    ctx.docs.put('self', cardKey(ctx.scope.id), { entries: finishedCells }).catch((error: unknown) => {
+      ctx.log('warn', `bingo: could not keep the draft round's card (${String(error)})`);
+    });
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- keyed on the card's content
+  }, [(finishedCells ?? []).join('\u0000'), data.myCard]);
 
   // A claimed card is on the record but not in the viewer's partition, where the tile draws it from; only
   // this browser can put it there (see claimCards.ts). Once per episode, and only when it could apply.
@@ -248,7 +270,9 @@ export function EpisodeBingo({ ctx }: { ctx: PluginContext }) {
   const active = tabs.find((t) => t.id === tab) ?? tabs[tabs.length - 1];
   const hideForSpoilers = spoilersCovered && active.id !== 'me';
   const signedIn = Boolean(ctx.user);
-  const hasCard = Boolean(data.myCard);
+  // A finished round's card is on the record like a written one; a lobby or a running round's isn't yet.
+  const inRound = Boolean(seat);
+  const hasCard = Boolean(data.myCard) || seat?.status === 'FINISHED';
   // A card can be on the record without being in the viewer's partition yet: one imported and claimed,
   // until it has been copied in. Offering a late card then would be a control the backend ignores.
   const onRecord =
@@ -257,7 +281,7 @@ export function EpisodeBingo({ ctx }: { ctx: PluginContext }) {
     );
   const allowLate = data.phase?.allowLate !== false;
   // Editable while predictions are open; after that only a card that does not exist yet, and then once.
-  const editable = active.id === 'me' && signedIn && canEditCard(phase, onRecord, allowLate);
+  const editable = active.id === 'me' && signedIn && !inRound && canEditCard(phase, onRecord, allowLate);
   const finalSubmission = editable && isFinalSubmission(phase);
   // A standing choice about how you appear, not part of the card — so it stays changeable after the freeze.
   const canChoose = active.id === 'me' && signedIn && phase !== 'ARCHIVED';
@@ -283,7 +307,13 @@ export function EpisodeBingo({ ctx }: { ctx: PluginContext }) {
       )}
 
       {finalSubmission && <p className="bingo__warn">{i18n.t('late.warning')}</p>}
-      {active.id === 'me' && signedIn && !editable && hasCard && phase !== 'ARCHIVED' && (
+      {active.id === 'me' && seat && (
+        <p className="bingo__note">
+          {i18n.t('draft.tile.seat')}{' '}
+          <a className="bingo__link" href={`/p/bingo/draft/${seat.id}`}>{i18n.t('draft.tile.open')}</a>
+        </p>
+      )}
+      {active.id === 'me' && signedIn && !inRound && !editable && hasCard && phase !== 'ARCHIVED' && (
         <p className="bingo__note">{i18n.t('episode.frozen')}</p>
       )}
       {active.id === 'me' && signedIn && !hasCard && onRecord && (
@@ -417,6 +447,20 @@ export function EpisodeBingo({ ctx }: { ctx: PluginContext }) {
           awaiting={awaiting}
           pending={undecided(data.candidates, data.resolution).length}
           onOpen={setModal}
+          drafting={drafting}
+          onDraft={
+            ctx.actions
+              ? async () => {
+                  setDrafting(true);
+                  setDraftFailure(null);
+                  const failure = await startDraft(ctx);
+                  if (failure) {
+                    setDrafting(false);
+                    setDraftFailure(failure);
+                  }
+                }
+              : undefined
+          }
           onMove={async (to) => {
             try {
               await ctx.docs.put(ctx.scope, KEY_CONTROL, {
@@ -437,6 +481,7 @@ export function EpisodeBingo({ ctx }: { ctx: PluginContext }) {
           }}
         />
       )}
+      {draftFailure && <p className="bingo__warn">{i18n.t(draftErrorKey(draftFailure))}</p>}
       {modal === 'feature' && (
         <FeatureModal
           ctx={ctx}

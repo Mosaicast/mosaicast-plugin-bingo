@@ -26,9 +26,6 @@ jobs:
 
       - name: Build and test
         working-directory: backend
-        env:
-          GITHUB_ACTOR: ${{ github.actor }}
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: ./gradlew --no-daemon clean build
 
   frontend:
@@ -90,9 +87,6 @@ jobs:
       # The drop-in `dist/` layout build.sh
       # writes is the deliverable — the two jobs above would stay green even if build.sh broke.
       - name: Run build.sh
-        env:
-          GITHUB_ACTOR: ${{ github.actor }}
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: ./build.sh
 
       - name: Verify dist/ layout

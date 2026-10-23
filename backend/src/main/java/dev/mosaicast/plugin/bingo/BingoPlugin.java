@@ -126,6 +126,7 @@ public class BingoPlugin implements PluginBackend, UserDataHandler, PageRoutePro
     private BingoRecord record;
     private BingoPublish publish;
     private BingoImport importer;
+    private BingoDrafts drafts;
     /** Set once {@link #register} has run; the host may ask about pages before that. */
     private volatile BingoPages pages;
     /** What the last site roll-up was computed from, and when; see {@link #rollUp}. */
@@ -150,10 +151,14 @@ public class BingoPlugin implements PluginBackend, UserDataHandler, PageRoutePro
         this.lifecycle = new BingoLifecycle(ctx, clock);
         this.record = new BingoRecord(ctx, clock);
         this.publish = new BingoPublish(ctx, clock, lifecycle);
-        this.pages = new BingoPages(ctx, lifecycle);
         this.everyone = Objects.requireNonNull(ctx.allUsers(),
                 "bingo needs data.readsAllUsers in plugin.json: it reads every player's card");
         this.importer = new BingoImport(ctx, clock, everyone, lifecycle);
+        this.drafts = new BingoDrafts(ctx, clock, everyone, lifecycle,
+                () -> doubleConfig("fuzzyThreshold", DEFAULT_FUZZY_THRESHOLD));
+        this.pages = new BingoPages(ctx, lifecycle, drafts::exists);
+        // Before the first tick, which reads the rounds: a running one is re-armed here after a restart.
+        drafts.register();
 
         // Publish once at boot as well as on the schedule: `backendOwned` closes a key only from the moment
         // the manifest declares it and does not remove a value a client forged before that.
@@ -208,6 +213,11 @@ public class BingoPlugin implements PluginBackend, UserDataHandler, PageRoutePro
                 }
             }
 
+            try {
+                drafts.prune();
+            } catch (RuntimeException e) {
+                ctx.logger().warn("bingo draft round pass failed", e);
+            }
             try {
                 rollUp(pass, slugs);
             } catch (RuntimeException e) {
@@ -538,15 +548,27 @@ public class BingoPlugin implements PluginBackend, UserDataHandler, PageRoutePro
      * partition the document lives in, never from something a client said.
      */
     private Map<String, List<CardInput>> collectCards() {
+        Map<String, BingoDrafts.EpisodeDrafts> rounds = drafts.byEpisode();
         Map<String, List<CardInput>> bySlug = new LinkedHashMap<>();
         for (OwnedDocEntry entry : everyone.query(CARD_PREFIX)) {
             String slug = entry.key().substring(CARD_PREFIX.length());
             Card card = read(entry.value(), Card.class);
+            BingoDrafts.EpisodeDrafts round = rounds.get(slug);
+            if (round != null && (round.playing().contains(entry.userId().toString())
+                    || round.finished().containsKey(entry.userId().toString()))) {
+                // One card per person and episode. Whoever sits in a draft round plays that card, and a
+                // document in their own partition, which they can write at any time, is not read at all.
+                continue;
+            }
             if (card != null && !slug.isEmpty()) {
                 bySlug.computeIfAbsent(slug, s -> new ArrayList<>())
                         .add(new CardInput(entry.userId().toString(), card.safeEntries()));
             }
         }
+        // A finished round's cards are documents like any other: read on every pass while predictions are open,
+        // frozen with the rest at the lock. The round, not the player, is what wrote them.
+        rounds.forEach((slug, round) -> round.finished().forEach((author, entries) ->
+                bySlug.computeIfAbsent(slug, s -> new ArrayList<>()).add(new CardInput(author, entries))));
         bySlug.values().forEach(cards -> cards.sort(Comparator.comparing(CardInput::author)));
         return bySlug;
     }
@@ -619,6 +641,7 @@ public class BingoPlugin implements PluginBackend, UserDataHandler, PageRoutePro
         }
         // A fresh opaque id per erasure, so two erased people never merge into one competitor.
         String pseudonym = "erased:" + UUID.randomUUID();
+        drafts.erase(userId, pseudonym);
 
         for (EntryRow row : schema.select(ENTITY_ENTRY, byAuthor(userId), EntryRow.class)) {
             schema.update(ENTITY_ENTRY, row.id(), Map.of("author", pseudonym));

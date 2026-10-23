@@ -31,6 +31,8 @@ import static dev.mosaicast.plugin.bingo.BingoDocs.*;
  *   <li>{@code e/<slug>/u/<userId>} - one player's published result, the link a player shares.</li>
  *   <li>{@code season/<n>} and {@code season/<n>/<feed>} - the site page for one season; the short form
  *       only where no two feeds share the number.</li>
+ *   <li>{@code draft} and {@code draft/<id>} - a person's draft rounds, and one round. Members only, which
+ *       the page checks through an action; the share card names nobody.</li>
  * </ul>
  *
  * <p>Both questions run on a visitor's request, so each is a few document reads, never a scan. Neither
@@ -44,10 +46,21 @@ final class BingoPages {
 
     private final PluginContext ctx;
     private final BingoLifecycle lifecycle;
+    /** Whether a draft round with this id exists. */
+    private final java.util.function.Predicate<String> draftExists;
 
-    BingoPages(PluginContext ctx, BingoLifecycle lifecycle) {
+    BingoPages(PluginContext ctx, BingoLifecycle lifecycle, java.util.function.Predicate<String> draftExists) {
         this.ctx = ctx;
         this.lifecycle = lifecycle;
+        this.draftExists = draftExists;
+    }
+
+    /**
+     * {@code draft} - the list of one's own rounds - and {@code draft/<id>} for a round that exists. The id is
+     * a random UUID, so answering for it tells nobody anything they could not have guessed.
+     */
+    private boolean isDraft(List<String> parts) {
+        return parts.size() == 1 || (parts.size() == 2 && draftExists.test(parts.get(1)));
     }
 
     /** See {@link dev.mosaicast.plugin.api.PageRouteProvider#hasRoute}. */
@@ -58,6 +71,9 @@ final class BingoPages {
         }
         if (parts.get(0).equals("season")) {
             return isSeason(parts);
+        }
+        if (parts.get(0).equals("draft")) {
+            return isDraft(parts);
         }
         if (!parts.get(0).equals("e")) {
             return false;
@@ -101,6 +117,12 @@ final class BingoPages {
             return Optional.of(new OgMeta("Bingo", text(locale,
                     "Predict what happens in the next episode, and see how everyone's card did.",
                     "Tippe, was in der nächsten Folge passiert, und sieh, wie alle Karten abgeschnitten haben."),
+                    null, locale));
+        }
+        if (parts.get(0).equals("draft") && isDraft(parts)) {
+            // Names nobody and no episode: a round's link is passed around, and its page is for members only.
+            return Optional.of(new OgMeta(text(locale, "Draft round", "Draftrunde"), text(locale,
+                    "Take turns filling your bingo cards.", "Füllt eure Bingokarten abwechselnd aus."),
                     null, locale));
         }
         if (!parts.get(0).equals("e") || parts.size() < 2 || !isPublicBingo(parts.get(1))) {

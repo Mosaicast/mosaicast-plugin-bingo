@@ -31,6 +31,8 @@ import { feedName, pageSeasons, rankingOf, scopeKey, seasonFromRoute, type PageS
 import { BingoList } from './BingoList';
 import { Shell, nameOf } from './common';
 import { ClaimBox } from './ClaimBox';
+import { DraftList } from './DraftList';
+import { DraftRound } from './DraftRound';
 import { RankingPanel } from './RankingPanel';
 import { EpisodeScores, HistoryPanel } from './HistoryPanel';
 import { RecapPanel } from './RecapPanel';
@@ -38,7 +40,7 @@ import { Results } from './Results';
 import { ShareButton } from './ShareButton';
 import { readScope, pick, resolvePeople } from './useBingo';
 
-const ROUTES = ['', 'season/:n', 'season/:n/:feed', 'e/:slug', 'e/:slug/u/:user'] as const;
+const ROUTES = ['', 'season/:n', 'season/:n/:feed', 'e/:slug', 'e/:slug/u/:user', 'draft', 'draft/:id'] as const;
 
 
 /**
@@ -65,6 +67,8 @@ export function BingoPage({ ctx }: { ctx: PluginContext }) {
           <EpisodeView ctx={ctx} i18n={i18n} slug={match.params.slug} featured={match.params.user} />
         </div>
       )}
+      {match?.pattern === 'draft' && <DraftList ctx={ctx} i18n={i18n} />}
+      {match?.pattern === 'draft/:id' && <DraftRound key={match.params.id} ctx={ctx} i18n={i18n} id={match.params.id} />}
       {!match && <p className="bingo__panel bingo__note">{i18n.t('page.notFound')}</p>}
     </Shell>
   );
@@ -180,6 +184,8 @@ function SiteView({
   return (
     <>
       {head}
+      {/* Nothing at all for somebody with no draft round: the box only exists once they have one. */}
+      {route.n === undefined && <DraftList ctx={ctx} i18n={i18n} compact />}
       {seasons.length > 0 && (
         <nav className="bingo__tabs-nav" aria-label={i18n.t('history.season')}>
           {tab('', i18n.t('history.all'), chosen === undefined)}
