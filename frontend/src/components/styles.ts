@@ -431,6 +431,10 @@ export const BINGO_CSS =
   .bingo__draft-card .bingo__cell { min-height: 2.75rem; font-size: .6875rem; padding: .25rem; }
   .bingo__draft-card .bingo__grid { gap: .2rem; }
   .bingo__drafts { margin-bottom: .75rem; }
+  .bingo__draft-item { align-items: center; flex-wrap: nowrap; }
+  .bingo__draft-item-text { display: flex; flex-direction: column; gap: 2px; min-width: 0; flex: 1; }
+  .bingo__draft-item .bingo__btn { flex: none; }
+  @container (max-width: 22rem) { .bingo__draft-item { flex-wrap: wrap; } }
   .bingo__drafts .bingo__section-title { margin-top: 0; }
   .bingo__drafts .bingo__items { margin-bottom: .5rem; }
 
