@@ -71,15 +71,30 @@ export function DraftList({ ctx, i18n, compact = false }: { ctx: PluginContext; 
           item.role === 'invited'
             ? i18n.t('draft.list.invited', { name: nameOf(people[item.host], i18n) })
             : i18n.t(`draft.list.${item.role}`);
+        const href = `/p/bingo/draft/${item.id}`;
+        // A row says what's waiting there, and its button says what to do about it.
+        const action = item.yourTurn
+          ? i18n.t('draft.list.play')
+          : item.role === 'invited'
+            ? i18n.t('draft.list.seeInvite')
+            : i18n.t('draft.tile.open');
         return (
-          <li key={item.id} className="bingo__item">
-            <a className="bingo__item-link" href={`/p/bingo/draft/${item.id}`} onClick={(e) => go(e, `draft/${item.id}`)}>
-              {title ? i18n.t('draft.episode', { title }) : i18n.t('draft.quietEpisode')}
-            </a>
-            <span className="bingo__item-meta">
-              {item.yourTurn && <strong className="bingo__chip-state bingo__chip-state--open">{i18n.t('draft.list.yourTurn')}</strong>}{' '}
-              {i18n.t(`draft.list.${item.status}`)} · {role} · {i18n.t('draft.list.players', { count: String(item.players) })}
+          <li key={item.id} className="bingo__item bingo__draft-item">
+            <span className="bingo__draft-item-text">
+              <a className="bingo__item-link" href={href} onClick={(e) => go(e, `draft/${item.id}`)}>
+                {title ? i18n.t('draft.episode', { title }) : i18n.t('draft.quietEpisode')}
+              </a>
+              <span className="bingo__item-meta">
+                {i18n.t(`draft.list.${item.status}`)} · {role} · {i18n.t('draft.list.players', { count: String(item.players) })}
+              </span>
             </span>
+            <a
+              className={item.yourTurn || item.role === 'invited' ? 'bingo__btn bingo__btn--small' : 'bingo__btn bingo__btn--quiet bingo__btn--small'}
+              href={href}
+              onClick={(e) => go(e, `draft/${item.id}`)}
+            >
+              {action}
+            </a>
           </li>
         );
       })}

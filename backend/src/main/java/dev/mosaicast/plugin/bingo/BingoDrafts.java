@@ -542,6 +542,10 @@ final class BingoDrafts {
         }
         if (d.host.equals(me)) {
             view.put("code", d.code);
+            if (d.status == BingoDraft.Status.LOBBY && !d.order.contains(me)) {
+                // So the lobby can say why "I'm playing" is off, instead of offering a switch that's refused.
+                view.put("hostHasCard", hasCard(me, d.episode, d.id));
+            }
         }
         view.put("online", online(channelOf(d)));
         return view;

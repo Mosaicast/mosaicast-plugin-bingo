@@ -319,7 +319,6 @@
   "draft.list.LOBBY": "Noch nicht gestartet",
   "draft.list.RUNNING": "Läuft",
   "draft.list.FINISHED": "Vorbei",
-  "draft.list.yourTurn": "Du bist dran",
   "draft.list.players": "{{count}} dabei",
   "draft.tile.seat": "Diese Karte spielst du in einer Draftrunde.",
   "draft.tile.open": "Zur Runde",
@@ -351,5 +350,8 @@
   "draft.error.too-many": "Das sind zu viele. Höchstens 24 Leute können eingeladen oder dabei sein.",
   "draft.error.vote-open": "Warte erst die Abstimmung ab.",
   "draft.error.voted": "Du hast schon abgestimmt.",
-  "draft.error.not-an-episode": "Starte eine Draftrunde bei einer Folge."
+  "draft.error.not-an-episode": "Starte eine Draftrunde bei einer Folge.",
+  "draft.list.play": "Jetzt ziehen",
+  "draft.list.seeInvite": "Einladung ansehen",
+  "draft.lobby.hostHasCard": "Du hast für diese Folge schon eine Karte. Du leitest diese Runde also, ohne mitzuspielen."
 }
