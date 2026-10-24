@@ -211,5 +211,23 @@ describe('<BingoPage> draft round', () => {
     await flush();
     expect(host.textContent).toContain('Your draft rounds');
     expect(host.textContent).toContain('Invited by Ann');
+    const open = [...host.querySelectorAll('a')].find((l) => l.textContent === 'See invite');
+    expect(open?.getAttribute('href')).toBe('/p/bingo/draft/r1');
+  });
+
+  it('gives every round a button that says what to do there', async () => {
+    await render('draft', {
+      'draft-inbox': () => ({
+        items: [
+          { id: 'r1', status: 'RUNNING', host: 'a', role: 'player', players: 2, yourTurn: true, createdAt: 2, episode: 'ep-1' },
+          { id: 'r2', status: 'FINISHED', host: 'b', role: 'host', players: 2, yourTurn: false, createdAt: 1, episode: 'ep-1' },
+        ],
+      }),
+    });
+    const buttons = [...host.querySelectorAll('a.bingo__btn')].map((l) => [l.textContent, l.getAttribute('href')]);
+    expect(buttons).toEqual([
+      ['Take your turn', '/p/bingo/draft/r1'],
+      ['Open the round', '/p/bingo/draft/r2'],
+    ]);
   });
 });

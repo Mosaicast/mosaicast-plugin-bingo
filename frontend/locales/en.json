@@ -319,7 +319,6 @@
   "draft.list.LOBBY": "Not started",
   "draft.list.RUNNING": "Running",
   "draft.list.FINISHED": "Over",
-  "draft.list.yourTurn": "Your turn",
   "draft.list.players": "{{count}} in",
   "draft.tile.seat": "You're playing this card in a draft round.",
   "draft.tile.open": "Open the round",
@@ -351,5 +350,7 @@
   "draft.error.too-many": "That's too many people. Up to 24 can be invited or in.",
   "draft.error.vote-open": "Wait for the vote first.",
   "draft.error.voted": "You've already voted.",
-  "draft.error.not-an-episode": "Start a draft round from an episode."
+  "draft.error.not-an-episode": "Start a draft round from an episode.",
+  "draft.list.play": "Take your turn",
+  "draft.list.seeInvite": "See invite"
 }
