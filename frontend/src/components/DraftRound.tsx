@@ -7,6 +7,7 @@ import type { PluginI18n } from '../i18n';
 import { Icon } from '../icons';
 import { draftErrorKey, inviteLink } from '../draft';
 import type { DraftSettings, DraftView } from '../types';
+import { copyText } from './clipboard';
 import { nameOf } from './common';
 import { DraftGame } from './DraftGame';
 import { DraftOrder } from './DraftOrder';
@@ -393,6 +394,7 @@ function Invite({
   onInvite: (userIds: string[]) => Promise<string | null>;
 }) {
   const dialog = useRef<HTMLDialogElement>(null);
+  const linkField = useRef<HTMLInputElement>(null);
   const [candidates, setCandidates] = useState<UserRef[] | null>(null);
   const [query, setQuery] = useState('');
   const [chosen, setChosen] = useState<string[]>([]);
@@ -426,14 +428,13 @@ function Invite({
         <div className="bingo__field">
           <span>{i18n.t('draft.lobby.link')}</span>
           <div className="bingo__share">
-            <input className="bingo__input bingo__code" readOnly value={link} onFocus={(e) => e.target.select()} />
+            <input ref={linkField} className="bingo__input bingo__code" readOnly value={link}
+              onFocus={(e) => e.target.select()} />
             <button type="button" className="bingo__btn bingo__btn--quiet bingo__btn--small" onClick={async () => {
-              try {
-                await navigator.clipboard.writeText(link);
+              // A failed copy still leaves the link selected, one Ctrl+C away.
+              if (await copyText(link, linkField.current)) {
                 setCopied(true);
                 setTimeout(() => setCopied(false), 2000);
-              } catch {
-                // The field is selectable; copying by hand still works.
               }
             }}>
               {copied ? i18n.t('draft.lobby.copied') : i18n.t('draft.lobby.copy')}

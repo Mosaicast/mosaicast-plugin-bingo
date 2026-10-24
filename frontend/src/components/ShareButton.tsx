@@ -4,6 +4,7 @@
 import { useState } from 'react';
 import type { PluginContext } from '@mosaicast/plugin-sdk';
 import type { PluginI18n } from '../i18n';
+import { copyText } from './clipboard';
 
 /** This plugin's id, which names its page subtree: `/p/bingo/…`. Fixed by `plugin.json`. */
 export const PLUGIN_ID = 'bingo';
@@ -45,8 +46,8 @@ export function ShareButton({
         await navigator.share({ title, url });
         return;
       }
-      await navigator.clipboard.writeText(url);
-      setCopied(true);
+      if (await copyText(url)) setCopied(true);
+      else ctx.log('warn', 'bingo: could not copy the link');
     } catch (error) {
       // Dismissing the share sheet rejects too; only a real failure is worth a line in the log.
       if ((error as { name?: string })?.name !== 'AbortError') {

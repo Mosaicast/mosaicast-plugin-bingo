@@ -37,6 +37,11 @@ Built against **`platformApi` 0.20.0**, so it needs **core 0.10.0 or newer**. Co
   are gone.
 - `docs/ARCHITECTURE.md` is core 0.11.1's copy, which adds §7.9 (realtime actions and channels).
 
+### Fixed
+- **Copy buttons on plain http.** The share button and the invite link's *Copy* did nothing on a site opened
+  over http under any name but `localhost`, where browsers offer no clipboard API. They fall back to the
+  copy command now, and a failed copy leaves the invite link selected.
+
 ## [0.9.1] — wording
 
 Still built against **`platformApi` 0.19.1**.
