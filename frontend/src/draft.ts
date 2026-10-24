@@ -72,6 +72,7 @@ export function applyUpdate(view: DraftView, update: DraftUpdate): DraftView | n
     online: view.online,
     quiet: view.quiet,
     quietEpisode: view.quietEpisode,
+    hostHasCard: view.hostHasCard,
     episode: update.episode ?? view.episode,
     game: update.game ? { ...update.game, seats } : undefined,
   };
