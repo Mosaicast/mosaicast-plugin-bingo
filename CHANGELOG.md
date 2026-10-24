@@ -10,6 +10,19 @@ in the three files that carry it.
 
 ## [Unreleased]
 
+## [0.10.1] — draft round fixes
+
+Still built against **`platformApi` 0.20.0**, so it needs core 0.10.0 or newer; tested on core 0.11.1.
+
+### Fixed
+- **Copy buttons on plain http.** The share button and the invite link's *Copy* did nothing on a site opened
+  over http under any name but `localhost`, where browsers offer no clipboard API. They fall back to the
+  copy command now, and a failed copy leaves the invite link selected.
+- **The list of draft rounds** gives each round a button that says what to do there: *Take your turn*, *See
+  invite* or *Open the round*. Only the title was a link, which didn't read as a way back in.
+- **A host who already has a card** on the episode still runs a round, without playing. The lobby now
+  disables *I'm playing* and says why, where it used to offer a switch the backend refused.
+
 ## [0.10.0] — draft rounds
 
 Built against **`platformApi` 0.20.0**, so it needs **core 0.10.0 or newer**. Core matches `major.minor`, so a
@@ -36,11 +49,6 @@ Built against **`platformApi` 0.20.0**, so it needs **core 0.10.0 or newer**. Co
 - The Java SDK comes from **Maven Central**. The GitHub Packages repository, and the token CI passed to it,
   are gone.
 - `docs/ARCHITECTURE.md` is core 0.11.1's copy, which adds §7.9 (realtime actions and channels).
-
-### Fixed
-- **Copy buttons on plain http.** The share button and the invite link's *Copy* did nothing on a site opened
-  over http under any name but `localhost`, where browsers offer no clipboard API. They fall back to the
-  copy command now, and a failed copy leaves the invite link selected.
 
 ## [0.9.1] — wording
 
