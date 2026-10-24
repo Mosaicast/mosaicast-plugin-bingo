@@ -192,6 +192,19 @@ describe('<BingoPage> draft round', () => {
     expect(host.querySelector<HTMLInputElement>('.bingo__code')!.value).toContain('/p/bingo/draft/r1?code=c0de');
   });
 
+  it('tells a host who already has a card why they can\'t play', async () => {
+    const lobby = view({ status: 'LOBBY', game: undefined, code: 'c0de', order: ['b'], hostHasCard: true });
+    await render(
+      'draft/r1',
+      { 'draft-state': () => lobby },
+      { ...me, id: 'a', displayName: 'Ann', role: 'podcaster' as never },
+    );
+    const playing = [...host.querySelectorAll('label')].find((l) => l.textContent?.includes("I'm playing"))!
+      .querySelector('input')!;
+    expect(playing.disabled).toBe(true);
+    expect(host.textContent).toContain('You already have a card for this episode, so you run this round without playing.');
+  });
+
   it('tells somebody outside the round that it isn\'t theirs', async () => {
     await render('draft/r1', { 'draft-state': () => actionRejection('not-invited') });
     expect(host.textContent).toContain('You\'re not in this round.');

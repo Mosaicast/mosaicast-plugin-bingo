@@ -425,6 +425,18 @@ class BingoDraftsTest extends BingoTestSupport {
     }
 
     @Test
+    void aHostWithACardRunsTheRoundWithoutPlayingAndIsToldWhy() {
+        seedCard(ctx, host, LINE_CARD);
+        String id = create();
+        JsonNode view = state(hostCaller(), id);
+        assertEquals(0, view.get("order").size(), "their own card stays the one they play");
+        assertTrue(view.get("hostHasCard").asBoolean());
+        assertEquals("has-card", rejected(hostCaller(), "draft-setup", Map.of("id", id, "hostPlays", true)));
+        assertTrue(ctx.store().asUser(host).get(Scope.user(), BingoDocs.SEAT_PREFIX + EPISODE, BingoDrafts.Seat.class)
+                .isEmpty(), "no seat: their tile keeps their own card");
+    }
+
+    @Test
     void everyHandlerIsDeclaredAndEveryDeclarationHandled() {
         assertEquals(new java.util.TreeSet<>(BingoDrafts.ACTIONS), new java.util.TreeSet<>(ctx.actions().handled()));
         JsonNode names = BingoSchemaFixture.manifest().get("actions").get("names");

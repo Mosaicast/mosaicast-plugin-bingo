@@ -352,5 +352,6 @@
   "draft.error.voted": "You've already voted.",
   "draft.error.not-an-episode": "Start a draft round from an episode.",
   "draft.list.play": "Take your turn",
-  "draft.list.seeInvite": "See invite"
+  "draft.list.seeInvite": "See invite",
+  "draft.lobby.hostHasCard": "You already have a card for this episode, so you run this round without playing."
 }

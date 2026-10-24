@@ -643,6 +643,8 @@ export interface DraftView {
   quiet?: boolean;
   /** For podcasters and admins: the episode isn't announced, so only they can join. */
   quietEpisode?: boolean;
+  /** For the host, in the lobby, while not playing: they already have a card here, so they can't play. */
+  hostHasCard?: boolean;
   /** The invite link's secret: for the host only. */
   code?: string;
   /** Who has the round open right now. */
@@ -650,7 +652,7 @@ export interface DraftView {
 }
 
 /** One `update` event: a whole view without the cards, plus the one square written, if any. */
-export interface DraftUpdate extends Omit<DraftView, 'code' | 'online' | 'quiet' | 'quietEpisode'> {
+export interface DraftUpdate extends Omit<DraftView, 'code' | 'online' | 'quiet' | 'quietEpisode' | 'hostHasCard'> {
   written?: { userId: string; cell: number; text: string };
 }
 

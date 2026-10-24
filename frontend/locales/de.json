@@ -352,5 +352,6 @@
   "draft.error.voted": "Du hast schon abgestimmt.",
   "draft.error.not-an-episode": "Starte eine Draftrunde bei einer Folge.",
   "draft.list.play": "Jetzt ziehen",
-  "draft.list.seeInvite": "Einladung ansehen"
+  "draft.list.seeInvite": "Einladung ansehen",
+  "draft.lobby.hostHasCard": "Du hast für diese Folge schon eine Karte. Du leitest diese Runde also, ohne mitzuspielen."
 }

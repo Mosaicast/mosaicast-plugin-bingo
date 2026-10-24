@@ -326,9 +326,11 @@ function Rules({
     <fieldset className="bingo__rules">
       <legend className="bingo__section-title">{i18n.t('draft.lobby.settings')}</legend>
       <label className="bingo__check">
-        <input type="checkbox" checked={hostPlays} onChange={(e) => save({}, e.target.checked)} />
+        <input type="checkbox" checked={hostPlays} disabled={view.hostHasCard === true}
+          onChange={(e) => save({}, e.target.checked)} />
         {i18n.t('draft.lobby.hostPlays')}
       </label>
+      {view.hostHasCard && <p className="bingo__note">{i18n.t('draft.lobby.hostHasCard')}</p>}
       <label className="bingo__check">
         <input type="checkbox" checked={s.clock} onChange={(e) => save({ clock: e.target.checked })} />
         {i18n.t('draft.lobby.clock')}
