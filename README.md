@@ -24,7 +24,7 @@ A bingo exists only once a podcaster creates a template, and it ends for good wh
 | `OPEN` | the template is created | anyone signed in | every tick, ranked |
 | `LOCKED` | the episode is released, or the podcaster locks | writes still land, but | cards freeze; a newcomer is taken once, unranked |
 | `RESOLVED` | the podcaster finishes ticking off | same | final scores; host standings recomputed |
-| `ARCHIVED` | `archiveAfterDays` after resolving, or manually | nothing reads it | nothing, ever again |
+| `ARCHIVED` | `archiveAfterDays` after resolving, or manually | nothing reads it | nothing, unless the resolution is corrected |
 
 The podcaster's decision always beats the automatic suggestion — locking on release is a default, not a
 wall, and a locked bingo can be reopened until it is resolved. Someone catching up after the lock can
@@ -119,6 +119,17 @@ other, ranked while predictions are open, and they score, can be featured and fr
 cancelled round records nothing. While someone sits in a round, the episode's tile shows that card and no
 editor, because the backend reads only the round's card for them. Somebody with a card on an episode
 can't join a round there, so everyone has one card per episode.
+
+**Scoring it early.** A show that predicts its own episodes often goes through the hosts' cards while
+recording, before the episode is out. On a finished round's page a podcaster or admin in the round gets
+*Tick off answers*: tapping a square marks it as come true, tapping it again takes that back, and the
+standings above the cards (lines and squares per player) follow at once, on every podcaster's screen in the
+round. A tick is a decision in the episode's `resolution`, the same document the resolve dialog writes, for
+the square's whole group, so a fan who predicted the same thing gets it too. Taking a tick back removes the
+decision rather than recording a miss. Nothing public moves: the board, the recap, the answers and the site
+standings all wait for the real resolution, as they would for a half-ticked dialog, and a fan in the round
+sees no ticks until then (the `marks` event goes to podcasters and admins only). Resolving later starts
+from these ticks, and once the bingo is resolved everyone in the round sees how the cards did.
 
 **How it stays live.** Draft rounds use the realtime contract of `platformApi` 0.20.0. Every move is an
 **action** the backend checks the moment it arrives (`draft-move`, `draft-vote`, …), with the caller
@@ -285,6 +296,13 @@ is what makes the next part exact.
 Terms that arrive afterwards (someone playing late) are the ones with no decision, so the button becomes
 *Catch up (n)* and the dialog shows only those. No timestamps involved.
 
+A podcaster who ticked something wrong uses *Correct the resolution*, which stays on the tile after the
+bingo is resolved and after it is archived. It shows every candidate with its current decision and saves
+only the decisions; the phase stays where it is. The next pass rescores every card, and the board, the
+answers, the recap and the site standings follow. An archived bingo is otherwise never looked at again, so
+its phase document keeps a fingerprint of the decisions and pins it was last scored with, and a pass that
+sees a different one scores it once more, from its frozen rows, without taking new cards.
+
 ### Correcting the grouping
 
 Each candidate in the resolve dialog opens up to show the spellings grouped into it. A podcaster can
@@ -338,6 +356,12 @@ shell has since changed language.
 Ranked players and latecomers are told different things, since *"see how your card scored"* and *"your card
 is not ranked"* are not the same news. Nobody is told twice: the backend records who it has told, which is
 also what lets someone who joins after the resolution be told on a later tick.
+
+A **correction** tells the people it moved: anyone already told whose lines or squares changed gets one
+more message saying the resolution was corrected. Only a decision that flips or goes away, or a changed
+pin, counts as a correction; deciding a candidate nobody had decided yet is catching up and sends nothing.
+The message waits until the resolution has been left alone for 10 minutes, so fixing three things in three
+saves sends one message.
 
 Both surfaces are opt-in manifest blocks. Without `identity` every player is a placeholder; without
 `notifications` nothing is sent. Neither failure is loud, and neither breaks the tile.
@@ -492,7 +516,8 @@ everything public is published by the backend. Raw material stays behind higher 
 - **Draft rounds** (`draft:*`): nobody, admins included (`data.backendPrivate`). A round holds every card
   and the invite code, and reaches a browser only through what the `draft-state` action answers: members
   get the round, someone holding the code a short preview, anyone else nothing. A player's `seat:<slug>`
-  in their own partition only tells their tile which round to ask about.
+  in their own partition only tells their tile which round to ask about. A finished round's ticks go to
+  its podcasters and admins until the bingo is resolved, and to every member after.
 
 When a podcaster sends an announced episode back to quiet, or cancels it, the backend runs a pass at once
 (`onEpisodePhaseChanged`), so the site documents stop naming it right away instead of on the next tick.

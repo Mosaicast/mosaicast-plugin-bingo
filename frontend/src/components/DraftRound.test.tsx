@@ -205,6 +205,72 @@ describe('<BingoPage> draft round', () => {
     expect(host.textContent).toContain('You already have a card for this episode, so you run this round without playing.');
   });
 
+  const podcaster = { ...me, id: 'a', displayName: 'Ann', role: 'podcaster' as never };
+
+  function finished(scoring?: DraftView['scoring']): DraftView {
+    const v = view({ status: 'FINISHED', scoring });
+    v.game = {
+      ...v.game!,
+      current: null,
+      seats: [
+        { userId: 'a', bankMs: null, out: false, done: true, skipped: 0, filled: 4, cells: ['Rain', 'Sun', 'Fog', 'Hail'] },
+        { userId: 'b', bankMs: null, out: false, done: true, skipped: 0, filled: 4, cells: ['Snow', 'Wind', 'Mist', 'Dew'] },
+      ],
+    };
+    return v;
+  }
+
+  const early = {
+    hits: { a: [true, true, false, false], b: [false, false, false, false] },
+    resolved: false,
+    canMark: true,
+    rankBy: 'lines' as const,
+  };
+
+  it('lets a podcaster tick a finished round off early and shows who is ahead', async () => {
+    const { actions } = await render(
+      'draft/r1',
+      { 'draft-state': () => finished(early), 'draft-mark': () => finished(early) },
+      podcaster,
+    );
+    expect(host.textContent).toContain('Score it early');
+    expect(host.textContent).toContain('Only podcasters and admins see this until the bingo is resolved.');
+    const rows = [...host.querySelectorAll('.bingo__standings li')].map((li) => li.textContent);
+    expect(rows[0]).toContain('Ann');
+    expect(rows[0]).toContain('1/6 lines, 2/4 squares');
+
+    // Squares only take a tick once marking is switched on.
+    expect(host.querySelector('.bingo__cell--toggle')).toBeNull();
+    await act(async () => button('Tick off answers')!.click());
+    const snow = [...host.querySelectorAll<HTMLButtonElement>('.bingo__cell--toggle')].find(
+      (b) => b.textContent === 'Snow',
+    )!;
+    expect(snow.getAttribute('aria-pressed')).toBe('false');
+    await act(async () => snow.click());
+    await flush();
+    expect(actions.calls.at(-1)).toMatchObject({ name: 'draft-mark', payload: { id: 'r1', seat: 'b', cell: 0 } });
+  });
+
+  it('takes the ticks somebody else makes as they come', async () => {
+    const { channels } = await render('draft/r1', { 'draft-state': () => finished(early) }, podcaster);
+    act(() => {
+      channels.emit('draft:r1', 'marks', {
+        scoring: { ...early, hits: { ...early.hits, b: [true, true, true, true] } },
+      });
+    });
+    await flush();
+    const rows = [...host.querySelectorAll('.bingo__standings li')].map((li) => li.textContent);
+    expect(rows[0]).toContain('Bea');
+    expect(rows[0]).toContain('6/6 lines, 4/4 squares');
+  });
+
+  it('shows a fan in the round no ticks before the resolution', async () => {
+    await render('draft/r1', { 'draft-state': () => finished() });
+    expect(host.textContent).not.toContain('Score it early');
+    expect(host.querySelector('.bingo__cell--hit:not(.bingo__cell--free)')).toBeNull();
+    expect(host.textContent).toContain('Snow');
+  });
+
   it('tells somebody outside the round that it isn\'t theirs', async () => {
     await render('draft/r1', { 'draft-state': () => actionRejection('not-invited') });
     expect(host.textContent).toContain('You\'re not in this round.');

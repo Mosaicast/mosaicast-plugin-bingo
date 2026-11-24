@@ -88,7 +88,8 @@ final class BingoLifecycle {
                 lockedAt == null ? null : lockedAt.toString(),
                 resolvedAt == null ? null : resolvedAt.toString(),
                 archiveAt == null ? null : archiveAt.toString(),
-                null);
+                null,
+                previous == null ? null : previous.scoredWith());
     }
 
     /**

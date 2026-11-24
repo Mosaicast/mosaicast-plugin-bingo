@@ -87,6 +87,8 @@ export interface PhaseState {
   archiveAt: string | null;
   /** How alike two entries must be to count as one. Published because there is no `ctx.config`. */
   fuzzyThreshold?: number;
+  /** A hash of the decisions and pins last scored; how an archived bingo notices a correction. */
+  scoredWith?: string | null;
 }
 
 /** One prediction several people keep making. */
@@ -649,10 +651,30 @@ export interface DraftView {
   code?: string;
   /** Who has the round open right now. */
   online?: string[];
+  /** A finished round's ticks, for whoever may see them (see `DraftScoring`). */
+  scoring?: DraftScoring;
+}
+
+/**
+ * Which squares came true on a finished round's cards.
+ *
+ * Before the bingo is resolved only podcasters and admins get this: they ticked squares off while recording,
+ * and a fan in the round hasn't heard the episode yet. Afterwards every member does.
+ */
+export interface DraftScoring {
+  /** Per player, by square: whether it came true. */
+  hits: Record<string, boolean[]>;
+  /** Whether the bingo is resolved, so the ticks are its real answers. */
+  resolved: boolean;
+  /** Whether the reader may still tick squares off (`draft-mark`). */
+  canMark: boolean;
+  /** What the site ranks by, so the standings read the same way the board will. */
+  rankBy: 'lines' | 'fields';
 }
 
 /** One `update` event: a whole view without the cards, plus the one square written, if any. */
-export interface DraftUpdate extends Omit<DraftView, 'code' | 'online' | 'quiet' | 'quietEpisode' | 'hostHasCard'> {
+export interface DraftUpdate
+  extends Omit<DraftView, 'code' | 'online' | 'quiet' | 'quietEpisode' | 'hostHasCard' | 'scoring'> {
   written?: { userId: string; cell: number; text: string };
 }
 

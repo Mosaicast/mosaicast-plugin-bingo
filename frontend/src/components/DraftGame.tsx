@@ -8,6 +8,7 @@ import { bankLeft, checkSquare, formatClock, seatOf, timeLeft } from '../draft';
 import type { DraftSeat, DraftView } from '../types';
 import { BingoGrid, cellsFor } from './BingoGrid';
 import { nameOf } from './common';
+import { DraftScore } from './DraftScore';
 
 const MAX_TEXT = 140;
 
@@ -111,7 +112,11 @@ export function DraftGame({
 
       {vote && <VotePanel i18n={i18n} view={view} me={me} people={people} serverNow={serverNow} act={act} onError={onError} />}
 
-      {mine?.cells && (
+      {view.scoring && (
+        <DraftScore i18n={i18n} view={view} me={me} people={people} act={act} onError={onError} />
+      )}
+
+      {!view.scoring && mine?.cells && (
         <section className="bingo__draft-mine">
           <p className="bingo__section-title">{i18n.t('draft.yourCard')}</p>
           {myTurn && <p className="bingo__note">{i18n.t('draft.turn.pick')}</p>}
@@ -155,17 +160,19 @@ export function DraftGame({
         </section>
       )}
 
-      <div className="bingo__draft-others">
-        {game.seats
-          .filter((s) => s.userId !== me)
-          .map((seat) => (
-            <section key={seat.userId} className="bingo__draft-card">
-              <p className="bingo__section-title">{i18n.t('draft.cardOf', { name: nameOf(people[seat.userId], i18n) })}</p>
-              <BingoGrid size={view.size} freeCentre={view.freeCentre} entries={seat.cells ?? []} i18n={i18n}
-                label={i18n.t('draft.cardOf', { name: nameOf(people[seat.userId], i18n) })} />
-            </section>
-          ))}
-      </div>
+      {!view.scoring && (
+        <div className="bingo__draft-others">
+          {game.seats
+            .filter((s) => s.userId !== me)
+            .map((seat) => (
+              <section key={seat.userId} className="bingo__draft-card">
+                <p className="bingo__section-title">{i18n.t('draft.cardOf', { name: nameOf(people[seat.userId], i18n) })}</p>
+                <BingoGrid size={view.size} freeCentre={view.freeCentre} entries={seat.cells ?? []} i18n={i18n}
+                  label={i18n.t('draft.cardOf', { name: nameOf(people[seat.userId], i18n) })} />
+              </section>
+            ))}
+        </div>
+      )}
 
       {host && view.status === 'RUNNING' && (
         <div className="bingo__actions">

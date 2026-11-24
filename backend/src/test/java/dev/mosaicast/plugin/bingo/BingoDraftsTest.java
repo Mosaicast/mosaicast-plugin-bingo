@@ -436,6 +436,103 @@ class BingoDraftsTest extends BingoTestSupport {
                 .isEmpty(), "no seat: their tile keeps their own card");
     }
 
+    // ---------------------------------------------------------------- scoring early
+
+    /** A finished round the tick has seen, with the host and Alice listening. */
+    String finishedRound() {
+        String id = lobbyWithPlayers(untimed());
+        call(hostCaller(), "draft-start", Map.of("id", id));
+        playOut(id);
+        plugin.tick();
+        ChannelRef ref = new ChannelRef(Scope.site(), BingoDrafts.CHANNEL_PREFIX + id);
+        ctx.channels().subscribe(hostCaller(), ref);
+        ctx.channels().subscribe(Callers.fan(alice), ref);
+        return id;
+    }
+
+    String firstSquare(String id, UUID who) {
+        for (JsonNode seat : state(hostCaller(), id).get("game").get("seats")) {
+            if (seat.get("userId").asString().equals(who.toString())) {
+                return seat.get("cells").get(0).asString();
+            }
+        }
+        throw new AssertionError("no seat for " + who);
+    }
+
+    Map<String, Boolean> decisions() {
+        return ctx.store().get(Scope.episode(EPISODE), BingoDocs.KEY_RESOLUTION, BingoDocs.Resolution.class)
+                .map(BingoDocs.Resolution::hits).orElse(Map.of());
+    }
+
+    @Test
+    void thePodcastersTickSquaresOffEarlyAndOnlyTheySeeIt() {
+        String id = finishedRound();
+        ChannelRef ref = new ChannelRef(Scope.site(), BingoDrafts.CHANNEL_PREFIX + id);
+        int before = ctx.channels().published(ref).size();
+
+        JsonNode scoring = call(hostCaller(), "draft-mark", Map.of("id", id, "seat", alice.toString(), "cell", 0))
+                .get("scoring");
+        assertTrue(scoring.get("hits").get(alice.toString()).get(0).asBoolean());
+        assertFalse(scoring.get("hits").get(alice.toString()).get(1).asBoolean());
+        assertTrue(scoring.get("canMark").asBoolean());
+        assertFalse(scoring.get("resolved").asBoolean());
+        assertEquals(Map.of(BingoFuzzy.normalise(firstSquare(id, alice)), true), decisions(),
+                "a decision in the episode's resolution, so the real one starts from it");
+
+        List<ChannelEvent> events = ctx.channels().published(ref).subList(before, ctx.channels().published(ref).size());
+        assertEquals(1, events.size());
+        assertEquals("marks", events.get(0).event());
+        assertEquals(host, events.get(0).recipient(), "to the podcaster, never to the fan listening beside them");
+
+        assertTrue(state(hostCaller(), id).has("scoring"));
+        assertFalse(state(Callers.fan(alice), id).has("scoring"), "a fan hasn't heard the episode yet");
+
+        plugin.tick();
+        assertFalse(leaderboard(ctx).published(), "and nothing public moves before the resolution");
+        assertEquals("OPEN", phase(ctx).orElseThrow().phase());
+
+        // Taking the tick back removes the decision, so the resolve dialog asks about it again.
+        call(hostCaller(), "draft-mark", Map.of("id", id, "seat", alice.toString(), "cell", 0));
+        assertEquals(Map.of(), decisions());
+    }
+
+    @Test
+    void nothingIsTickedOffWhileTheRoundRuns() {
+        String running = lobbyWithPlayers(untimed());
+        call(hostCaller(), "draft-start", Map.of("id", running));
+        assertEquals("not-finished",
+                rejected(hostCaller(), "draft-mark", Map.of("id", running, "seat", host.toString(), "cell", 0)));
+    }
+
+    @Test
+    void onlyAPodcasterInAFinishedRoundTicksOff() {
+        String id = finishedRound();
+        assertThrows(IllegalStateException.class,
+                () -> call(Callers.fan(alice), "draft-mark", Map.of("id", id, "seat", alice.toString(), "cell", 0)),
+                "the host's floor: a fan never reaches the handler");
+        assertEquals("not-invited", rejected(Callers.podcaster(carol), "draft-mark",
+                Map.of("id", id, "seat", alice.toString(), "cell", 0)));
+        assertEquals("bad-cell",
+                rejected(hostCaller(), "draft-mark", Map.of("id", id, "seat", alice.toString(), "cell", 99)));
+        call(Callers.admin(UUID.randomUUID()), "draft-mark", Map.of("id", id, "seat", alice.toString(), "cell", 0));
+        assertEquals(1, decisions().size(), "an admin may, member or not");
+    }
+
+    @Test
+    void onceResolvedEveryoneInTheRoundSeesTheResultAndTheTicksStop() {
+        String id = finishedRound();
+        call(hostCaller(), "draft-mark", Map.of("id", id, "seat", bob.toString(), "cell", 0));
+        control(ctx, "RESOLVED");
+        plugin.tick();
+
+        JsonNode scoring = state(Callers.fan(alice), id).get("scoring");
+        assertTrue(scoring.get("resolved").asBoolean());
+        assertFalse(scoring.get("canMark").asBoolean());
+        assertTrue(scoring.get("hits").get(bob.toString()).get(0).asBoolean());
+        assertEquals("already-resolved",
+                rejected(hostCaller(), "draft-mark", Map.of("id", id, "seat", bob.toString(), "cell", 1)));
+    }
+
     @Test
     void everyHandlerIsDeclaredAndEveryDeclarationHandled() {
         assertEquals(new java.util.TreeSet<>(BingoDrafts.ACTIONS), new java.util.TreeSet<>(ctx.actions().handled()));

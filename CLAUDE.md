@@ -16,8 +16,8 @@ Java 21 (Gradle, PF4J extension) · React 18 + Vite (Web Component) · **platfor
 ## Commands
 ```
 ./build.sh                                    # -> dist/{plugin.json,bingo.jar,assets/bingo.es.js}
-cd backend  && ./gradlew test                 # 206 tests
-cd frontend && npm test && npm run typecheck  # 209 tests
+cd backend  && ./gradlew test                 # 215 tests
+cd frontend && npm test && npm run typecheck  # 216 tests
 node --test scripts/*.test.mjs                # import script (also in CI)
 scripts/set-version.sh <x.y.z>                # bumps the plugin version in all three files
 ```
@@ -37,7 +37,7 @@ shared/fuzzy-vectors.json · scripts/bingo-import.mjs (no deps; docs/import-form
 frontend/src/{keys,types}.ts            doc keys and shapes — mirror BingoDocs' records
 frontend/src/{fuzzy,regroup,history,palette,draft}.ts   card checks, pins, chart transforms, palette, round events
 frontend/src/components/                EpisodeBingo (+ parts), EpisodeCardBadge, BingoPage, HistoryPanel, ClaimBox,
-                                        ResolveModal, Draft{Round,Game,Order,List}, charts/ (hand-drawn SVG)
+                                        ResolveModal, Draft{Round,Game,Order,List,Score}, charts/ (hand-drawn SVG)
 frontend/locales/{en,de}.json           UI strings
 ```
 
@@ -76,6 +76,9 @@ frontend/locales/{en,de}.json           UI strings
   re-armed in `register()`. A round's card replaces its members' partition cards, so the `seat:<slug>` hint
   must make the tile read-only. Prune a finished round only after predictions close. Each rejection code
   needs `draft.error.<code>` in both locales (`draft.test.ts` checks against the Java).
+- **`resolution` is written before RESOLVED too** (`draft-mark`), so public output gates on the phase, never on
+  decisions existing; early ticks go to staff only. ARCHIVED rescores once when `PhaseState.scoredWith` changes.
+  Correction notices: flipped/removed decisions or pins only, never catch-up, after `CORRECTION_QUIET`.
 - **`DocStore` throws on the `USER` scope, reads included** (only an action's `call.store()` reaches the caller's). Fan cards are
   written by the browser and read back only via `ctx.allUsers()` (0.16.0; needs `data.readsAllUsers`).
 - **`allUsers().query` yields a bare `UUID`**; since 0.13.0 `ctx.users` turns it into a name and avatar.

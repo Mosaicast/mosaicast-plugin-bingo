@@ -1055,7 +1055,8 @@ class BingoPluginTest extends BingoTestSupport {
 
         plugin.register(ctx); // refused: over the cap
         assertEquals(1, notifier.messagesFor(alice).size());
-        assertTrue(ctx.store().get(Scope.episode(EPISODE), BingoDocs.KEY_NOTIFIED, Object.class).isEmpty(),
+        assertTrue(ctx.store().get(Scope.episode(EPISODE), BingoDocs.KEY_NOTIFIED, BingoDocs.NotifyState.class)
+                        .map(BingoDocs.NotifyState::safeUserIds).orElse(List.of()).isEmpty(),
                 "nobody is marked as told, so a later tick will try again rather than dropping it");
     }
 
@@ -1069,6 +1070,123 @@ class BingoPluginTest extends BingoTestSupport {
     }
 
     /** A bingo with one ranked player, already resolved. */
+    // ---------------------------------------------------------------- correcting a resolution
+
+    @Test
+    void aCorrectionRescoresAndTellsOnlyThoseItMovedOnceThePodcasterIsDone() {
+        var ctx = ctx(published(false));
+        seedTemplate(ctx);
+        seedCard(ctx, alice, List.of("kraken"));
+        seedCard(ctx, bob, List.of("squid"));
+        var notifier = new FakeNotifier(ctx.store());
+        ctx.withNotifier(notifier);
+        var plugin = new BingoPlugin(clock);
+        plugin.register(ctx);
+        resolve(ctx, Map.of("kraken", true, "squid", false));
+        control(ctx, "RESOLVED");
+        plugin.tick();
+        assertEquals(2, rowFor(ctx, alice.toString()).fields());
+        assertEquals(1, notifier.messagesFor(alice).size());
+
+        // The kraken never showed up after all.
+        resolve(ctx, Map.of("kraken", false, "squid", false));
+        plugin.tick();
+        assertEquals(1, rowFor(ctx, alice.toString()).fields(), "the board follows the correction at once");
+        assertEquals(1, notifier.messagesFor(alice).size(), "but the message waits until they're done");
+
+        clock.advance(BingoPublish.CORRECTION_QUIET.plusMinutes(1));
+        plugin.tick();
+        assertEquals(2, notifier.messagesFor(alice).size());
+        assertTrue(notifier.messagesFor(alice).get(1).textFor("en").contains("corrected"));
+        assertEquals(1, notifier.messagesFor(bob).size(), "bob's score didn't move");
+
+        clock.advance(Duration.ofHours(1));
+        plugin.tick();
+        assertEquals(2, notifier.messagesFor(alice).size(), "told once");
+    }
+
+    @Test
+    void catchingUpOnANewCandidateIsNotACorrection() {
+        var ctx = resolvedBingo();
+        var notifier = new FakeNotifier(ctx.store());
+        ctx.withNotifier(notifier);
+        var plugin = new BingoPlugin(clock);
+        plugin.register(ctx);
+        seedCard(ctx, bob, List.of("squid")); // late, told at once
+        plugin.tick();
+        assertEquals(1, notifier.messagesFor(bob).size());
+
+        resolve(ctx, Map.of("kraken", true, "squid", true));
+        plugin.tick();
+        clock.advance(BingoPublish.CORRECTION_QUIET.plusMinutes(1));
+        plugin.tick();
+        assertEquals(1, notifier.messagesFor(bob).size());
+        assertEquals(1, notifier.messagesFor(alice).size());
+    }
+
+    @Test
+    void anArchivedBingoIsScoredOnceMoreAfterACorrection() {
+        var ctx = ctx(published(false), new MapPluginConfig().with("archiveAfterDays", 30));
+        seedTemplate(ctx);
+        seedCard(ctx, alice, List.of("kraken"));
+        var plugin = new BingoPlugin(clock);
+        plugin.register(ctx);
+        resolve(ctx, Map.of("kraken", true));
+        control(ctx, "RESOLVED");
+        plugin.tick();
+        clock.advance(Duration.ofDays(31));
+        plugin.tick();
+        assertEquals("ARCHIVED", phase(ctx).orElseThrow().phase());
+        assertEquals(2, rowFor(ctx, alice.toString()).fields());
+
+        resolve(ctx, Map.of("kraken", false));
+        plugin.tick();
+        assertEquals(1, rowFor(ctx, alice.toString()).fields());
+        assertEquals(Map.of("kraken", false), answers(ctx));
+        assertEquals("ARCHIVED", phase(ctx).orElseThrow().phase(), "and it stays archived");
+    }
+
+    @Test
+    void anArchiveFromBeforeTheFingerprintIsNotRescoredOnUpgrade() {
+        var ctx = ctx(published(false), new MapPluginConfig().with("archiveAfterDays", 30));
+        seedTemplate(ctx);
+        seedCard(ctx, alice, List.of("kraken"));
+        var plugin = new BingoPlugin(clock);
+        plugin.register(ctx);
+        resolve(ctx, Map.of("kraken", true));
+        control(ctx, "RESOLVED");
+        plugin.tick();
+        clock.advance(Duration.ofDays(31));
+        plugin.tick();
+        var old = phase(ctx).orElseThrow().withScoredWith(null);
+        ctx.store().put(Scope.episode(EPISODE), BingoDocs.KEY_PHASE, old);
+        resolve(ctx, Map.of("kraken", false));
+
+        plugin.tick();
+        assertEquals(2, rowFor(ctx, alice.toString()).fields(), "takes note without scoring");
+        assertNotNull(phase(ctx).orElseThrow().scoredWith());
+    }
+
+    @Test
+    void ticksMadeBeforeTheResolutionStayBehindTheCover() {
+        var ctx = ctx(published(false));
+        seedTemplate(ctx);
+        seedCard(ctx, alice, List.of("kraken"));
+        var plugin = new BingoPlugin(clock);
+        plugin.register(ctx);
+
+        // Ticked off early, during the recording, while predictions are still open.
+        resolve(ctx, Map.of("kraken", true));
+        plugin.tick();
+
+        assertEquals("OPEN", phase(ctx).orElseThrow().phase());
+        assertFalse(leaderboard(ctx).published());
+        assertTrue(leaderboard(ctx).ranked().isEmpty());
+        assertTrue(answers(ctx).isEmpty());
+        assertFalse(ctx.store().get(Scope.episode(EPISODE), BingoDocs.KEY_RECAP, BingoDocs.Recap.class)
+                .orElseThrow().published());
+    }
+
     private FakePluginContext resolvedBingo() {
         var ctx = ctx(published(false));
         seedTemplate(ctx);

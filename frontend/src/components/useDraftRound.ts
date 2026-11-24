@@ -11,7 +11,7 @@ import {
 } from '@mosaicast/plugin-sdk';
 import { applyUpdate } from '../draft';
 import { draftChannel, seatKey } from '../keys';
-import type { DraftPreview, DraftUpdate, DraftView } from '../types';
+import type { DraftPreview, DraftScoring, DraftUpdate, DraftView } from '../types';
 
 /** Every draft action is called in the site scope, whatever page the call comes from. */
 export const SITE: Scope = { type: 'site', id: 'main' };
@@ -96,10 +96,21 @@ export function useDraftRound(ctx: PluginContext, id: string, code: string | nul
           setOnline((event.data as { online?: string[] }).online ?? []);
           return;
         }
+        if (event.event === 'marks' && current.current) {
+          // Somebody ticked a square off. Not versioned: it changes no round, only what came true.
+          take({ ...current.current, scoring: (event.data as { scoring: DraftScoring }).scoring });
+          return;
+        }
         if (event.event !== 'update' || !current.current) return;
+        const was = current.current.status;
         const next = applyUpdate(current.current, event.data as DraftUpdate);
-        if (next === null) void load();
-        else if (next !== current.current) take(next);
+        // A round that just finished has ticks to show, and only the whole view carries them.
+        if (next === null) {
+          void load();
+          return;
+        }
+        if (next !== current.current) take(next);
+        if (next.status === 'FINISHED' && was !== 'FINISHED') void load();
       },
       { scope: SITE, onReset: () => void load(), onStatus: setConnection },
     );

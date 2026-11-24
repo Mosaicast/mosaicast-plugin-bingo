@@ -124,3 +124,73 @@ describe('<ResolveModal> regrouping', () => {
     expect(host.textContent).toContain('Your corrections are applied on the next update.');
   });
 });
+
+describe('<ResolveModal> correcting', () => {
+  const scope = { type: 'episode' as const, id: 'ep-1' };
+  const candidates = [
+    { canonical: 'kraken', label: 'kraken', count: 1 },
+    { canonical: 'giant squid', label: 'giant squid', count: 1 },
+  ];
+  let host: HTMLDivElement;
+  let root: Root;
+
+  beforeAll(() => {
+    HTMLDialogElement.prototype.showModal ??= function (this: HTMLDialogElement) {
+      this.setAttribute('open', '');
+    };
+    HTMLDialogElement.prototype.close ??= function (this: HTMLDialogElement) {
+      this.removeAttribute('open');
+    };
+  });
+
+  beforeEach(() => {
+    host = document.createElement('div');
+    document.body.appendChild(host);
+    root = createRoot(host);
+  });
+
+  afterEach(() => {
+    act(() => root.unmount());
+    host.remove();
+  });
+
+  it('shows every decision, flips one and leaves the phase alone', async () => {
+    // `octopus` was ticked off elsewhere (a draft round's page) after the dialog read the resolution.
+    const docs = makeMockDocs({
+      'data/episode/ep-1/resolution': { hits: { kraken: true, 'giant squid': false, octopus: true } },
+    });
+    const ctx = makeBingoCtx({ scope, docs });
+    let done = 0;
+    await act(async () => {
+      root.render(
+        <ResolveModal
+          ctx={ctx}
+          i18n={makeI18n(ctx.locale)}
+          candidates={candidates}
+          cardCounts={{}}
+          assignments={{ kraken: 'kraken', 'giant squid': 'giant squid' }}
+          grouping={null}
+          resolution={{ hits: { kraken: true, 'giant squid': false } }}
+          mode="correct"
+          onClose={() => {}}
+          onDone={() => done++}
+          onRegroup={() => {}}
+        />,
+      );
+    });
+    expect(host.textContent).toContain('Correct the resolution');
+    const ticks = [...host.querySelectorAll<HTMLButtonElement>('.bingo__tick')];
+    expect(ticks.map((t) => t.getAttribute('aria-pressed'))).toEqual(['true', 'false']);
+
+    await act(async () => ticks[0].click());
+    const save = [...host.querySelectorAll('button')].find((b) => b.textContent?.trim() === 'Save the correction')!;
+    await act(async () => save.click());
+    await flush(ctx);
+
+    expect(docs.stored['data/episode/ep-1/resolution']).toEqual({
+      hits: { kraken: false, 'giant squid': false, octopus: true },
+    });
+    expect(docs.stored['data/episode/ep-1/control']).toBeUndefined();
+    expect(done).toBe(1);
+  });
+});

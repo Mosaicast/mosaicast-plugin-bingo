@@ -76,7 +76,7 @@ final class BingoDrafts {
 
     static final List<String> ACTIONS = List.of("draft-create", "draft-setup", "draft-players", "draft-invite",
             "draft-start", "draft-cancel", "draft-end", "draft-join", "draft-decline", "draft-state",
-            "draft-move", "draft-vote", "draft-inbox");
+            "draft-move", "draft-vote", "draft-inbox", "draft-mark");
 
     private static final SecureRandom RANDOM = new SecureRandom();
 
@@ -86,6 +86,8 @@ final class BingoDrafts {
     private final BingoLifecycle lifecycle;
     private final DoubleSupplier threshold;
     private final Map<String, ReentrantLock> locks = new ConcurrentHashMap<>();
+    /** Per episode: {@code draft-mark} reads, changes and writes the episode's resolution. */
+    private final Map<String, ReentrantLock> resolutionLocks = new ConcurrentHashMap<>();
     private final Map<String, Scheduled> timers = new ConcurrentHashMap<>();
 
     BingoDrafts(PluginContext ctx, Clock clock, CrossUserStore everyone, BingoLifecycle lifecycle,
@@ -110,6 +112,8 @@ final class BingoDrafts {
     record MoveRequest(String id, Integer cell, String text) {}
 
     record VoteRequest(String id, Boolean allow) {}
+
+    record MarkRequest(String id, String seat, Integer cell) {}
 
     /** Where a person stands in their own partition for one episode. A hint for their tile, nothing more. */
     record Seat(String draftId) {}
@@ -175,6 +179,7 @@ final class BingoDrafts {
                     Boolean.TRUE.equals(r.allow()), now()));
         });
         handle(actions, "draft-inbox", this::inbox);
+        handle(actions, "draft-mark", this::mark);
 
         channels.authorize(this::mayListen);
         channels.onJoin((ref, caller) -> presence(ref));
@@ -548,6 +553,10 @@ final class BingoDrafts {
             }
         }
         view.put("online", online(channelOf(d)));
+        Map<String, Object> scoring = scoring(d, caller);
+        if (scoring != null) {
+            view.put("scoring", scoring);
+        }
         return view;
     }
 
@@ -617,6 +626,146 @@ final class BingoDrafts {
         }
         v.put("game", game);
         return v;
+    }
+
+    // ---------------------------------------------------------------- scoring early
+
+    /**
+     * {@code draft-mark}: ticks a square off before the bingo is resolved, or takes the tick back.
+     *
+     * <p>This is for scoring the round while recording, before the episode is out. A tick is a decision in
+     * the episode's resolution, the same one the resolve dialog writes, so the real resolution later starts
+     * from it. It decides the square's whole group, so everyone who predicted the same thing gets it too.
+     * Taking it back removes the decision instead of writing a miss, so the resolve dialog still asks.
+     *
+     * <p>Nothing public changes: the board, the recap, the answers and the site stats all wait for
+     * {@code RESOLVED}. Only podcasters and admins in the round see the ticks, through {@link #scoring} and a
+     * {@code marks} event sent to them alone. Answers with the caller's view, like every other round action.
+     */
+    private Object mark(ActionCall call) {
+        MarkRequest r = call.payload(MarkRequest.class);
+        if (r == null || r.id() == null || r.seat() == null || r.cell() == null) {
+            throw new BingoDraft.Refused("bad-request");
+        }
+        BingoDraft d = load(r.id());
+        Caller caller = call.caller();
+        if (caller.role() == Role.FAN) {
+            throw new BingoDraft.Refused("staff-only");
+        }
+        if (!d.isMember(caller.userId().toString()) && caller.role() != Role.ADMIN) {
+            throw new BingoDraft.Refused("not-invited");
+        }
+        if (d.status != BingoDraft.Status.FINISHED) {
+            throw new BingoDraft.Refused("not-finished");
+        }
+        BingoDraft.Seat seat = d.seat(r.seat());
+        if (seat == null || r.cell() < 0 || r.cell() >= seat.cells.size() || seat.cells.get(r.cell()).isBlank()) {
+            throw new BingoDraft.Refused("bad-cell");
+        }
+
+        Scope scope = Scope.episode(d.episode);
+        ReentrantLock lock = resolutionLocks.computeIfAbsent(d.episode, k -> new ReentrantLock());
+        lock.lock();
+        Map<String, Object> scoring;
+        try {
+            if (settled(d.episode)) {
+                throw new BingoDraft.Refused("already-resolved");
+            }
+            Map<String, Boolean> hits = new LinkedHashMap<>(decisionsOf(scope));
+            String canonical = groupingFor(d, scope, hits).canonicalOf(seat.cells.get(r.cell()));
+            if (canonical == null) {
+                throw new BingoDraft.Refused("bad-cell");
+            }
+            if (Boolean.TRUE.equals(hits.get(canonical))) {
+                hits.remove(canonical);
+            } else {
+                hits.put(canonical, true);
+            }
+            ctx.store().put(scope, KEY_RESOLUTION, new Resolution(hits));
+            scoring = scoring(d, caller);
+        } finally {
+            lock.unlock();
+        }
+
+        Channel channel = channelOf(d);
+        List<String> listening = channel.subscribers().stream().map(UUID::toString).toList();
+        Map<String, Object> event = Map.of("scoring", scoring);
+        for (String id : staff(listening)) {
+            channel.publishTo(UUID.fromString(id), "marks", event);
+        }
+        return view(d, caller);
+    }
+
+    /**
+     * Which squares came true on each card of a finished round, or {@code null} for somebody who may not know.
+     *
+     * <p>Before the bingo is resolved that is podcasters and admins only: they recorded the episode, a fan in
+     * the round has not heard it yet. Afterwards it's everyone in the round, since the answers are public then.
+     */
+    Map<String, Object> scoring(BingoDraft d, Caller caller) {
+        if (d.status != BingoDraft.Status.FINISHED) {
+            return null;
+        }
+        boolean settled = settled(d.episode);
+        boolean staff = caller.role() != Role.FAN;
+        if (!settled && !staff) {
+            return null;
+        }
+        Scope scope = Scope.episode(d.episode);
+        Map<String, Boolean> hits = decisionsOf(scope);
+        BingoFuzzy.Grouping grouping = groupingFor(d, scope, hits);
+        Map<String, List<Boolean>> bySeat = new LinkedHashMap<>();
+        for (BingoDraft.Seat seat : d.seats) {
+            List<Boolean> marks = new ArrayList<>();
+            for (String text : seat.cells) {
+                String canonical = text == null || text.isBlank() ? null : grouping.canonicalOf(text);
+                marks.add(canonical != null && Boolean.TRUE.equals(hits.get(canonical)));
+            }
+            bySeat.put(seat.userId, marks);
+        }
+        Map<String, Object> out = new LinkedHashMap<>();
+        out.put("hits", bySeat);
+        out.put("resolved", settled);
+        out.put("canMark", !settled && staff);
+        out.put("rankBy", BingoScore.RankBy.of(ctx.config().get("rankBy", String.class, "lines"))
+                .name().toLowerCase(java.util.Locale.ROOT));
+        return out;
+    }
+
+    private boolean settled(String slug) {
+        Phase phase = ctx.store().get(Scope.episode(slug), KEY_PHASE, PhaseState.class)
+                .map(p -> BingoLifecycle.parsePhase(p.phase()))
+                .orElse(Phase.OPEN);
+        return phase == Phase.RESOLVED || phase == Phase.ARCHIVED;
+    }
+
+    private Map<String, Boolean> decisionsOf(Scope scope) {
+        return ctx.store().get(scope, KEY_RESOLUTION, Resolution.class)
+                .map(Resolution::hits)
+                .map(Map::copyOf)
+                .orElseGet(Map::of);
+    }
+
+    /**
+     * The episode's grouping as the tick makes it: every entry it last saw, this round's squares, the decided
+     * groups as seeds and the podcaster's pins, at the threshold the tick used. Grouping depends only on the
+     * distinct entries, so the tick's published assignments are a complete input.
+     */
+    private BingoFuzzy.Grouping groupingFor(BingoDraft d, Scope scope, Map<String, Boolean> hits) {
+        Set<String> texts = new LinkedHashSet<>(ctx.store().get(scope, KEY_CANDIDATES, Candidates.class)
+                .map(Candidates::assignments)
+                .map(Map::keySet)
+                .orElseGet(Set::of));
+        for (BingoDraft.Seat seat : d.seats) {
+            seat.cells.stream().filter(t -> t != null && !t.isBlank()).forEach(texts::add);
+        }
+        Map<String, String> pins = ctx.store().get(scope, KEY_GROUPING, GroupingDoc.class)
+                .map(GroupingDoc::normalisedPins)
+                .orElseGet(Map::of);
+        double cut = ctx.store().get(scope, KEY_PHASE, PhaseState.class)
+                .map(PhaseState::fuzzyThreshold)
+                .orElse(threshold.getAsDouble());
+        return BingoFuzzy.group(texts, cut, hits.keySet(), pins);
     }
 
     // ---------------------------------------------------------------- what the tick reads
