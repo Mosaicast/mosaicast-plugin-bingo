@@ -384,10 +384,11 @@ public class BingoPlugin implements PluginBackend, UserDataHandler, PageRoutePro
             // Terminal: this episode has left the working set for good. It is still a bingo that happened,
             // so it stays on the site page's list - with no headcount, which would cost a read per episode.
             pass.bingos().add(BingoSummary.of(slug, template.get(), Phase.ARCHIVED.name(), null));
+            Resolution resolution = ctx.store().get(scope, KEY_RESOLUTION, Resolution.class).orElse(null);
             if (!firstPassDone) {
-                publishAnswers(scope, ctx.store().get(scope, KEY_RESOLUTION, Resolution.class).orElse(null),
-                        Phase.ARCHIVED);
+                publishAnswers(scope, resolution, Phase.ARCHIVED);
             }
+            rescoreArchived(slug, template.get(), previous, resolution, pass);
             return;
         }
 
@@ -400,8 +401,12 @@ public class BingoPlugin implements PluginBackend, UserDataHandler, PageRoutePro
         if (release == EpisodePhase.PLANNED) {
             pass.quiet().add(slug);
         }
+        Resolution resolution = ctx.store().get(scope, KEY_RESOLUTION, Resolution.class)
+                .orElseGet(() -> new Resolution(Map.of()));
+        Map<String, String> pins = pinsOf(scope);
         PhaseState state = lifecycle.resolvePhase(slug, release, previous, archiveAfterDays, allowLate)
-                .withThreshold(threshold);
+                .withThreshold(threshold)
+                .withScoredWith(BingoDocs.scoredWith(resolution.hits(), pins));
         ctx.store().put(scope, KEY_PHASE, state);
         Phase phase = Phase.valueOf(state.phase());
 
@@ -426,12 +431,87 @@ public class BingoPlugin implements PluginBackend, UserDataHandler, PageRoutePro
         Map<String, List<EntryRow>> rows = record.rowsOf(slug);
         List<CardInput> cards = whatCardsSay(pass.cards().getOrDefault(slug, List.of()), rows, template.get(),
                 writtenUnder, allowLate);
-        Resolution resolution = ctx.store().get(scope, KEY_RESOLUTION, Resolution.class)
-                .orElseGet(() -> new Resolution(Map.of()));
-        Map<String, String> pins = ctx.store().get(scope, KEY_GROUPING, GroupingDoc.class)
+        Grouped grouped = group(scope, cards, threshold, resolution, pins, phase);
+
+        if (phase == Phase.ARCHIVED) {
+            // Newly archived this tick: the documents above are its final state, and nothing is ingested.
+            pass.bingos().add(BingoSummary.of(slug, template.get(), Phase.ARCHIVED.name(), null));
+            return;
+        }
+
+        // Only cards that still have a document of their own are read again. A card that exists only as rows -
+        // imported, or whose document is gone - is the record already, and rewriting it would re-rank it.
+        Set<String> withDocument = new java.util.HashSet<>();
+        pass.cards().getOrDefault(slug, List.of()).forEach(c -> withDocument.add(c.author()));
+        record.ingest(slug, cards.stream().filter(c -> withDocument.contains(c.author())).toList(), rows,
+                grouped.grouping(), template.get(), writtenUnder, allowLate);
+        BingoRecord.Scored scored = scoreAndPublish(scope, slug, template.get(), grouped, resolution, prefs, phase,
+                rankBy);
+        if (release != EpisodePhase.PLANNED) {
+            pass.bingos().add(BingoSummary.of(slug, template.get(), phase.name(), scored.players()));
+        }
+
+        publish.showcase(slug, cards, prefs);
+
+        // A notification names the episode and links to it. While the episode is quiet nobody but a
+        // podcaster may know it exists, so the news waits until it is announced; who has been told is
+        // tracked per person, so the first tick after that sends it.
+        if (phase == Phase.RESOLVED) {
+            if (release != EpisodePhase.PLANNED) {
+                publish.notifyResolved(slug);
+            }
+            publish.trackCorrections(slug, resolution.hits(), pins, scored.moved(),
+                    release != EpisodePhase.PLANNED);
+        }
+    }
+
+    /**
+     * Scores an archived bingo once more after its resolution was corrected, and does nothing otherwise.
+     *
+     * <p>Archiving takes a bingo out of the working set, so nothing else would ever look at it again. The
+     * phase document remembers which decisions and pins were last scored ({@code scoredWith}); when those
+     * differ, this pass regroups the frozen rows, rescores them and republishes what is derived from them.
+     * No card is read: an archived bingo takes no new entries. A phase document from before the fingerprint
+     * existed gets one without a rescore, so an upgrade doesn't rescore the whole archive at once.
+     */
+    private void rescoreArchived(String slug, Template template, PhaseState previous, Resolution found, Pass pass) {
+        Scope scope = Scope.episode(slug);
+        Resolution resolution = found != null ? found : new Resolution(Map.of());
+        Map<String, String> pins = pinsOf(scope);
+        String fingerprint = BingoDocs.scoredWith(resolution.hits(), pins);
+        if (fingerprint.equals(previous.scoredWith())) {
+            return;
+        }
+        if (previous.scoredWith() != null) {
+            Map<String, List<EntryRow>> rows = record.rowsOf(slug);
+            List<CardInput> cards = whatCardsSay(List.of(), rows, template, Phase.ARCHIVED, false);
+            double threshold = previous.fuzzyThreshold() != null
+                    ? previous.fuzzyThreshold() : pass.settings().threshold();
+            Grouped grouped = group(scope, cards, threshold, resolution, pins, Phase.ARCHIVED);
+            BingoRecord.Scored scored = scoreAndPublish(scope, slug, template, grouped, resolution, pass.prefs(),
+                    Phase.ARCHIVED, pass.settings().rankBy());
+            boolean announced = lifecycle.releasePhaseOf(slug) != EpisodePhase.PLANNED;
+            publish.trackCorrections(slug, resolution.hits(), pins, scored.moved(), announced);
+        }
+        ctx.store().put(scope, KEY_PHASE, previous.withScoredWith(fingerprint));
+    }
+
+    /** The podcaster's merges and splits, as the grouping takes them. */
+    private Map<String, String> pinsOf(Scope scope) {
+        return ctx.store().get(scope, KEY_GROUPING, GroupingDoc.class)
                 .map(GroupingDoc::normalisedPins)
                 .orElseGet(Map::of);
+    }
 
+    /** One pass's grouping of a bingo's entries, and what the candidate list says about it. */
+    private record Grouped(BingoFuzzy.Grouping grouping, List<BingoFuzzy.Candidate> items,
+                           Map<String, Integer> cardCounts) {}
+
+    /**
+     * Groups the entries, then publishes the candidate list and the answers.
+     */
+    private Grouped group(Scope scope, List<CardInput> cards, double threshold, Resolution resolution,
+                          Map<String, String> pins, Phase phase) {
         List<String> everyEntry = new ArrayList<>();
         cards.forEach(c -> everyEntry.addAll(c.entries()));
         // Decided groups are seeded so a later entry cannot rename them out from under their decision, and
@@ -477,34 +557,19 @@ public class BingoPlugin implements PluginBackend, UserDataHandler, PageRoutePro
         ctx.store().put(scope, KEY_CANDIDATES,
                 new Candidates(items, assignments, cardCounts, now().toString()));
         publishAnswers(scope, resolution, phase);
+        return new Grouped(grouping, items, cardCounts);
+    }
 
-        if (phase == Phase.ARCHIVED) {
-            // Newly archived this tick: the documents above are its final state, and nothing is ingested.
-            pass.bingos().add(BingoSummary.of(slug, template.get(), Phase.ARCHIVED.name(), null));
-            return;
-        }
-
-        // Only cards that still have a document of their own are read again. A card that exists only as rows -
-        // imported, or whose document is gone - is the record already, and rewriting it would re-rank it.
-        Set<String> withDocument = new java.util.HashSet<>();
-        pass.cards().getOrDefault(slug, List.of()).forEach(c -> withDocument.add(c.author()));
-        record.ingest(slug, cards.stream().filter(c -> withDocument.contains(c.author())).toList(), rows, grouping,
-                template.get(), writtenUnder, allowLate);
-        BingoRecord.Scored scored = record.score(slug, template.get(), grouping, resolution, prefs, phase, rankBy);
+    /** Rescores the frozen rows and publishes the board and the recap. */
+    private BingoRecord.Scored scoreAndPublish(Scope scope, String slug, Template template, Grouped grouped,
+                                               Resolution resolution, Map<String, Prefs> prefs, Phase phase,
+                                               BingoScore.RankBy rankBy) {
+        BingoRecord.Scored scored = record.score(slug, template, grouped.grouping(), resolution, prefs, phase,
+                rankBy);
         ctx.store().put(scope, KEY_LEADERBOARD, scored.board());
-        ctx.store().put(scope, KEY_RECAP, record.recap(scored, items, cardCounts, resolution, phase));
-        if (release != EpisodePhase.PLANNED) {
-            pass.bingos().add(BingoSummary.of(slug, template.get(), phase.name(), scored.players()));
-        }
-
-        publish.showcase(slug, cards, prefs);
-
-        // A notification names the episode and links to it. While the episode is quiet nobody but a
-        // podcaster may know it exists, so the news waits until it is announced; who has been told is
-        // tracked per person, so the first tick after that sends it.
-        if (phase == Phase.RESOLVED && release != EpisodePhase.PLANNED) {
-            publish.notifyResolved(slug);
-        }
+        ctx.store().put(scope, KEY_RECAP,
+                record.recap(scored, grouped.items(), grouped.cardCounts(), resolution, phase));
+        return scored;
     }
 
     // ---------------------------------------------------------------- cards and preferences

@@ -8,6 +8,7 @@ import { Icon } from '../icons';
 import { KEY_CONTROL, KEY_GROUPING, KEY_RESOLUTION } from '../keys';
 import { mergePins, pendingPins, splitPin, variantsOf } from '../regroup';
 import type { Candidate, GroupingDoc, Resolution } from '../types';
+import { pick, readScope } from './useBingo';
 
 /**
  * The resolving surface, as a dialog on the bingo itself.
@@ -22,6 +23,9 @@ import type { Candidate, GroupingDoc, Resolution } from '../types';
  *   arrived since. No timestamps needed, and it removes an old ambiguity: until now "never ticked" and
  *   "ticked, then unticked" were the same thing to the backend, so a term that appeared after the
  *   resolution silently counted as a miss.
+ * - **correct** — every candidate with its decision, after the resolution, to fix one ticked wrong. It
+ *   writes the decisions and leaves the phase alone; the backend rescores (an archived bingo too) and tells
+ *   the people whose score moved.
  *
  * <p>Each candidate also opens onto the spellings grouped into it, so a podcaster can overrule the matching:
  * split a spelling off into its own group, or merge a whole candidate into another. Those are written at
@@ -51,7 +55,7 @@ export function ResolveModal({
   /** The podcaster's own corrections so far. */
   grouping: GroupingDoc | null;
   resolution: Resolution | null;
-  mode: 'resolve' | 'catchup';
+  mode: 'resolve' | 'catchup' | 'correct';
   onClose: () => void;
   onDone: () => void;
   /** A correction was written; re-read so its pending state shows. The dialog stays open. */
@@ -59,7 +63,7 @@ export function ResolveModal({
 }) {
   const ref = useRef<HTMLDialogElement>(null);
   const decided = resolution?.hits ?? {};
-  const shown = mode === 'resolve' ? candidates : candidates.filter((c) => !(c.canonical in decided));
+  const shown = mode === 'catchup' ? candidates.filter((c) => !(c.canonical in decided)) : candidates;
 
   const [marks, setMarks] = useState<Record<string, boolean>>(() =>
     Object.fromEntries(shown.map((c) => [c.canonical, decided[c.canonical] === true])),
@@ -115,8 +119,10 @@ export function ResolveModal({
     setBusy(true);
     try {
       // Every candidate on screen gets a decision, not just the ticked ones. That is what makes
-      // "no decision yet" mean "arrived after the resolution" from here on.
-      const hits: Record<string, boolean> = { ...decided };
+      // "no decision yet" mean "arrived after the resolution" from here on. Read fresh first: a square ticked
+      // off on a draft round's page while this was open is a decision too, and must not be dropped.
+      const fresh = pick<Resolution>(await readScope(ctx, ctx.scope, [KEY_RESOLUTION]), KEY_RESOLUTION);
+      const hits: Record<string, boolean> = { ...(fresh?.hits ?? decided) };
       for (const c of shown) hits[c.canonical] = marks[c.canonical] === true;
       await ctx.docs.put(ctx.scope, KEY_RESOLUTION, { hits });
 
@@ -142,11 +148,11 @@ export function ResolveModal({
       <div className="bingo">
         <div className="bingo__head">
           <h3 className="bingo__title">
-            <Icon name="board" /> {i18n.t(mode === 'resolve' ? 'resolve.title' : 'resolve.catchupTitle')}
+            <Icon name="board" /> {i18n.t(`resolve.${COPY[mode].title}`)}
           </h3>
         </div>
         <p className="bingo__hint">
-          {i18n.t(mode === 'resolve' ? 'resolve.hint' : 'resolve.catchupHint')}
+          {i18n.t(`resolve.${COPY[mode].hint}`)}
         </p>
 
         {shown.length === 0 ? (
@@ -268,7 +274,7 @@ export function ResolveModal({
 
         <div className="bingo__actions">
           <button type="button" className="bingo__btn" onClick={confirm} disabled={busy}>
-            {i18n.t(mode === 'resolve' ? 'resolve.confirm' : 'resolve.catchupConfirm')}
+            {i18n.t(`resolve.${COPY[mode].confirm}`)}
           </button>
           <button
             type="button"
@@ -284,6 +290,13 @@ export function ResolveModal({
     </dialog>
   );
 }
+
+/** The dialog's wording per mode, as keys under `resolve.`. */
+const COPY = {
+  resolve: { title: 'title', hint: 'hint', confirm: 'confirm' },
+  catchup: { title: 'catchupTitle', hint: 'catchupHint', confirm: 'catchupConfirm' },
+  correct: { title: 'correctTitle', hint: 'correctHint', confirm: 'correctConfirm' },
+} as const;
 
 /** Candidates nobody has decided on yet — after a resolution, exactly the ones that arrived since. */
 export function undecided(candidates: Candidate[], resolution: Resolution | null): Candidate[] {

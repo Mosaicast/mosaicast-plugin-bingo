@@ -421,6 +421,18 @@ export const BINGO_CSS =
   .bingo__cell--pick:hover { border-color: var(--mc-accent-text); }
   .bingo__cell--pick:focus-visible { outline: 2px solid var(--mc-accent-text); outline-offset: 1px; }
   .bingo__cell--picked { border: 2px solid var(--mc-accent-text); border-style: solid; }
+  .bingo__cell--toggle { font: inherit; color: inherit; cursor: pointer; width: 100%; }
+  .bingo__cell--toggle.bingo__cell--hit { color: var(--mc-accent-text); font-weight: 600; }
+  .bingo__cell--toggle:hover { border-color: var(--mc-accent-text); }
+  .bingo__cell--toggle:focus-visible { outline: 2px solid var(--mc-accent-text); outline-offset: 1px; }
+  .bingo__draft-score { display: flex; flex-direction: column; gap: .75rem; }
+  .bingo__draft-score .bingo__actions { margin: 0; }
+  .bingo__standings { list-style: none; margin: 0; padding: 0; counter-reset: place; }
+  .bingo__standings li {
+    display: flex; flex-wrap: wrap; align-items: baseline; gap: .25rem .5rem; padding: .3rem .25rem;
+    border-bottom: 1px solid var(--mc-border); min-width: 0;
+  }
+  .bingo__standings-score { margin-left: auto; font-variant-numeric: tabular-nums; }
   .bingo__draft-entry { display: flex; flex-wrap: wrap; align-items: flex-end; gap: .5rem; margin-top: .5rem; }
   .bingo__draft-entry .bingo__field { flex: 1 1 14rem; min-width: 0; }
   .bingo__draft-entry .bingo__input { width: 100%; }

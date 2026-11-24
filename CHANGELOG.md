@@ -10,6 +10,28 @@ in the three files that carry it.
 
 ## [Unreleased]
 
+## [0.11.0] — correct a resolution, score a round early
+
+Still built against **`platformApi` 0.20.0**, so it needs core 0.10.0 or newer; tested on core 0.11.1.
+
+### Added
+- **Correct the resolution.** A resolved or archived bingo has *Correct the resolution* on the tile. The dialog
+  shows every candidate with its decision and saves only the decisions. The next pass rescores every card, and
+  the board, the answers, the recap and the site standings follow. An archived bingo is scored once more after
+  a correction, from its frozen rows.
+- **Players hear about a correction** when it changes their lines or squares: one message, sent once the
+  resolution has been left alone for 10 minutes. Catching up on new entries isn't a correction and sends
+  nothing.
+- **Score a draft round early.** On a finished round's page, podcasters and admins in the round can tick
+  squares off while recording, before the episode is out, and see everyone's lines and squares at once, on
+  every podcaster's screen. Each tick is a decision in the episode's resolution, for everyone who predicted
+  the same thing, so resolving later starts from it. Fans in the round see nothing until the bingo is
+  resolved, and nothing public moves before then. New action `draft-mark` (podcaster and up).
+
+### Fixed
+- A tile test that unseals a claimed card waited a fixed time for WebCrypto and failed now and then when the
+  whole suite ran at once. It waits for the result now.
+
 ## [0.10.1] — draft round fixes
 
 Still built against **`platformApi` 0.20.0**, so it needs core 0.10.0 or newer; tested on core 0.11.1.

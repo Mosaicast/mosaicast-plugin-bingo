@@ -251,14 +251,44 @@ final class BingoDocs {
      *
      * <p>{@code fuzzyThreshold} rides along because there is no {@code ctx.config} in a browser, and the card
      * editor warns about two squares that will count as one by the same threshold the tick groups with.
+     *
+     * <p>{@code scoredWith} fingerprints the decisions and pins the last pass scored against (see
+     * {@link #scoredWith}). An archived bingo is otherwise never looked at again, so this is how it notices
+     * that a podcaster corrected its resolution, and scores it once more.
      */
     record PhaseState(String phase, String suggested, boolean openedBeforeRelease,
                       boolean allowLate, String lockedAt, String resolvedAt, String archiveAt,
-                      Double fuzzyThreshold) {
+                      Double fuzzyThreshold, String scoredWith) {
 
         PhaseState withThreshold(double threshold) {
             return new PhaseState(phase, suggested, openedBeforeRelease, allowLate, lockedAt, resolvedAt,
-                    archiveAt, threshold);
+                    archiveAt, threshold, scoredWith);
+        }
+
+        PhaseState withScoredWith(String fingerprint) {
+            return new PhaseState(phase, suggested, openedBeforeRelease, allowLate, lockedAt, resolvedAt,
+                    archiveAt, fuzzyThreshold, fingerprint);
+        }
+    }
+
+    /**
+     * What a score depends on besides the cards: every decision and every pin, in a stable order.
+     *
+     * <p>Hashed so the phase document, which anyone may read, says nothing about the decisions themselves.
+     */
+    static String scoredWith(Map<String, Boolean> hits, Map<String, String> pins) {
+        StringBuilder text = new StringBuilder();
+        new java.util.TreeMap<>(hits == null ? Map.<String, Boolean>of() : hits)
+                .forEach((k, v) -> text.append(k).append('=').append(v).append('\n'));
+        text.append('\u0000');
+        new java.util.TreeMap<>(pins == null ? Map.<String, String>of() : pins)
+                .forEach((k, v) -> text.append(k).append('>').append(v).append('\n'));
+        try {
+            byte[] digest = java.security.MessageDigest.getInstance("SHA-256")
+                    .digest(text.toString().getBytes(java.nio.charset.StandardCharsets.UTF_8));
+            return java.util.HexFormat.of().formatHex(digest, 0, 12);
+        } catch (java.security.NoSuchAlgorithmException e) {
+            throw new IllegalStateException(e);
         }
     }
 
@@ -397,8 +427,29 @@ final class BingoDocs {
     /** Predictions people keep making, for the card editor. Site scope, backend-owned. */
     record Suggestions(List<Suggestion> items, String computedAt) {}
 
-    /** Who has already been told this bingo resolved. Backend-owned, and why nobody is told twice. */
-    record NotifyState(List<String> userIds, String updatedAt) {}
+    /**
+     * Who has already been told this bingo resolved. Backend-owned, and why nobody is told twice.
+     *
+     * <p>The rest is for telling people about a correction. {@code decisions} and {@code pins} are what the
+     * last pass after the resolution saw, so the next one can tell a changed decision from a newly added
+     * one. {@code corrected} is who is owed a message about it, and {@code correctedAt} when the podcaster
+     * last changed something: the message waits until they've been done for a while.
+     */
+    record NotifyState(List<String> userIds, String updatedAt, Map<String, Boolean> decisions,
+                       Map<String, String> pins, List<String> corrected, String correctedAt) {
+
+        NotifyState(List<String> userIds, String updatedAt) {
+            this(userIds, updatedAt, null, null, null, null);
+        }
+
+        List<String> safeUserIds() {
+            return userIds == null ? List.of() : userIds;
+        }
+
+        List<String> safeCorrected() {
+            return corrected == null ? List.of() : corrected;
+        }
+    }
 
     /** A row of {@code plugin_bingo_entry}. The {@code id} component is assigned by the platform. */
     record EntryRow(long id, String episode, String author, int position, String text,

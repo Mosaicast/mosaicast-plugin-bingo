@@ -23,11 +23,16 @@ read the caller's own rows and return them, with nothing published anywhere. Bef
 private to put a person's own history.
 - Cost: one action, a panel on the site page, and tests for "only your own rows".
 
-### Live tick-off
-While a podcaster ticks answers off, viewers see the result only on their next read. Draft rounds brought
-channels (`platformApi` 0.20.0), so the push side exists now; it would still have to respect the spoiler
-cover (`ctx.progress` is per-device) and stay within the rule that nothing public reflects an unresolved
-score. Not needed for now.
+### Live tick-off for everyone
+Podcasters already tick a finished draft round off live (0.11.0), and only they see it. A fan watching the
+tile still sees the result on their next read after the resolution. A push to fans would have to respect the
+spoiler cover (`ctx.progress` is per-device) and stay within the rule that nothing public reflects an
+unresolved score. Not needed for now.
+
+### Early ticks on the tile
+Scoring early lives on a draft round's page. A host who played a plain card on the tile has no early view,
+because the tile's dialog writes a full resolution only. A "save without resolving" in that dialog plus a
+podcaster-only preview board would cover it. Not asked for yet.
 
 ### Backend enforcement of duplicate squares
 The card editor stops a player saving the same prediction twice, but only in the browser. A direct write

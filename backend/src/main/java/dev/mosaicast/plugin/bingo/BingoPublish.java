@@ -13,6 +13,7 @@ import dev.mosaicast.plugin.api.SchemaStore;
 import dev.mosaicast.plugin.api.Scope;
 
 import java.time.Clock;
+import java.time.Duration;
 import java.time.Instant;
 import java.util.ArrayList;
 import java.util.Comparator;
@@ -20,6 +21,7 @@ import java.util.LinkedHashMap;
 import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
+import java.util.Objects;
 import java.util.Set;
 import java.util.UUID;
 
@@ -106,8 +108,7 @@ final class BingoPublish {
 
         Scope scope = Scope.episode(slug);
         NotifyState state = ctx.store().get(scope, KEY_NOTIFIED, NotifyState.class).orElse(null);
-        Set<String> already = new LinkedHashSet<>(
-                state == null || state.userIds() == null ? List.of() : state.userIds());
+        Set<String> already = new LinkedHashSet<>(state == null ? List.of() : state.safeUserIds());
 
         List<UUID> ranked = new ArrayList<>();
         List<UUID> late = new ArrayList<>();
@@ -135,12 +136,78 @@ final class BingoPublish {
         settled &= send(notifier, late, lateMessage(title, slug), told, slug);
 
         if (told.size() != already.size()) {
-            ctx.store().put(scope, KEY_NOTIFIED, new NotifyState(List.copyOf(told), now().toString()));
+            ctx.store().put(scope, KEY_NOTIFIED, state == null
+                    ? new NotifyState(List.copyOf(told), now().toString())
+                    : new NotifyState(List.copyOf(told), now().toString(), state.decisions(), state.pins(),
+                            state.corrected(), state.correctedAt()));
         }
         if (!settled) {
             ctx.logger().info("bingo is holding notifications for {} until a later tick", slug);
         }
     }
+
+    /**
+     * Tells people when a correction to the resolution changed their score.
+     *
+     * <p>A correction is a decision that flipped or went away, or a pin that changed. Deciding a candidate
+     * nobody had decided yet is catching up, not correcting, so it never sends anything: that is what
+     * comparing with the decisions the last pass saw is for. Only people already told the bingo resolved
+     * hear about a correction, and only those whose points or lines actually moved.
+     *
+     * <p>A podcaster fixing a resolution often saves more than once, so the message waits until nothing
+     * has changed for {@link #CORRECTION_QUIET}: three saves, one message.
+     *
+     * @param hits     the resolution this pass scored against
+     * @param pins     the pins this pass grouped with
+     * @param moved    whose standing this pass changed
+     * @param announce whether the episode may be named yet; a quiet one keeps the message waiting
+     */
+    void trackCorrections(String slug, Map<String, Boolean> hits, Map<String, String> pins, Set<String> moved,
+                          boolean announce) {
+        Scope scope = Scope.episode(slug);
+        NotifyState state = ctx.store().get(scope, KEY_NOTIFIED, NotifyState.class)
+                .orElseGet(() -> new NotifyState(List.of(), now().toString()));
+        Map<String, Boolean> decisions = hits == null ? Map.of() : Map.copyOf(hits);
+        Map<String, String> pinned = pins == null ? Map.of() : Map.copyOf(pins);
+
+        Set<String> pending = new LinkedHashSet<>(state.safeCorrected());
+        String correctedAt = state.correctedAt();
+        // The first pass after the resolution only takes note: there is nothing yet to compare with.
+        boolean corrected = state.decisions() != null && (!pinned.equals(state.pins() == null ? Map.of() : state.pins())
+                || state.decisions().entrySet().stream()
+                        .anyMatch(e -> !Objects.equals(e.getValue(), decisions.get(e.getKey()))));
+        if (corrected) {
+            correctedAt = now().toString();
+            moved.stream().filter(state.safeUserIds()::contains).forEach(pending::add);
+        }
+
+        Notifier notifier = ctx.notifier();
+        if (!pending.isEmpty() && announce && notifier != null && correctedAt != null
+                && !now().isBefore(Instant.parse(correctedAt).plus(CORRECTION_QUIET))) {
+            List<UUID> ids = new ArrayList<>();
+            pending.forEach(id -> {
+                try {
+                    ids.add(UUID.fromString(id));
+                } catch (IllegalArgumentException e) {
+                    // pseudonymised: nobody left to tell
+                }
+            });
+            if (send(notifier, ids, correctedMessage(episodeTitle(slug), slug), new LinkedHashSet<>(), slug)) {
+                pending.clear();
+            } else {
+                ctx.logger().info("bingo is holding a correction notice for {} until a later tick", slug);
+            }
+        }
+
+        NotifyState next = new NotifyState(state.safeUserIds(), state.updatedAt(), decisions, pinned,
+                pending.isEmpty() ? null : List.copyOf(pending), pending.isEmpty() ? null : correctedAt);
+        if (!next.equals(state)) {
+            ctx.store().put(scope, KEY_NOTIFIED, next);
+        }
+    }
+
+    /** How long a corrected resolution has to stay unchanged before the people it moved hear about it. */
+    static final Duration CORRECTION_QUIET = Duration.ofMinutes(10);
 
     /**
      * Sends to one audience.
@@ -199,6 +266,16 @@ final class BingoPublish {
                 "de", "Das Bingo für „" + title + "“ ist aufgelöst. Du hast nach dem "
                         + "Schließen der Tipps gespielt, deine Karte wird daher nicht gewertet — "
                         + "du kannst aber sehen, wie sie abgeschnitten hat."))
+                .withLink("/episodes/" + slug);
+    }
+
+    /** The news that a correction changed somebody's score. */
+    static NotifyMessage correctedMessage(String title, String slug) {
+        return new NotifyMessage(Map.of(
+                "en", "The resolution for “" + title + "” was corrected, and your score changed. "
+                        + "See how your card does now.",
+                "de", "Die Auflösung für „" + title + "“ wurde korrigiert, und deine Punkte haben sich "
+                        + "geändert. Sieh nach, wie deine Karte jetzt dasteht."))
                 .withLink("/episodes/" + slug);
     }
 

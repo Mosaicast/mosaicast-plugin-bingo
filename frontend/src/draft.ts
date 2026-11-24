@@ -13,6 +13,7 @@ import type { DraftMatch, DraftSeat, DraftUpdate, DraftView } from './types';
 
 /** Every rejection code the backend sends, so each has its own sentence. Anything else gets a general one. */
 export const DRAFT_ERRORS = [
+  'already-resolved',
   'bad-cell',
   'bad-request',
   'bad-settings',
@@ -26,6 +27,7 @@ export const DRAFT_ERRORS = [
   'no-vote',
   'not-a-voter',
   'not-an-episode',
+  'not-finished',
   'not-found',
   'not-host',
   'not-invited',
@@ -35,6 +37,7 @@ export const DRAFT_ERRORS = [
   'over',
   'quiet',
   'repeat',
+  'staff-only',
   'stale-order',
   'too-few',
   'too-long',
@@ -73,6 +76,7 @@ export function applyUpdate(view: DraftView, update: DraftUpdate): DraftView | n
     quiet: view.quiet,
     quietEpisode: view.quietEpisode,
     hostHasCard: view.hostHasCard,
+    scoring: view.scoring,
     episode: update.episode ?? view.episode,
     game: update.game ? { ...update.game, seats } : undefined,
   };

@@ -79,7 +79,7 @@ export function EpisodeBingo({ ctx }: { ctx: PluginContext }) {
   const [saving, setSaving] = useState<'idle' | 'saving' | 'saved'>('idle');
   const [revealed, setRevealed] = useState(false);
   const [unheard, setUnheard] = useState(false);
-  const [modal, setModal] = useState<'resolve' | 'catchup' | 'feature' | null>(null);
+  const [modal, setModal] = useState<'resolve' | 'catchup' | 'correct' | 'feature' | null>(null);
   const [linking, setLinking] = useState(false);
   const copied = useRef<string | null>(null);
 
@@ -496,7 +496,7 @@ export function EpisodeBingo({ ctx }: { ctx: PluginContext }) {
           }}
         />
       )}
-      {(modal === 'resolve' || modal === 'catchup') && (
+      {(modal === 'resolve' || modal === 'catchup' || modal === 'correct') && (
         <ResolveModal
           ctx={ctx}
           i18n={i18n}

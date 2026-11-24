@@ -1,6 +1,6 @@
 {
   "id": "bingo",
-  "version": "0.10.1",
+  "version": "0.11.0",
   "platformApi": "0.20.0",
   "name": "Bingo",
   "license": "AGPL-3.0-or-later",
@@ -113,7 +113,8 @@
       "draft-state": {},
       "draft-move": {},
       "draft-vote": {},
-      "draft-inbox": {}
+      "draft-inbox": {},
+      "draft-mark": { "callableBy": "podcaster" }
     }
   },
   "channels": {

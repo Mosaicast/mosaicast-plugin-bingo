@@ -3,7 +3,7 @@
 
 import { act } from 'react';
 import { createRoot, type Root } from 'react-dom/client';
-import { afterEach, beforeEach, describe, expect, it } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import {
   makeMockActions,
   makeMockDocs,
@@ -88,6 +88,23 @@ describe('<EpisodeBingo>', () => {
     const lock = [...host.querySelectorAll('button')].find((b) => b.textContent?.includes('Closing'));
     expect(lock).toBeDefined();
     expect((lock as HTMLButtonElement).disabled).toBe(true);
+  });
+
+  it.each([
+    ['RESOLVED', true],
+    ['ARCHIVED', true],
+    ['LOCKED', false],
+  ])('offers a correction once the bingo is resolved, archived included (%s)', async (phase, offered) => {
+    await render(
+      ctxWith(
+        { [docPath('template')]: { size: 3 }, [docPath('phase')]: { phase, suggested: 'LOCKED' } },
+        { user: podcaster },
+      ),
+    );
+    const correct = [...host.querySelectorAll('button')].find(
+      (b) => b.textContent?.trim() === 'Correct the resolution',
+    );
+    expect(Boolean(correct)).toBe(offered);
   });
 
   it('writes the intent when a lifecycle button is pressed', async () => {
@@ -373,13 +390,17 @@ describe('<EpisodeBingo>', () => {
     await act(async () => {
       root.render(<EpisodeBingo ctx={ctx} />);
     });
-    for (let i = 0; i < 6; i++) {
-      await flush(ctx);
-      await act(async () => new Promise((resolve) => setTimeout(resolve, 30)));
-    }
-
-    expect(docs.stored['data/user/me/card:ep']).toEqual({ entries: ['Tyrion drinks', ''], imported: true });
-    expect((host.querySelector('.bingo__grid') as HTMLElement).textContent).toContain('Tyrion drinks');
+    // Unsealing the claimed card is real WebCrypto, which takes as long as a busy machine needs: wait for
+    // the outcome rather than a fixed number of rounds, which failed whenever the whole suite ran at once.
+    await vi.waitFor(
+      async () => {
+        await flush(ctx);
+        await act(async () => new Promise((resolve) => setTimeout(resolve, 30)));
+        expect(docs.stored['data/user/me/card:ep']).toEqual({ entries: ['Tyrion drinks', ''], imported: true });
+        expect(host.querySelector('.bingo__grid')?.textContent).toContain('Tyrion drinks');
+      },
+      { timeout: 20_000, interval: 50 },
+    );
     expect(host.textContent).not.toContain('Submit');
   }, 30_000);
 

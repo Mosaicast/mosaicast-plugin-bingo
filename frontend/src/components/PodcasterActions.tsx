@@ -25,7 +25,7 @@ export function PodcasterActions({
   /** A lifecycle change already asked for and not yet applied. Blocks asking again. */
   awaiting: Phase | null;
   pending: number;
-  onOpen: (mode: 'resolve' | 'catchup' | 'feature') => void;
+  onOpen: (mode: 'resolve' | 'catchup' | 'correct' | 'feature') => void;
   onMove: (to: Phase) => void;
   /** Opens a draft round on this episode; absent where the host offers no realtime actions. */
   onDraft?: () => void;
@@ -66,6 +66,11 @@ export function PodcasterActions({
       {phase === 'RESOLVED' && pending > 0 && (
         <button type="button" className="bingo__btn" onClick={() => onOpen('catchup')}>
           {i18n.t('resolve.catchup', { count: String(pending) })}
+        </button>
+      )}
+      {(phase === 'RESOLVED' || phase === 'ARCHIVED') && (
+        <button type="button" className="bingo__btn bingo__btn--quiet" onClick={() => onOpen('correct')}>
+          {i18n.t('resolve.correct')}
         </button>
       )}
       {phase !== 'ARCHIVED' && (

@@ -13,6 +13,7 @@ import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.HashSet;
 import java.util.LinkedHashMap;
+import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
@@ -192,7 +193,7 @@ final class BingoRecord {
                  Map<String, Prefs> prefs, Phase phase, BingoScore.RankBy rankBy) {
         SchemaStore schema = ctx.schema();
         if (schema == null) {
-            return new Scored(Leaderboard.empty(now().toString()), List.of(), 0);
+            return new Scored(Leaderboard.empty(now().toString()), List.of(), 0, Set.of());
         }
 
         Map<String, List<EntryRow>> byAuthor = rowsOf(slug);
@@ -212,6 +213,8 @@ final class BingoRecord {
         // headcount or thin out the tally that places the very people no row is published for.
         List<Row> everyRanked = new ArrayList<>();
         int everyPlayer = 0;
+        // Whose standing changed from one they already had: what a correction is told to.
+        Set<String> moved = new LinkedHashSet<>();
 
         for (Map.Entry<String, List<EntryRow>> e : byAuthor.entrySet()) {
             List<EntryRow> cardRows = e.getValue();
@@ -240,6 +243,9 @@ final class BingoRecord {
             CardResultRow stored = results.get(author);
             if (stored == null || stored.fields() != score.fields() || stored.lines() != score.lines()
                     || stored.cells() != score.cells() || stored.ranked() != isRanked) {
+                if (stored != null && (stored.fields() != score.fields() || stored.lines() != score.lines())) {
+                    moved.add(author);
+                }
                 schema.delete(ENTITY_CARD_RESULT, byCard(slug, author));
                 Map<String, Object> values = new LinkedHashMap<>();
                 values.put("episode", slug);
@@ -271,14 +277,15 @@ final class BingoRecord {
         // exactly what the spoiler cover over the grid is there to prevent.
         if (phase != Phase.RESOLVED && phase != Phase.ARCHIVED) {
             return new Scored(new Leaderboard(List.of(), List.of(), players, players, false, List.of(),
-                    name(rankBy), now.toString()), List.copyOf(everyRanked), players);
+                    name(rankBy), now.toString()), List.copyOf(everyRanked), players, Set.copyOf(moved));
         }
 
         Comparator<Row> best = comparing(rankBy).thenComparing(Row::author);
         ranked.sort(best);
         late.sort(best);
         return new Scored(new Leaderboard(cap(ranked), cap(late), players, players, true,
-                distributionOf(everyRanked), name(rankBy), now.toString()), List.copyOf(everyRanked), players);
+                distributionOf(everyRanked), name(rankBy), now.toString()), List.copyOf(everyRanked), players,
+                Set.copyOf(moved));
     }
 
     /**
@@ -286,8 +293,9 @@ final class BingoRecord {
      *
      * @param everyRanked every ranked card's score, listed or not - an aggregate names nobody
      * @param players     everyone who played, late ones included
+     * @param moved       whose points or lines differ from what their stored result said
      */
-    record Scored(Leaderboard board, List<Row> everyRanked, int players) {}
+    record Scored(Leaderboard board, List<Row> everyRanked, int players, Set<String> moved) {}
 
     /**
      * What happened in one bingo, in a few lines - published only once it is resolved, like the board.

@@ -40,6 +40,8 @@ interface Props {
   flags?: Record<number, 'duplicate' | 'similar'>;
   /** Told which square the player is in, so a picked suggestion can land there. */
   onFocusCell?: (index: number) => void;
+  /** When set, every written square is a button that ticks it off or takes the tick back. */
+  onToggle?: (index: number) => void;
 }
 
 export function BingoGrid({
@@ -52,6 +54,7 @@ export function BingoGrid({
   label,
   flags,
   onFocusCell,
+  onToggle,
 }: Props) {
   const cells = cellsFor(size, freeCentre);
   const editable = Boolean(onChange);
@@ -59,7 +62,7 @@ export function BingoGrid({
   const lines = editable || !hits ? [] : completedLines(hitGrid(hits, size, freeCentre), size);
 
   const wrap = useRef<HTMLDivElement>(null);
-  const squares = useRef<(HTMLDivElement | null)[]>([]);
+  const squares = useRef<(HTMLElement | null)[]>([]);
   const strokes = useStrokes(wrap, squares, lines);
 
   return (
@@ -71,7 +74,7 @@ export function BingoGrid({
         style={{ gridTemplateColumns: `repeat(${size}, minmax(0, 1fr))` }}
       >
         {cells.map((cell, i) => {
-          const keep = (el: HTMLDivElement | null) => {
+          const keep = (el: HTMLElement | null) => {
             squares.current[i] = el;
           };
           if (cell.kind === 'free') {
@@ -105,6 +108,20 @@ export function BingoGrid({
                   onFocus={() => onFocusCell?.(cell.index)}
                 />
               </div>
+            );
+          }
+          if (onToggle && value) {
+            return (
+              <button
+                key={cell.index}
+                ref={keep}
+                type="button"
+                className={`${classes} bingo__cell--toggle`}
+                aria-pressed={hit}
+                onClick={() => onToggle(cell.index)}
+              >
+                <span className="bingo__cell-text">{value}</span>
+              </button>
             );
           }
           return (
@@ -148,7 +165,7 @@ const INSET = 6;
  */
 function useStrokes(
   wrap: React.RefObject<HTMLDivElement | null>,
-  squares: React.RefObject<(HTMLDivElement | null)[]>,
+  squares: React.RefObject<(HTMLElement | null)[]>,
   lines: CompletedLine[],
 ) {
   const [box, setBox] = useState<{ width: number; height: number; segments: Segment[] }>({
