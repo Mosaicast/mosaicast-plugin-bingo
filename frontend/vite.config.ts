@@ -14,7 +14,7 @@ export default defineConfig({
     outDir: 'build',
     emptyOutDir: true,
     lib: {
-      entry: resolve(__dirname, 'src/bingo-element.tsx'),
+      entry: resolve(import.meta.dirname, 'src/bingo-element.tsx'),
       formats: ['es'],
       fileName: () => 'bingo.es.js',
     },
