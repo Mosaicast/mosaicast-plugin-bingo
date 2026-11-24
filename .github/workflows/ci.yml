@@ -18,7 +18,7 @@ jobs:
     steps:
       - uses: actions/checkout@v7
 
-      - uses: actions/setup-java@v6.0.1
+      - uses: actions/setup-java@v6.3.0
         with:
           distribution: temurin
           java-version: '21'
@@ -34,12 +34,13 @@ jobs:
     steps:
       - uses: actions/checkout@v7
 
-      # jsdom 30 declares `engines: ^22.22.2 || ^24.15.0 || >=26`, and on Node 20 its bundled undici
-      # dies at import with `webidl.util.markAsUncloneable is not a function` before a single test runs.
-      # Node 20 went end-of-life in April 2026 anyway, so the floor moves rather than the dependency.
+      # Node 24, so npm 11: the npm that Dependabot and the release workflow use. Vite 8 (inside vitest)
+      # lists esbuild as an optional peer; npm 11 leaves such a package out of the lockfile, and npm 10's
+      # `npm ci` then refuses that lockfile as out of sync. One npm everywhere keeps every lockfile valid.
+      # (jsdom 30 needs `^22.22.2 || ^24.15.0 || >=26` anyway.)
       - uses: actions/setup-node@v7
         with:
-          node-version: '22'
+          node-version: '24'
           cache: npm
           cache-dependency-path: frontend/package-lock.json
 
@@ -71,16 +72,16 @@ jobs:
     steps:
       - uses: actions/checkout@v7
 
-      - uses: actions/setup-java@v6.0.1
+      - uses: actions/setup-java@v6.3.0
         with:
           distribution: temurin
           java-version: '21'
           cache: gradle
 
-      # Same floor as the frontend job above — build.sh runs the same npm install.
+      # Same Node as the frontend job above, and as the release: build.sh runs the same npm install.
       - uses: actions/setup-node@v7
         with:
-          node-version: '22'
+          node-version: '24'
           cache: npm
           cache-dependency-path: frontend/package-lock.json
 
